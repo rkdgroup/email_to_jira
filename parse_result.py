@@ -43,10 +43,12 @@ class ParseResult:
 
     def __post_init__(self):
         # Auto-build summary if not provided
-        if not self.summary and self.mailer_name and self.list_name and self.mailer_po:
+        # Title uses manager_order_number (NOT mailer_po) per Lee Ann's feedback
+        if not self.summary and self.mailer_name and self.list_name:
+            order_id = self.manager_order_number or self.mailer_po
             object.__setattr__(
                 self, "summary",
-                f"{self.list_name.upper()} - {self.mailer_name.upper()} - {self.mailer_po}"
+                f"{self.list_name.upper()} - {self.mailer_name.upper()} - {order_id}"
             )
 
     def to_jira_kwargs(self) -> dict:
