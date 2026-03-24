@@ -17,9 +17,6 @@ python parse_pipeline.py /path/to/folder/
 
 # Dry-run (extract + validate only, no ticket created)
 python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
-
-# Orchestrator mode (Claude-driven agentic loop)
-python orchestrator.py /path/to/order.pdf --dry-run
 ```
 
 No test framework, linter, or CI/CD configured. Testing is manual against PDFs in `broker_pdf/` and `Test_pdf/`.
@@ -36,20 +33,20 @@ Credentials in `.env`: `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `ANTHROP
 
 ```
 PDF → [tools_pdf.py] extract text (PyMuPDF primary, pdfminer fallback)
-    → [broker_detector.py] detect broker from regex fingerprints (first 3000 chars)
+    → [parsers/__init__.py] detect_broker() from regex fingerprints (first 3000 chars)
     → Match: [parsers/<broker>.py] rule-based parse (confidence 0.92)
       No match: [claude_fallback.py] Claude AI parse (confidence 0.75)
     → [parse_result.py] ParseResult frozen dataclass
-    → [result_validator.py] validate fields
+    → [parse_result.py] validate_result() validates fields
     → [client_lookup.py] enrich from Excel (NEW LR CLIENT LIST 2026.xlsx)
     → [tools_jira.py] duplicate check → create ticket + attach PDF
 ```
 
 ## Field Rules
 
-- **Title**: `P.O. {manager_order_number} {list_abbreviation}` — use abbreviations
+- **Title**: `{LIST NAME} - {MAILER NAME} - {MANAGER ORDER NUMBER}` — List Name first, Mailer Name second, Manager Order Number last (never Mailer PO). e.g. `JUDICIAL WATCH DONORS - HERITAGE FOUNDATION - W74926JW`
 - **Description**: Full PDF text content, never as a comment
-- **List Manager** = broker company (ADSTRA, RMI, WE ARE MOORE, KAP, CONRAD DIRECT, etc.)
+- **List Manager** = must be one of these exact values: ADSTRA, AALC, AMLC, CELCO, CONRAD, DATA-AXLE, KAP, MARY E GRANGER, NEGEV, NAMES IN THE NEWS, RKD, RMI, WASHINGTON LISTS, WE ARE MOORE
 - **Mailer Name** = organization sending the mail. **List Name** = donor list being rented. Never swap.
 - **Availability Rule**: "Full Run" = "All Available", "NTH NAME" = "Nth"
 - **Other Fees**: "STATE OMITS" when omission has 6+ states/zips/SCFs
@@ -116,28 +113,40 @@ From Excel lookup via db_code (e.g., F41D):
 - Client Database = full db_code (F41D)
 - Seed Database = db_code with S suffix (F41S)
 
+### Always fill all the feild in the JIRA tickets.
+
 ## Key Code Patterns
 
 | Broker | Source |
 |--------|--------|
-| Conrad Direct | Text after "And"/"&" on MATERIAL line. Not always present. |
+| Conrad Direct | Text after "And"/"&" on MATERIAL line. Not always present. e.g. "...PO# L50278HF & HF Thirteen Star Flag #2215A" → Key Code = "HF Thirteen Star Flag #2215A" |
 | Data Axle | "Key Code:" field or Order# suffix |
 | Others | Extracted from order if present |
+
+## Additional Field Rules (from Lee Ann Hazelwood)
+
+- **Mailer / Broker fields**: Treated identically for list rental orders — interchangeable on order forms.
+- **Special Seed Instructions**: Blank for most orders. FTP details and email addresses never go here.
+- **Shipping Instructions**: `CC: {requestor_email}` using the broker's requestor email.
+- **Availability Rule**: "Full Run" = "All Available". Confirmed.
+- **List Name abbreviations**: FAIR = Federation for American Immigration Reform.
 
 ## Supported Brokers (10)
 
 data_axle, simiocloud, rmi_direct, celco, rkd_group, amlc, kap, washington_lists, conrad_direct, names_in_news
+
+Note: ADSTRA and WE ARE MOORE have no dedicated parsers — they fall through to `claude_fallback.py`.
 
 ## Adding a New Broker Parser
 
 1. Create `parsers/my_broker.py` inheriting from `BaseBrokerParser`
 2. Implement `parse(text: str) -> ParseResult`
 3. Register in `PARSER_REGISTRY` in `parsers/__init__.py`
-4. Add detection regex to `_RULES` in `broker_detector.py`
+4. Add detection regex to `_RULES` in `parsers/__init__.py`
 
-## Key Code Patterns
+## Parser Internals
 
 - **BaseBrokerParser** (`parsers/base.py`): Shared helpers — `_find()`, `_find_date()`, `_find_quantity()`, `_map_shipping_method()`, `_detect_file_format()`, `_detect_state_omits()`, `_extract_special_seed_instructions()`
 - **CONFIDENCE_RULE_BASED** = 0.92 — never hardcode, import from base
-- **Broker detection** (`broker_detector.py`): Pre-compiled regex patterns in `_RULES`
+- **Broker detection** (`parsers/__init__.py`): Pre-compiled regex patterns in `_RULES`, called via `detect_broker()`
 - **Client lookup** (`client_lookup.py`): Reads `NEW LR CLIENT LIST 2026.xlsx`. Exact db_code match first, then fuzzy name match (≥50% word overlap).

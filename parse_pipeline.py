@@ -41,6 +41,24 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
+def _find_supplementary_files(pdf_path: str, order_number: str) -> list[Path]:
+    """
+    Find supplementary files (xlsx, xls, csv) in the same folder as the PDF
+    whose filename contains the given order number.
+    e.g. "AMLC #667855 ZipOmits.xlsx" matches order_number "667855".
+    """
+    if not order_number:
+        return []
+    folder = Path(pdf_path).parent
+    matches = []
+    for f in folder.iterdir():
+        if (f.is_file()
+                and f.suffix.lower() in (".xlsx", ".xls", ".csv")
+                and order_number in f.stem):
+            matches.append(f)
+    return matches
+
+
 def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False) -> dict:
     """
     Process a single PDF purchase order.
@@ -52,6 +70,7 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False) -> 
     from parse_result import validate_result
     from tools_jira import create_jira_ticket, search_jira_tickets, flag_for_review, attach_file_to_ticket
     from client_lookup import enrich_fields
+    from client_profiles import find_profile
 
     pdf_path = str(Path(pdf_path).resolve())
     log.info("Processing: %s", pdf_path)
@@ -123,12 +142,16 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False) -> 
         return {"success": False, "source": result.source, "errors": [f"Duplicate: {keys}"]}
 
     # Step 5: Enrich fields from Excel client list
-    enriched = enrich_fields(list_name=result.list_name or "", db_code="")
+    enriched = enrich_fields(
+        list_name=result.list_name or "",
+        mailer_name=result.mailer_name or "",
+        list_manager=result.list_manager or "",
+    )
     db_code_resolved = enriched.get("db_code", "")
 
-    # Step 6: Create ticket (pass PDF text as description)
+    # Step 6: Create ticket
     kwargs = result.to_jira_kwargs()
-    kwargs["description"] = text  # Full PDF content goes in ticket description
+    kwargs["description"] = _build_adf_description(result)
     if enriched.get("billable_account") and not kwargs.get("billable_account"):
         kwargs["billable_account"] = enriched["billable_account"]
     if enriched.get("list_manager") and not kwargs.get("list_manager"):
@@ -150,6 +173,31 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False) -> 
     except Exception as _e:
         log.warning("Could not attach PDF: %s", _e)
 
+    # Step 8: Attach supplementary files (e.g. zip omit xlsx) matched by order number
+    for order_num in filter(None, [result.manager_order_number, result.mailer_po]):
+        for supp in _find_supplementary_files(pdf_path, order_num):
+            try:
+                attach_file_to_ticket(ticket["key"], str(supp))
+                log.info("Supplementary file attached to %s: %s", ticket["key"], supp.name)
+            except Exception as _e:
+                log.warning("Could not attach supplementary file %s: %s", supp.name, _e)
+
+    # Step 9: Attach client profile document
+    try:
+        profile_path = find_profile(
+            list_manager=result.list_manager,
+            list_name=result.list_name,
+            mailer_name=result.mailer_name,
+            db_code=db_code_resolved,
+        )
+        if profile_path:
+            attach_file_to_ticket(ticket["key"], str(profile_path))
+            log.info("Profile attached to %s: %s", ticket["key"], profile_path.name)
+        else:
+            log.info("No client profile found for %s", ticket["key"])
+    except Exception as _e:
+        log.warning("Could not attach client profile: %s", _e)
+
     return {
         "success": True,
         "ticket_key": ticket["key"],
@@ -158,6 +206,111 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False) -> 
         "db_code": db_code_resolved,
         "warnings": list(result.warnings),
     }
+
+
+def _build_adf_description(result) -> dict:
+    """Build a clean, readable Atlassian Document Format description from a ParseResult."""
+
+    def heading(text: str, level: int = 3) -> dict:
+        return {"type": "heading", "attrs": {"level": level},
+                "content": [{"type": "text", "text": text}]}
+
+    def para(*parts) -> dict:
+        """Build a paragraph from alternating (text, bold) tuples or plain strings."""
+        content = []
+        for part in parts:
+            if isinstance(part, tuple):
+                txt, bold = part
+                node = {"type": "text", "text": txt}
+                if bold:
+                    node["marks"] = [{"type": "strong"}]
+                content.append(node)
+            else:
+                content.append({"type": "text", "text": str(part)})
+        return {"type": "paragraph", "content": content}
+
+    def bullet_list(items: list[str]) -> dict:
+        return {
+            "type": "bulletList",
+            "content": [
+                {"type": "listItem",
+                 "content": [para(item)]}
+                for item in items
+            ],
+        }
+
+    nodes = []
+
+    # --- Order Details ---
+    nodes.append(heading("Order Details"))
+    order_type = "list exchange" if result.list_manager else "list rental"
+    details = (
+        f"This is a {order_type} order managed by "
+        f"{result.list_manager or 'the list manager'}."
+    )
+    if result.manager_order_number:
+        details += f" Manager Order Number: {result.manager_order_number}."
+    if result.mailer_po:
+        details += f" Mailer PO: {result.mailer_po}."
+    nodes.append(para(details))
+
+    # --- List & Mailer ---
+    nodes.append(heading("List & Mailer"))
+    qty_fmt = f"{result.requested_quantity:,}" if result.requested_quantity else "unspecified"
+    avail = result.availability_rule or "standard"
+    list_mailer = (
+        f"{result.mailer_name} is renting the {result.list_name} list. "
+        f"A total of {qty_fmt} names are requested using {avail} selection."
+    )
+    if result.mail_date:
+        list_mailer += f" Mail date is {result.mail_date}."
+    if result.key_code:
+        list_mailer += f" Key code: {result.key_code}."
+    nodes.append(para(list_mailer))
+
+    # --- Shipping ---
+    nodes.append(heading("Shipping"))
+    ship_parts = []
+    if result.shipping_method and result.ship_to_email:
+        ship_parts.append(
+            f"Files are to be delivered via {result.shipping_method} to {result.ship_to_email}."
+        )
+    elif result.shipping_method:
+        ship_parts.append(f"Files are to be delivered via {result.shipping_method}.")
+    if result.ship_by_date:
+        ship_parts.append(f"The order must ship by {result.ship_by_date}.")
+    if result.shipping_instructions:
+        ship_parts.append(result.shipping_instructions)
+    nodes.append(para(" ".join(ship_parts) if ship_parts else "No shipping details provided."))
+
+    # --- Omissions ---
+    if result.omission_description:
+        nodes.append(heading("Omissions"))
+        # Split multi-line omission text into bullet items
+        lines = [ln.strip() for ln in result.omission_description.splitlines() if ln.strip()]
+        if len(lines) > 1:
+            nodes.append(bullet_list(lines))
+        else:
+            nodes.append(para(result.omission_description))
+
+    # --- Special Instructions ---
+    if result.special_seed_instructions:
+        nodes.append(heading("Special Seed Instructions"))
+        nodes.append(para(result.special_seed_instructions))
+
+    # --- Other Fees ---
+    if result.other_fees:
+        nodes.append(heading("Other Fees"))
+        nodes.append(para(result.other_fees))
+
+    # --- Requestor ---
+    nodes.append(heading("Requestor"))
+    contact = result.requestor_name or "Unknown"
+    if result.requestor_email:
+        contact += f" — {result.requestor_email}"
+    nodes.append(para(contact))
+
+    return {"type": "doc", "version": 1, "content": nodes}
 
 
 def _print_result(result) -> None:

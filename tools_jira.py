@@ -111,18 +111,16 @@ def create_jira_ticket(
         "summary": summary,
     }
 
-    # Description — full PDF content in ADF format
+    # Description — accepts a pre-built ADF dict or a plain string
     if description:
-        fields["description"] = {
-            "type": "doc",
-            "version": 1,
-            "content": [
-                {
-                    "type": "paragraph",
-                    "content": [{"type": "text", "text": description}],
-                }
-            ],
-        }
+        if isinstance(description, dict):
+            fields["description"] = description
+        else:
+            fields["description"] = {
+                "type": "doc",
+                "version": 1,
+                "content": [{"type": "paragraph", "content": [{"type": "text", "text": description}]}],
+            }
 
     # Text fields
     if mailer_name:

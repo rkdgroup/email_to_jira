@@ -105,17 +105,22 @@ class RkdGroupParser(BaseBrokerParser):
                     break
 
         # --- Key code: before "Key(s):" label ---
+        # Search in reverse from closest line to Key(s): label
         result["key_code"] = ""
+        _KEY_EXCLUDE = {
+            "Managed", "Active", "Fax", "E-Mail", "FTP Transfer",
+            "Call With Count before Shipping", "Nth Cross Section", "M", "/",
+        }
         for i, ln in enumerate(lines):
             if re.match(r"Key\(?s?\)?:", ln, re.IGNORECASE):
-                for j in range(max(0, i - 3), i):
+                for j in range(i - 1, max(0, i - 4), -1):
                     candidate = lines[j]
                     if (not candidate.endswith(":") and len(candidate) >= 2 and
-                            candidate not in ("Managed", "Active", "Fax", "E-Mail",
-                                              "FTP Transfer", "Call With Count before Shipping",
-                                              "Nth Cross Section", "M", "/", "E-Mail") and
+                            candidate not in _KEY_EXCLUDE and
                             not re.match(r"^\d{1,2}/\d{1,2}/\d{2,4}$", candidate) and
-                            not re.match(r"^[\d,]+$", candidate)):
+                            not re.match(r"^[\d,]+$", candidate) and
+                            not re.match(r"^\d+\.?\d*%$", candidate) and
+                            not re.search(r"all\s+available", candidate, re.IGNORECASE)):
                         result["key_code"] = candidate
                         break
                 break
@@ -199,7 +204,7 @@ class RkdGroupParser(BaseBrokerParser):
             ship_to_email=r["ship_to_email"],
             key_code=r["key_code"],
             availability_rule=r["availability_rule"],
-            file_format="",
+            file_format=self._detect_file_format(text),
             shipping_method=r["shipping_method"],
             shipping_instructions=r["shipping_instructions"],
             omission_description=r["omission_description"],
@@ -230,7 +235,7 @@ class AmlcParser(RkdGroupParser):
             ship_to_email=r["ship_to_email"],
             key_code=r["key_code"],
             availability_rule=r["availability_rule"],
-            file_format="",
+            file_format=self._detect_file_format(text),
             shipping_method=r["shipping_method"],
             shipping_instructions=r["shipping_instructions"],
             omission_description=r["omission_description"],

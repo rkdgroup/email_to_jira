@@ -9,6 +9,7 @@ import re
 import logging
 from dataclasses import dataclass
 
+from parsers.adstra import AdstraParser
 from parsers.data_axle import DataAxleParser, SimioCloudParser
 from parsers.rmi_direct import RmiDirectParser
 from parsers.celco import CelcoParser
@@ -34,6 +35,10 @@ class BrokerMatch:
 
 
 _RULES = [
+    ("adstra", [
+        re.compile(r"adstradata\.com", re.IGNORECASE),
+        re.compile(r"Adstra\s+order#", re.IGNORECASE),
+    ]),
     ("rkd_group", [
         re.compile(r"RKD\s+GROUP", re.IGNORECASE),
         re.compile(r"Service\s+Bureau\s+No", re.IGNORECASE),
@@ -106,6 +111,7 @@ def detect_broker(text: str) -> BrokerMatch | None:
 # --- Parser Registry ---
 
 PARSER_REGISTRY = {
+    "adstra":           AdstraParser(),
     "data_axle":        DataAxleParser(),
     "simiocloud":       SimioCloudParser(),
     "rmi_direct":       RmiDirectParser(),
