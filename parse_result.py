@@ -49,6 +49,7 @@ class ParseResult:
     omission_description: str = ""
     other_fees: str = ""
     special_seed_instructions: str = ""
+    segment_criteria: str = ""          # e.g. "12MOS $10+ DONORS" (ADSTRA Selects: field)
 
     # Non-fatal issues
     warnings: tuple = field(default_factory=tuple)

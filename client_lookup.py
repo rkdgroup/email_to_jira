@@ -200,7 +200,7 @@ def enrich_fields(
     if broker_rows:
         best, score = _best_match(broker_rows, list_name, mailer_name)
         if best and score >= 0.4:
-            log.info("Broker sheet match (score=%.2f): %s → %s", score, list_name or mailer_name, best["db_code"])
+            log.info("Broker sheet match (score=%.2f): %s -> %s", score, list_name or mailer_name, best["db_code"])
             return _row_to_result(best)
 
     # 3. All other broker sheets (cross-broker fallback)
@@ -212,13 +212,13 @@ def enrich_fields(
             continue
         best, score = _best_match(rows, list_name, mailer_name)
         if best and score >= 0.5:
-            log.info("Cross-broker sheet %r match (score=%.2f): %s → %s", sheet_name, score, list_name or mailer_name, best["db_code"])
+            log.info("Cross-broker sheet %r match (score=%.2f): %s -> %s", sheet_name, score, list_name or mailer_name, best["db_code"])
             return _row_to_result(best)
 
     # 4. Full client sheet fallback
     best, score = _best_match(_load_all_clients(), list_name)
     if best and score >= 0.5:
-        log.info("Full sheet match (score=%.2f): %s → %s", score, list_name, best["db_code"])
+        log.info("Full sheet match (score=%.2f): %s -> %s", score, list_name, best["db_code"])
         return _row_to_result(best)
 
     return {}

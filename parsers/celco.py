@@ -186,8 +186,8 @@ class CelcoParser(BaseBrokerParser):
         # --- Shipping method ---
         ship_via = ""
         for i, ln in enumerate(lines):
-            if ln == "SHIP VIA" and i + 1 < len(lines):
-                ship_via = lines[i + 1]
+            if ln == "SHIP VIA" and i > 0:
+                ship_via = lines[i - 1]  # value precedes label in CELCO column layout
                 break
 
         shipping_method = self._map_shipping_method(ship_via)

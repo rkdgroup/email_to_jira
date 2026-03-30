@@ -19,8 +19,10 @@ AMLC/
 # Client profile documents (sensitive)
 Client Profiles/
 
-# Auth token cache
+# Auth token cache and runtime state
 email_scanner/token_cache.bin
+email_scanner/thread_map.json
+email_scanner/processed_ids.json
 
 # Logs and runtime state
 email_scanner/logs/

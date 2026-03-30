@@ -262,6 +262,8 @@ def _build_adf_description(result) -> dict:
         f"{result.mailer_name} is renting the {result.list_name} list. "
         f"A total of {qty_fmt} names are requested using {avail} selection."
     )
+    if result.segment_criteria:
+        list_mailer += f" Selection: {result.segment_criteria}."
     if result.mail_date:
         list_mailer += f" Mail date is {result.mail_date}."
     if result.key_code:

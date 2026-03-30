@@ -45,19 +45,16 @@ log = logging.getLogger(__name__)
 # ── Config ────────────────────────────────────────────────────────────────────
 CLIENT_ID        = os.getenv("MS_CLIENT_ID", "")
 TENANT_ID        = os.getenv("MS_TENANT_ID", "common")
-SCOPES           = ["Mail.Read", "Mail.ReadWrite"]
+SCOPES           = ["Mail.Read", "Mail.ReadWrite", "Mail.Read.Shared", "Mail.ReadWrite.Shared"]
 TOKEN_CACHE_FILE = _SCRIPT_DIR / "token_cache.bin"
-POLL_INTERVAL    = 300  # 5 minutes
+POLL_INTERVAL    = 60  # 5 minutes
 
-SHARED_MAILBOX = os.getenv("IMAP_EMAIL", "Listfulfillment@data-management.com")
-SOURCE_FOLDER  = "List Rental"
-FAILED_FOLDER  = "List Rental/Failed"
-
-SENDER_WHITELIST = {
-    e.strip().lower()
-    for e in os.getenv("EMAIL_WHITELIST", "robert@amlclists.com").split(",")
-    if e.strip()
-}
+SHARED_MAILBOX        = os.getenv("IMAP_EMAIL", "Listfulfillment@data-management.com")
+SOURCE_FOLDER         = "List Rental"
+PROCESSED_FOLDER      = "List Rental/Processed"
+FAILED_FOLDER         = "List Rental/Failed"
+THREAD_MAP_FILE     = _SCRIPT_DIR / "thread_map.json"   # conversationId → ticket key
+PROCESSED_IDS_FILE  = _SCRIPT_DIR / "processed_ids.json"  # message IDs already handled
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
@@ -177,47 +174,130 @@ def _get_folder_id(token: str, folder_path: str) -> str:
     return parent_id
 
 
+# ── Thread map (conversationId → Jira ticket key) ────────────────────────────
+
+def _load_thread_map() -> dict:
+    if THREAD_MAP_FILE.exists():
+        return json.loads(THREAD_MAP_FILE.read_text())
+    return {}
+
+
+def _save_thread_map(thread_map: dict) -> None:
+    THREAD_MAP_FILE.write_text(json.dumps(thread_map, indent=2))
+
+
+# ── Processed message IDs ─────────────────────────────────────────────────────
+
+def _load_processed_ids() -> set:
+    if PROCESSED_IDS_FILE.exists():
+        return set(json.loads(PROCESSED_IDS_FILE.read_text()))
+    return set()
+
+
+def _mark_processed(msg_id: str) -> None:
+    ids = _load_processed_ids()
+    ids.add(msg_id)
+    PROCESSED_IDS_FILE.write_text(json.dumps(list(ids), indent=2))
+
+
 # ── Email processing ──────────────────────────────────────────────────────────
 
-def process_message(token: str, message: dict, failed_folder_id: str) -> None:
-    from parse_pipeline import process_pdf
+def _add_jira_comment(ticket_key: str, subject: str, sender: str, body: str) -> None:
+    """Add a follow-up email as a comment on an existing Jira ticket."""
+    from tools_jira import add_comment_to_ticket
+    comment = f"Follow-up email from {sender}\nSubject: {subject}\n\n{body}"
+    result  = add_comment_to_ticket(ticket_key, comment)
+    if "error" in result:
+        log.error("Failed to add comment to %s: %s", ticket_key, result["error"])
+    else:
+        log.info("Added follow-up comment to %s", ticket_key)
 
-    msg_id  = message["id"]
-    subject = message.get("subject", "(no subject)")
-    sender  = message.get("from", {}).get("emailAddress", {}).get("address", "").lower()
+
+def _download_attachment(token: str, msg_id: str, att: dict, suffix: str) -> str | None:
+    """Download an attachment and save to a temp file. Returns temp path or None on failure."""
+    try:
+        att_data  = _get(token, f"{_mailbox_base()}/messages/{msg_id}/attachments/{att['id']}")
+        file_bytes = base64.b64decode(att_data["contentBytes"])
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(file_bytes)
+            return tmp.name
+    except Exception as e:
+        log.error("Failed to download attachment %r: %s", att.get("name"), e)
+        return None
+
+
+def process_message(token: str, message: dict, failed_folder_id: str, processed_folder_id: str) -> None:
+    from parse_pipeline import process_pdf
+    from tools_jira import attach_file_to_ticket
+    import re
+
+    msg_id          = message["id"]
+    subject         = message.get("subject", "(no subject)")
+    sender          = message.get("from", {}).get("emailAddress", {}).get("address", "").lower()
+    conversation_id = message.get("conversationId", "")
 
     log.info("Processing: %r from %s", subject, sender)
 
-    if sender not in SENDER_WHITELIST:
-        log.info("Skipping — sender not in whitelist: %s", sender)
-        _patch(token, f"{_mailbox_base()}/messages/{msg_id}", {"isRead": True})
+    # If thread already has a ticket, add follow-up as comment
+    thread_map = _load_thread_map()
+    if conversation_id and conversation_id in thread_map:
+        existing_key = thread_map[conversation_id]
+        log.info("Follow-up on thread -> adding comment to %s", existing_key)
+        msg_detail = _get(token, f"{_mailbox_base()}/messages/{msg_id}",
+                          params={"$select": "body"})
+        body = msg_detail.get("body", {}).get("content", "")
+        body = re.sub(r"<[^>]+>", "", body).strip()
+        if body:
+            _add_jira_comment(existing_key, subject, sender, body)
+        _mark_processed(msg_id)
         return
 
-    data        = _get(token, f"{_mailbox_base()}/messages/{msg_id}/attachments",
-                       params={"$select": "id,name,contentType,contentBytes"})
-    attachments = [
-        a for a in data.get("value", [])
-        if a.get("name", "").lower().endswith(".pdf")
-        or "pdf" in a.get("contentType", "").lower()
-    ]
+    # Fetch all attachments
+    data     = _get(token, f"{_mailbox_base()}/messages/{msg_id}/attachments",
+                    params={"$select": "id,name,contentType"})
+    all_atts = data.get("value", [])
 
-    if not attachments:
-        log.warning("No PDF attachments in %r — marking read", subject)
-        _patch(token, f"{_mailbox_base()}/messages/{msg_id}", {"isRead": True})
+    pdf_atts   = [a for a in all_atts
+                  if a.get("name", "").lower().endswith(".pdf")
+                  or "pdf" in a.get("contentType", "").lower()]
+    other_atts = [a for a in all_atts if a not in pdf_atts]
+
+    if not pdf_atts:
+        log.debug("No PDF in message %r — skipping", subject)
+        _mark_processed(msg_id)
         return
 
-    any_failed = False
-    for att in attachments:
+    any_failed  = False
+    ticket_keys = []
+    for att in pdf_atts:
         att_name = att.get("name", "attachment.pdf")
+        tmp_path = _download_attachment(token, msg_id, att, ".pdf")
+        if not tmp_path:
+            any_failed = True
+            continue
         try:
-            pdf_bytes = base64.b64decode(att["contentBytes"])
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp.write(pdf_bytes)
-                tmp_path = tmp.name
-
             result = process_pdf(tmp_path)
             if result.get("success"):
-                log.info("Ticket created: %s from %r", result.get("ticket_key"), att_name)
+                key = result.get("ticket_key")
+                log.info("Ticket created: %s from %r", key, att_name)
+                ticket_keys.append(key)
+
+                # Attach other files (Excel, zip, etc.) to the ticket
+                for other in other_atts:
+                    other_name = other.get("name", "file")
+                    ext = Path(other_name).suffix or ".bin"
+                    other_path = _download_attachment(token, msg_id, other, ext)
+                    if other_path:
+                        try:
+                            attach_file_to_ticket(key, other_path)
+                            log.info("Extra file attached to %s: %r", key, other_name)
+                        except Exception as e:
+                            log.warning("Could not attach %r to %s: %s", other_name, key, e)
+                        finally:
+                            try:
+                                Path(other_path).unlink()
+                            except Exception:
+                                pass
             else:
                 log.error("Pipeline failed for %r: %s", att_name,
                           "; ".join(result.get("errors", ["unknown"])))
@@ -231,37 +311,49 @@ def process_message(token: str, message: dict, failed_folder_id: str) -> None:
             except Exception:
                 pass
 
+    # Save thread -> ticket mapping for first successful ticket
+    if ticket_keys and conversation_id:
+        thread_map[conversation_id] = ticket_keys[0]
+        _save_thread_map(thread_map)
+
+    _mark_processed(msg_id)
+
     if any_failed:
-        log.warning("Moving %r to Failed", subject)
+        log.warning("Moving %r to Failed folder", subject)
         _post(token, f"{_mailbox_base()}/messages/{msg_id}/move",
               {"destinationId": failed_folder_id})
-    else:
-        _patch(token, f"{_mailbox_base()}/messages/{msg_id}", {"isRead": True})
-        log.info("Marked as read: %r", subject)
+    elif ticket_keys:
+        log.info("Moving %r to Processed folder", subject)
+        _post(token, f"{_mailbox_base()}/messages/{msg_id}/move",
+              {"destinationId": processed_folder_id})
 
 
 # ── Main scan ─────────────────────────────────────────────────────────────────
 
 def run_scan() -> None:
-    token     = get_access_token()
-    source_id = _get_folder_id(token, SOURCE_FOLDER)
-    failed_id = _get_folder_id(token, FAILED_FOLDER)
+    token        = get_access_token()
+    source_id    = _get_folder_id(token, SOURCE_FOLDER)
+    failed_id    = _get_folder_id(token, FAILED_FOLDER)
+    processed_id = _get_folder_id(token, PROCESSED_FOLDER)
 
     data     = _get(token, f"{_mailbox_base()}/mailFolders/{source_id}/messages",
-                    params={"$filter": "isRead eq false", "$top": 25,
-                            "$select": "id,subject,from,receivedDateTime,hasAttachments"})
-    messages = data.get("value", [])
+                    params={"$top": 50,
+                            "$select": "id,subject,from,receivedDateTime,hasAttachments,conversationId",
+                            "$orderby": "receivedDateTime asc"})
+    processed = _load_processed_ids()
+    messages  = [m for m in data.get("value", []) if m["id"] not in processed]
 
     if not messages:
-        log.info("No unread messages in '%s'.", SOURCE_FOLDER)
+        log.info("No new messages in '%s'.", SOURCE_FOLDER)
         return
 
-    log.info("Found %d unread message(s).", len(messages))
+    log.info("Found %d new message(s).", len(messages))
     for msg in messages:
         try:
-            process_message(token, msg, failed_id)
+            process_message(token, msg, failed_id, processed_id)
         except Exception as e:
             log.error("Error processing message: %s", e)
+            _mark_processed(msg["id"])
 
 
 def main():

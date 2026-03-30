@@ -70,6 +70,9 @@ class AdstraParser(BaseBrokerParser):
         # --- Omission description ---
         omission_description = self._find(text, r"OMIT:\s*(.+?)(?:\n|SHIP\s+TO)", group=1).strip()
 
+        # --- Segment criteria (Selects: field) ---
+        segment_criteria = self._find(text, r"Selects:\s*(.+?)(?:\n|Price)", group=1).strip()
+
         # --- Other fees --- leave blank; State Omits is not auto-inferred from omit count
         other_fees = ""
 
@@ -101,4 +104,5 @@ class AdstraParser(BaseBrokerParser):
             omission_description=omission_description,
             other_fees=other_fees,
             special_seed_instructions=special_seed_instructions,
+            segment_criteria=segment_criteria,
         )

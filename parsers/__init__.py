@@ -47,6 +47,10 @@ _RULES = [
         re.compile(r"American\s+Mailing\s+Lists\s+Corporation\s+Management", re.IGNORECASE),
         re.compile(r"(?:Service\s+Bureau|Purchase\s+Order)\s+No", re.IGNORECASE),
     ]),
+    ("celco", [
+        re.compile(r"LIST\s+(?:EXCHANGE|RENTAL)\s+ORDER", re.IGNORECASE),
+        re.compile(r"CELCO", re.IGNORECASE),
+    ]),
     ("simiocloud", [
         re.compile(r"(?:Exchange|Rental)\s+Order", re.IGNORECASE),
         re.compile(r"SimioCloud", re.IGNORECASE),
@@ -58,10 +62,6 @@ _RULES = [
     ("rmi_direct", [
         re.compile(r"RMI\s+Direct\s+Marketing", re.IGNORECASE),
         re.compile(r"(?:Exchange|Rental)\s*Instruction", re.IGNORECASE),
-    ]),
-    ("celco", [
-        re.compile(r"LIST\s+(?:EXCHANGE|RENTAL)\s+ORDER", re.IGNORECASE),
-        re.compile(r"CELCO", re.IGNORECASE),
     ]),
     ("kap", [
         re.compile(r"LIST\s+MANAGEMENT\s+DIVISION", re.IGNORECASE),
