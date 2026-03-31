@@ -30,14 +30,10 @@ class RkdGroupParser(BaseBrokerParser):
                 mail_date_label_idx = i
                 break
 
-        # --- The first value after the "Mail Date:" label is the MAILER name ---
-        # (right column first value pairs with Mailer: label)
+        # --- Mailer name: the non-date text line immediately before "Mailer:" label ---
+        # In the columnar layout, right-column values appear BEFORE their left-column labels.
+        # So the value for "Mailer:" is the last meaningful line before that label.
         result["mailer_name"] = ""
-        if mail_date_label_idx >= 0 and mail_date_label_idx + 1 < len(lines):
-            result["mailer_name"] = lines[mail_date_label_idx + 1]
-
-        # --- Mail date value: the date line BEFORE the Mailer: label ---
-        # It's in the right column, appearing between broker name and label block
         result["mail_date"] = ""
         mailer_label_idx = -1
         for i, ln in enumerate(lines):
@@ -46,10 +42,19 @@ class RkdGroupParser(BaseBrokerParser):
                 break
 
         if mailer_label_idx > 0:
-            for j in range(max(0, mailer_label_idx - 5), mailer_label_idx):
-                dm = re.match(r"^(\d{1,2}/\d{1,2}/\d{2,4})$", lines[j])
+            for j in range(mailer_label_idx - 1, max(0, mailer_label_idx - 6), -1):
+                candidate = lines[j]
+                dm = re.match(r"^(\d{1,2}/\d{1,2}/\d{2,4})$", candidate)
                 if dm:
-                    result["mail_date"] = self._normalize_date(dm.group(1))
+                    if not result["mail_date"]:
+                        result["mail_date"] = self._normalize_date(dm.group(1))
+                    continue
+                if (len(candidate) > 3 and not candidate.endswith(":") and
+                        not re.match(r"^\d", candidate) and
+                        not re.match(r"^[A-Z][a-z]+\s+[A-Z][a-z]+$", candidate)):
+                    # Skip if it looks like a person name (contact), not an org
+                    result["mailer_name"] = candidate
+                    break
 
         # --- Quantity: before "Quantity:" label ---
         result["requested_quantity"] = 0
@@ -174,12 +179,15 @@ class RkdGroupParser(BaseBrokerParser):
 
         # --- Omission ---
         result["omission_description"] = ""
-        m = re.search(r"(?:[Oo]mit|OMIT)\s+(.+?)(?:\n|$)", text)
+        m = re.search(r"(?:[Oo]mit|OMIT)[ \t:]+(.+?)(?:\n|$)", text)
         if m:
             result["omission_description"] = m.group(0).strip()
 
         # --- Special seed instructions ---
         result["special_seed_instructions"] = self._extract_special_seed_instructions(text)
+
+        # --- Segment criteria ---
+        result["segment_criteria"] = self._find(text, r"(?:Selects?|Segment)[:\s]+([^\n]+)")
 
         # --- Other fees: auto-detect State Omits ---
         result["other_fees"] = self._detect_state_omits(result["omission_description"])
@@ -194,7 +202,7 @@ class RkdGroupParser(BaseBrokerParser):
             mailer_name=r["mailer_name"],
             mailer_po=r["mailer_po"],
             list_name=r["list_name"],
-            list_manager="RKD GROUP",
+            list_manager="RKD",
             requested_quantity=r["requested_quantity"],
             manager_order_number=r["manager_order_number"],
             mail_date=r["mail_date"],
@@ -210,6 +218,7 @@ class RkdGroupParser(BaseBrokerParser):
             omission_description=r["omission_description"],
             other_fees=r["other_fees"],
             special_seed_instructions=r["special_seed_instructions"],
+            segment_criteria=r["segment_criteria"],
         )
 
 
@@ -241,4 +250,5 @@ class AmlcParser(RkdGroupParser):
             omission_description=r["omission_description"],
             other_fees=r["other_fees"],
             special_seed_instructions=r["special_seed_instructions"],
+            segment_criteria=r["segment_criteria"],
         )

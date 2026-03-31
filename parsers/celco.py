@@ -125,13 +125,19 @@ class CelcoParser(BaseBrokerParser):
         list_manager = "CELCO"
 
         # --- Segment ---
+        # In CELCO's two-column layout, right-column values appear AFTER the label block.
+        # Layout in extracted text: [list_value] → LIST → SEGMENT → FORMAT → KEYCODE → [segment_value] → ...
+        # Must skip past FORMAT and KEYCODE labels to reach the segment value.
+        _CELCO_LABELS = {"FORMAT", "KEYCODE", "LIST", "SEGMENT", "USER", "OFFER",
+                         "MAIL DATE", "WANTED BY", "SHIP VIA", "QUANTITY", "ORDER #",
+                         "DATE", "CLIENT REF", "CONTACT", "AT", "SHIP TO", "MARK ALL"}
         segment = ""
         for i, ln in enumerate(lines):
             if ln == "SEGMENT" and i + 1 < len(lines):
-                # Skip to next non-label line
-                for j in range(i + 1, min(i + 3, len(lines))):
-                    if lines[j] not in ("FORMAT", "KEYCODE", "LIST"):
-                        segment = lines[j]
+                for j in range(i + 1, min(i + 10, len(lines))):
+                    candidate = lines[j]
+                    if candidate not in _CELCO_LABELS and len(candidate) > 2 and not candidate.endswith(":"):
+                        segment = candidate
                         break
                 break
 
@@ -248,7 +254,7 @@ class CelcoParser(BaseBrokerParser):
 
         # --- Omission description ---
         omission_description = ""
-        omit_match = re.search(r"(OMIT[:\s]+.+?)(?:\n|$)", text, re.IGNORECASE)
+        omit_match = re.search(r"OMIT[ \t:]+(.+?)(?:\n|$)", text, re.IGNORECASE)
         if omit_match:
             omission_description = omit_match.group(1).strip()
 
@@ -280,5 +286,6 @@ class CelcoParser(BaseBrokerParser):
             shipping_instructions=shipping_instructions,
             omission_description=omission_description,
             other_fees=other_fees,
+            segment_criteria=segment,
         )
 

@@ -245,7 +245,7 @@ class WashingtonListsParser(BaseBrokerParser):
             ship_to_email = ship_notify_email
 
         # --- List manager ---
-        list_manager = "Washington Lists, Inc."
+        list_manager = "WASHINGTON LISTS"
 
         # --- Shipping method ---
         ship_via = ""
@@ -266,7 +266,7 @@ class WashingtonListsParser(BaseBrokerParser):
 
         # --- Omission ---
         omission_description = ""
-        omit_match = re.search(r"(OMIT[:\s]+.+?)(?:\n|$)", text, re.IGNORECASE)
+        omit_match = re.search(r"OMIT[ \t:]+(.+?)(?:\n|$)", text, re.IGNORECASE)
         if omit_match:
             omission_description = omit_match.group(1).strip()
 
@@ -294,5 +294,6 @@ class WashingtonListsParser(BaseBrokerParser):
             shipping_instructions=shipping_instructions,
             omission_description=omission_description,
             other_fees=other_fees,
+            segment_criteria=segment,
         )
 

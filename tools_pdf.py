@@ -3,11 +3,52 @@ PDF text extraction with dual-library fallback: PyMuPDF (primary) → pdfminer.s
 """
 
 import logging
+import os
+import tempfile
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
 PAGE_SEPARATOR = "\n\n--- PAGE BREAK ---\n\n"
 MIN_TEXT_LENGTH = 50
+
+
+def get_pdf_page_count(pdf_path: str) -> int:
+    """Return the number of pages in a PDF."""
+    try:
+        import pymupdf
+    except ImportError:
+        import fitz as pymupdf
+    doc = pymupdf.open(pdf_path)
+    count = doc.page_count
+    doc.close()
+    return count
+
+
+def split_pdf_into_pages(pdf_path: str) -> tuple[str, list[str]]:
+    """
+    Split a multi-page PDF into individual single-page files inside a temp directory.
+    Returns (tmp_dir, [page_paths]) — caller must delete tmp_dir when done.
+    Page files are named {original_stem}_page1.pdf, _page2.pdf, etc.
+    """
+    try:
+        import pymupdf
+    except ImportError:
+        import fitz as pymupdf
+
+    doc = pymupdf.open(pdf_path)
+    stem = Path(pdf_path).stem
+    tmp_dir = tempfile.mkdtemp(prefix="dslf_split_")
+    page_paths = []
+    for i in range(doc.page_count):
+        page_file = os.path.join(tmp_dir, f"{stem}_page{i + 1}.pdf")
+        single = pymupdf.open()
+        single.insert_pdf(doc, from_page=i, to_page=i)
+        single.save(page_file)
+        single.close()
+        page_paths.append(page_file)
+    doc.close()
+    return tmp_dir, page_paths
 
 
 def _extract_pymupdf(pdf_path: str) -> str:

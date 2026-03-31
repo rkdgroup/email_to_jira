@@ -225,12 +225,15 @@ class RmiDirectParser(BaseBrokerParser):
 
         # --- Omissions ---
         omission_description = ""
-        m = re.search(r"(Omit[:\s]+.+?)(?:\n|$)", text, re.IGNORECASE)
+        m = re.search(r"Omit[ \t:]+(.+?)(?:\n|$)", text, re.IGNORECASE)
         if m:
-            omission_description = m.group(0).strip()
+            omission_description = m.group(1).strip()
 
         # --- Other fees: auto-detect State Omits ---
         other_fees = self._detect_state_omits(omission_description)
+
+        # --- Segment criteria ---
+        segment_criteria = self._find(text, r"(?:Selects?|Segment)[:\s]+([^\n]+)")
 
         return ParseResult(
             source=f"rule:{self.broker_key}",
@@ -253,4 +256,5 @@ class RmiDirectParser(BaseBrokerParser):
             shipping_instructions=shipping_instructions,
             omission_description=omission_description,
             other_fees=other_fees,
+            segment_criteria=segment_criteria,
         )

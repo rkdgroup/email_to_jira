@@ -72,8 +72,26 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False) -> 
     from client_lookup import enrich_fields
     from client_profiles import find_profile
 
+    from tools_pdf import get_pdf_page_count, split_pdf_into_pages
+
     pdf_path = str(Path(pdf_path).resolve())
     log.info("Processing: %s", pdf_path)
+
+    # Step 0: Split multi-page PDFs — one ticket per page
+    page_count = get_pdf_page_count(pdf_path)
+    if page_count > 1:
+        log.info("Multi-page PDF (%d pages) — creating one ticket per page", page_count)
+        tmp_dir, page_paths = split_pdf_into_pages(pdf_path)
+        results = []
+        try:
+            for i, page_path in enumerate(page_paths):
+                log.info("--- Page %d/%d ---", i + 1, page_count)
+                r = process_pdf(page_path, dry_run=dry_run, verbose=verbose)
+                results.append(r)
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        return results
 
     # Step 1: Extract text
     text = extract_pdf_text(pdf_path)
@@ -243,74 +261,71 @@ def _build_adf_description(result) -> dict:
 
     # --- Order Details ---
     nodes.append(heading("Order Details"))
-    order_type = "list exchange" if result.list_manager else "list rental"
-    details = (
-        f"This is a {order_type} order managed by "
-        f"{result.list_manager or 'the list manager'}."
-    )
+    order_items = []
+    if result.list_manager:
+        order_items.append(f"List Manager: {result.list_manager}")
     if result.manager_order_number:
-        details += f" Manager Order Number: {result.manager_order_number}."
+        order_items.append(f"Manager Order #: {result.manager_order_number}")
     if result.mailer_po:
-        details += f" Mailer PO: {result.mailer_po}."
-    nodes.append(para(details))
+        order_items.append(f"Mailer PO: {result.mailer_po}")
+    nodes.append(bullet_list(order_items) if order_items else para("No order details."))
 
     # --- List & Mailer ---
     nodes.append(heading("List & Mailer"))
+    lm_items = []
+    if result.mailer_name:
+        lm_items.append(f"Mailer: {result.mailer_name}")
+    if result.list_name:
+        lm_items.append(f"List: {result.list_name}")
     qty_fmt = f"{result.requested_quantity:,}" if result.requested_quantity else "unspecified"
     avail = result.availability_rule or "standard"
-    list_mailer = (
-        f"{result.mailer_name} is renting the {result.list_name} list. "
-        f"A total of {qty_fmt} names are requested using {avail} selection."
-    )
+    lm_items.append(f"Quantity: {qty_fmt} ({avail})")
     if result.segment_criteria:
-        list_mailer += f" Selection: {result.segment_criteria}."
+        lm_items.append(f"Selection: {result.segment_criteria}")
     if result.mail_date:
-        list_mailer += f" Mail date is {result.mail_date}."
+        lm_items.append(f"Mail Date: {result.mail_date}")
     if result.key_code:
-        list_mailer += f" Key code: {result.key_code}."
-    nodes.append(para(list_mailer))
+        lm_items.append(f"Key Code: {result.key_code}")
+    nodes.append(bullet_list(lm_items))
 
     # --- Shipping ---
     nodes.append(heading("Shipping"))
-    ship_parts = []
-    if result.shipping_method and result.ship_to_email:
-        ship_parts.append(
-            f"Files are to be delivered via {result.shipping_method} to {result.ship_to_email}."
-        )
-    elif result.shipping_method:
-        ship_parts.append(f"Files are to be delivered via {result.shipping_method}.")
+    ship_items = []
+    if result.shipping_method:
+        ship_items.append(f"Method: {result.shipping_method}")
+    if result.ship_to_email:
+        ship_items.append(f"Ship To: {result.ship_to_email}")
     if result.ship_by_date:
-        ship_parts.append(f"The order must ship by {result.ship_by_date}.")
+        ship_items.append(f"Ship By: {result.ship_by_date}")
     if result.shipping_instructions:
-        ship_parts.append(result.shipping_instructions)
-    nodes.append(para(" ".join(ship_parts) if ship_parts else "No shipping details provided."))
+        ship_items.append(result.shipping_instructions)
+    nodes.append(bullet_list(ship_items) if ship_items else para("No shipping details provided."))
 
     # --- Omissions ---
     if result.omission_description:
         nodes.append(heading("Omissions"))
-        # Split multi-line omission text into bullet items
         lines = [ln.strip() for ln in result.omission_description.splitlines() if ln.strip()]
-        if len(lines) > 1:
-            nodes.append(bullet_list(lines))
-        else:
-            nodes.append(para(result.omission_description))
+        nodes.append(bullet_list(lines if lines else [result.omission_description]))
 
     # --- Special Instructions ---
     if result.special_seed_instructions:
         nodes.append(heading("Special Seed Instructions"))
-        nodes.append(para(result.special_seed_instructions))
+        seed = result.special_seed_instructions
+        if not re.match(r"^Insert\s*:", seed, re.IGNORECASE):
+            seed = f"Insert: {seed}"
+        nodes.append(bullet_list([seed]))
 
     # --- Other Fees ---
     if result.other_fees:
         nodes.append(heading("Other Fees"))
-        nodes.append(para(result.other_fees))
+        nodes.append(bullet_list([result.other_fees]))
 
     # --- Requestor ---
     nodes.append(heading("Requestor"))
     contact = result.requestor_name or "Unknown"
     if result.requestor_email:
         contact += f" — {result.requestor_email}"
-    nodes.append(para(contact))
+    nodes.append(bullet_list([contact]))
 
     return {"type": "doc", "version": 1, "content": nodes}
 
@@ -328,6 +343,7 @@ def _print_result(result) -> None:
         ("List Manager", result.list_manager),
         ("Quantity", result.requested_quantity),
         ("Availability", result.availability_rule),
+        ("Segment", result.segment_criteria),
         ("Mail Date", result.mail_date),
         ("Ship By", result.ship_by_date),
         ("Requestor", result.requestor_name),
@@ -343,6 +359,24 @@ def _print_result(result) -> None:
             print(f"  {label:<14}: {val}")
     if result.warnings:
         print(f"\n  Warnings: {'; '.join(result.warnings)}")
+
+    # --- Description preview ---
+    print("\n" + "-" * 60)
+    print("DESCRIPTION (plain text preview):")
+    print("-" * 60)
+    adf = _build_adf_description(result)
+    for node in adf.get("content", []):
+        if node["type"] == "heading":
+            text = "".join(c.get("text", "") for c in node.get("content", []))
+            print(f"\n[{text}]")
+        elif node["type"] == "paragraph":
+            text = "".join(c.get("text", "") for c in node.get("content", []))
+            print(text)
+        elif node["type"] == "bulletList":
+            for item in node.get("content", []):
+                for child in item.get("content", []):
+                    text = "".join(c.get("text", "") for c in child.get("content", []))
+                    print(f"  - {text}")
     print("=" * 60 + "\n")
 
 

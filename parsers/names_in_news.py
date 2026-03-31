@@ -103,7 +103,7 @@ class NamesInNewsParser(BaseBrokerParser):
             availability_rule = "All Available"
 
         # --- List manager ---
-        list_manager = "Names in the News"
+        list_manager = "NAMES IN THE NEWS"
 
         # --- Mail Date: appears later in values ---
         # Find the date that appears AFTER the FTP/shipping section
@@ -184,10 +184,13 @@ class NamesInNewsParser(BaseBrokerParser):
 
         # --- Other fees: auto-detect State Omits ---
         omission_description = ""
-        omit_match = re.search(r"(OMIT[:\s]+.+?)(?:\n|$)", text, re.IGNORECASE)
+        omit_match = re.search(r"OMIT[ \t:]+(.+?)(?:\n|$)", text, re.IGNORECASE)
         if omit_match:
             omission_description = omit_match.group(1).strip()
         other_fees = self._detect_state_omits(omission_description)
+
+        # --- Segment criteria ---
+        segment_criteria = self._find(text, r"(?:Selects?|Segment)[:\s]+([^\n]+)")
 
         return ParseResult(
             source=f"rule:{self.broker_key}",
@@ -210,4 +213,5 @@ class NamesInNewsParser(BaseBrokerParser):
             omission_description=omission_description,
             other_fees=other_fees,
             special_seed_instructions=special_seed_instructions,
+            segment_criteria=segment_criteria,
         )
