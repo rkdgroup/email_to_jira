@@ -1,0 +1,328 @@
+- db_code: A63D
+  billing_cust: A62
+  db_name: BFF MASTERFILE
+  rental_name: ALZHEIMERS DISEASE RESEARCH
+  list_manager: ADSTRA DATA
+  lm_contact: LEILANI
+  lrr: JRH
+  comments: null
+- db_code: A63D
+  billing_cust: A62
+  db_name: BFF MASTERFILE
+  rental_name: MACULAR DEGENERATION RESEARCH
+  list_manager: ADSTRA DATA
+  lm_contact: LEILANI
+  lrr: JRH
+  comments: null
+- db_code: A63D
+  billing_cust: A62
+  db_name: BFF MASTERFILE
+  rental_name: NATL GLAUCOMA RESEARCH
+  list_manager: ADSTRA DATA
+  lm_contact: LEILANI
+  lrr: JRH
+  comments: null
+- db_code: A16D
+  billing_cust: A16
+  db_name: A Child Forever Sweeps Donors
+  rental_name: A3-ACF SWEPS DONORS 00520
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: A18D
+  billing_cust: A18
+  db_name: Aggressive Cancer Research Sweepstakes Donors (ACR)
+  rental_name: A3-ACR SWEPS DONORS 00521
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: A96D
+  billing_cust: A96
+  db_name: American Association of State Troopers Scholarship (AAST)
+  rental_name: A3-AAST SCHOLORSHIP 00522
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: A40D
+  billing_cust: A40
+  db_name: Americans Against Child Abuse Sweepstakes Donors (AACA)
+  rental_name: A3-AACA SWEEPSTAKES DONORS 00523
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: A87D
+  billing_cust: A87
+  db_name: Americans Against Drug Abuse Sweepstake Donors (AADA)
+  rental_name: A3-AADA SWEEPSTAKES DONORS 00524
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: B28D
+  billing_cust: B28
+  db_name: Breast Cancer Project Sweepstakes Donors (BCP)
+  rental_name: A3-BCP SWEEPS DONORS 00525
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: C02D
+  billing_cust: C02
+  db_name: Care for Our Wounded Soldiers Sweeps Donors (CWS)
+  rental_name: A3-CFOWS  SWEEPS DONORS 00526
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: C21D
+  billing_cust: C21
+  db_name: Child Protection Program Sweeps Donors (CPP)
+  rental_name: A3-CPP SWEEPS DONORS 00527
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: C27D
+  billing_cust: C27
+  db_name: Children's Cancer Project Sweepstakes Donors (CCP)
+  rental_name: A3-CCP SWEEPS DONORS 00528
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: C69D
+  billing_cust: C69
+  db_name: Combating Children's Cancer Foundation Sweeps Donors (CCC)
+  rental_name: A3-CCC FOUNDATION SWEEPS DON 00529
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: D22D
+  billing_cust: D23
+  db_name: Defeat Diabetes (Sweepstake Donors To A Diabetes Cause) (DDF)
+  rental_name: A3-DEFEAT DIABETES SWEEPS DON 00530
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: F58D
+  billing_cust: F58
+  db_name: Fighting Childhood Leukemia Sweeps Donors (FCL)
+  rental_name: A3-FIGHT CHILDHOOD LEUKEMIA 00531
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: F45D
+  billing_cust: F45
+  db_name: Firefighters Charitable Foundation (FCF)
+  rental_name: A3-FIREFIGHTERS CHARITABLE FND 00532
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: I68D
+  billing_cust: I68
+  db_name: International Children's Cancer Foundation Sweepstake Donors (IFC2)
+  rental_name: A3-ICC FOUNDATION SWEEPS DONOR 00533
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: I67D
+  billing_cust: I67
+  db_name: Israel Children's Cancer Foundation Sweeps (CCCF)
+  rental_name: A3-ISRAEL CHILDRENS CANCER FND 00534
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: K40D
+  billing_cust: K40
+  db_name: Kids Wish Network - Sweepstakes Donors (KWN)
+  rental_name: A3-KWN SWEEPS DONORS 00535
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: K45D
+  billing_cust: K45
+  db_name: Kids Wish Network Hero of the Month Sweeps Donors (KWNH)
+  rental_name: A3-KWN HERO OF/MON SWEEPS DON 00536
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N67D
+  billing_cust: N67
+  db_name: National Cancer Assistance Foundation Sweepstakes Donors (NCAF)
+  rental_name: A3-NCAF SWEEPS DONORS 00537
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: NO LONGER UPDATING PER ADSTRA 10/23
+- db_code: X06D
+  billing_cust: X06
+  db_name: National Cancer Foundation - Kids Sweepstake Donors
+  rental_name: A3-NCF KIDS SWEEPS DONORS 00538
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: OFF THE MARKET PER ADSTRA
+- db_code: N56D
+  billing_cust: N56
+  db_name: National Cancer Military Fund Sweepstake Donors
+  rental_name: A3-NC MILITARY FUND SWEEPS DON 00539
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: OFF THE MARKET PER ADSTRA
+- db_code: N92D
+  billing_cust: N92
+  db_name: National Caregiving Foundation Sweeps
+  rental_name: A3-NATL CAREGIVINGFND SWEEPS 00540
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: O16D
+  billing_cust: O16
+  db_name: Operation Rover Rescue Sweeps Donors (OR2)
+  rental_name: A3-OR2 OPERATION ROVER RESCUE 00553
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: O56D
+  billing_cust: O56
+  db_name: Operation Rapid Response Sweeps Donors
+  rental_name: A3-OPER RAPID RESPONSE DONORS 00541
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: P47D
+  billing_cust: P47
+  db_name: Project Foster
+  rental_name: A3-PROJECT FOSTER 00542
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: P32D
+  billing_cust: P32
+  db_name: Project Toy Drop
+  rental_name: A3-PROJECT TOY DROP 00543
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: P36D
+  billing_cust: P34
+  db_name: Prostate Cancer Project Sweeps Donors
+  rental_name: A3-PROSTATE CANC PROJ SWEEPS 00544
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: S32D
+  billing_cust: S32
+  db_name: SAVE - Mission Recovery Sweepstake Donors
+  rental_name: A3-SAVE MISSION RECOVERY SWEEP 00545
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: S30D
+  billing_cust: S30
+  db_name: Survivors and Victims Empowered - Sweepstakes
+  rental_name: A3-SURVIVORS & VICTIMS EMPWRD 00546
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N15R
+  billing_cust: N15
+  db_name: NEWPORT CREATIVE SWEEPS MASTER
+  rental_name: A3-SDCA HEALTH & MEDICAL CAUSE 00547
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N15R
+  billing_cust: N15
+  db_name: NEWPORT CREATIVE SWEEPS MASTER
+  rental_name: A3-SDCA CHILDREN'S CAUSES 00548
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N15R
+  billing_cust: N15
+  db_name: NEWPORT CREATIVE SWEEPS MASTER
+  rental_name: A3-SDCAP MASTERFILE 00549
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N15R
+  billing_cust: N15
+  db_name: NEWPORT CREATIVE SWEEPS MASTER
+  rental_name: A3-SDCA VETS & SERVICE ORGS 00550
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N71D
+  billing_cust: N71
+  db_name: Sweepstake Donors to The National Cancer Center
+  rental_name: A3-SD TO THE NATL CANCER CENTR 00551
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: C16D
+  billing_cust: C16
+  db_name: Children's Wish Foundation International
+  rental_name: A3-                                                                                            00555
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: A69D
+  billing_cust: A69
+  db_name: American Children’s Cancer Benevolence Fund
+  rental_name: A3-ACBF AM CHILD CAN BENV FUND 00556
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: O29D
+  billing_cust: O29
+  db_name: ORR Peace for our Troops (PFOT)
+  rental_name: A3-
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N11D
+  billing_cust: N09
+  db_name: NATIONAL LAW ENFORCEMENT (NLEOMF)
+  rental_name: NLEOMF 49210
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N15R
+  billing_cust: N15
+  db_name: NEWPORT CREATIVE SWEEPS MASTER
+  rental_name: 3-SDCA CHARITABLE APPEALS MF
+  list_manager: null
+  lm_contact: null
+  lrr: null
+  comments: null

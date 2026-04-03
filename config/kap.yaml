@@ -1,0 +1,24 @@
+- db_code: A52D
+  billing_cust: A68
+  db_name: ABANDONED CHILDRENS FUND
+  rental_name: ABANDONED CHILDRENS FUND
+  list_manager: KEY ACQUISITION
+  lm_contact: STACEY
+  lrr: JRH
+  comments: null
+- db_code: I12D
+  billing_cust: I13
+  db_name: CHILDRENS HUNGER RELIEF FUND
+  rental_name: CHILDRENS HUNGER RELIEF FUND
+  list_manager: KEY ACQUISITION
+  lm_contact: STACEY
+  lrr: JRH
+  comments: null
+- db_code: S05D
+  billing_cust: S15
+  db_name: AID FOR STARVING CHILDREN
+  rental_name: AID FOR STARVING CHILDREN
+  list_manager: KEY ACQUISITION
+  lm_contact: LIZ
+  lrr: JRH
+  comments: null

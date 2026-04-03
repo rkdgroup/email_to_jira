@@ -1,0 +1,1256 @@
+- db_code: A63D
+  billing_cust: A62
+  db_name: BFF MASTERFILE
+  rental_name: ALZHEIMERS DISEASE RESEARCH
+  list_manager: ADSTRA DATA
+  lm_contact: LEILANI
+  lrr: JRH
+  comments: null
+- db_code: A63D
+  billing_cust: A62
+  db_name: BFF MASTERFILE
+  rental_name: MACULAR DEGENERATION RESEARCH
+  list_manager: ADSTRA DATA
+  lm_contact: LEILANI
+  lrr: JRH
+  comments: null
+- db_code: A63D
+  billing_cust: A62
+  db_name: BFF MASTERFILE
+  rental_name: NATL GLAUCOMA RESEARCH
+  list_manager: ADSTRA DATA
+  lm_contact: LEILANI
+  lrr: JRH
+  comments: null
+- db_code: A12D
+  billing_cust: A12
+  db_name: Arevium - HEAL OUR CHILDREN
+  rental_name: A3-HOC SWEEPS  00515
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: null
+  comments: null
+- db_code: A16D
+  billing_cust: A16
+  db_name: A Child Forever Sweeps Donors
+  rental_name: A3-ACF SWEEPS DONORS  00520
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: A18D
+  billing_cust: A18
+  db_name: Aggressive Cancer Research Sweepstakes Donors (ACR)
+  rental_name: A3-ACR SWEEPS DONORS  00521
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: A96D
+  billing_cust: A96
+  db_name: American Association of State Troopers Scholarship (AAST)
+  rental_name: A3-AAST SCHOLORSHIP  00522
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: A40D
+  billing_cust: A40
+  db_name: Americans Against Child Abuse Sweepstakes Donors (AACA)
+  rental_name: A3-AACA SWEEPSTAKES DONORS  00523
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: A69D
+  billing_cust: A69
+  db_name: American Children’s Cancer Benevolence Fund
+  rental_name: A3-ACBF AM CHILD CAN BENV FUND  00554
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: A87D
+  billing_cust: A87
+  db_name: Americans Against Drug Abuse Sweepstake Donors (AADA)
+  rental_name: A3-AADA SWEEPSTAKES DONORS  00524
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: B28D
+  billing_cust: B28
+  db_name: Breast Cancer Project Sweepstakes Donors (BCP)
+  rental_name: A3-BCP SWEEPS DONORS  00525
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: C02D
+  billing_cust: C02
+  db_name: Care for Our Wounded Soldiers Sweeps Donors (CWS)
+  rental_name: A3-CFOWS  SWEEPS DONORS  00526
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: C12
+  billing_cust: C12
+  db_name: Comm for Missing Children
+  rental_name: A3-CFM SWEEPS DONORS  00516
+  list_manager: ADSTRA DATA
+  lm_contact: null
+  lrr: null
+  comments: null
+- db_code: C16D
+  billing_cust: C16
+  db_name: Children's Wish Foundation International
+  rental_name: A3-CWF SWEEPS DONORS  00555
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: C21D
+  billing_cust: C21
+  db_name: Child Protection Program Sweeps Donors (CPP)
+  rental_name: A3-CPP SWEEPS DONORS  00527
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: C27D
+  billing_cust: C27
+  db_name: Children's Cancer Project Sweepstakes Donors (CCP)
+  rental_name: A3-CCP SWEEPS DONORS  00528
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: C69D
+  billing_cust: C69
+  db_name: Combating Children's Cancer Foundation Sweeps Donors (CCC)
+  rental_name: A3-CCC FOUNDATION SWEEPS DON  00529
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: D22D
+  billing_cust: D23
+  db_name: Defeat Diabetes (Sweepstake Donors To A Diabetes Cause) (DDF)
+  rental_name: A3-DEFEAT DIABETES SWEEPS DON  00530
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: E22D
+  billing_cust: E22
+  db_name: Educ Canines Asst W/Dis (ECAD)
+  rental_name: A3-ECAD SWEEPS 00518
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: null
+  comments: null
+- db_code: F58D
+  billing_cust: F58
+  db_name: Fighting Childhood Leukemia Sweeps Donors (FCL)
+  rental_name: A3-FIGHT CHILDHOOD LEUKEMIA 00531
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: F45D
+  billing_cust: F45
+  db_name: Firefighters Charitable Foundation (FCF)
+  rental_name: A3-FIREFIGHTERS CHARITABLE FND  00532
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: F65D
+  billing_cust: F65
+  db_name: Freedom Education Project FEP
+  rental_name: A3-FEP SWEEPS DONORS  00557
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: null
+  comments: null
+- db_code: I52D
+  billing_cust: I52
+  db_name: Inv Protect Enforce Off USA
+  rental_name: A3-INV SWEEPS DONORS  00559
+  list_manager: null
+  lm_contact: null
+  lrr: null
+  comments: null
+- db_code: I68D
+  billing_cust: I68
+  db_name: International Children's Cancer Foundation Sweepstake Donors (IFC2)
+  rental_name: A3-ICC FOUNDATION SWEEPS DONOR  00533
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: I67D
+  billing_cust: I67
+  db_name: Israel Children's Cancer Foundation Sweeps (CCCF)
+  rental_name: A3-ISRAEL CHILDRENS CANCER FND  00534
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: K40D
+  billing_cust: K40
+  db_name: Kids Wish Network - Sweepstakes Donors (KWN)
+  rental_name: A3-KWN SWEEPS DONORS  00535
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: K45D
+  billing_cust: K45
+  db_name: Kids Wish Network Hero of the Month Sweeps Donors (KWNH)
+  rental_name: A3-KWN HERO OF/MON SWEEPS DON  00536
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N71D
+  billing_cust: N71
+  db_name: National Cancer Center (NCCI)
+  rental_name: A3-NCCI SWEEPS DONOR   00551
+  list_manager: ADSTRA DATA
+  lm_contact: null
+  lrr: null
+  comments: null
+- db_code: N92D
+  billing_cust: N92
+  db_name: National Caregiving Foundation Sweeps
+  rental_name: A3-NATL CAREGIVINGFND SWEEPS  00540
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N11D
+  billing_cust: N09
+  db_name: NATIONAL LAW ENFORCEMENT (NLEOMF)
+  rental_name: NLEOMF 49210
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N15R
+  billing_cust: N15
+  db_name: NEWPORT CREATIVE SWEEPS MASTER
+  rental_name: A3-SDCA HEALTH & MEDICAL CAUSE 00547
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N15R
+  billing_cust: N15
+  db_name: NEWPORT CREATIVE SWEEPS MASTER
+  rental_name: A3-SDCA CHILDREN'S CAUSES  00548
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N15R
+  billing_cust: N15
+  db_name: NEWPORT CREATIVE SWEEPS MASTER
+  rental_name: A3-SDCAP MASTERFILE  00549
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N15R
+  billing_cust: N15
+  db_name: NEWPORT CREATIVE SWEEPS MASTER
+  rental_name: A3-SDCA VETS & SERVICE ORGS   00550
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N71D
+  billing_cust: N71
+  db_name: Sweepstake Donors to The National Cancer Center
+  rental_name: A3-SD TO THE NATL CANCER CENTR   00551
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N91D
+  billing_cust: N91
+  db_name: National Fallen Officer Fdtn
+  rental_name: A3-NFOF SWEEPS DONORS   00552
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: null
+  comments: null
+- db_code: O16D
+  billing_cust: O16
+  db_name: Operation Rover Rescue Sweeps Donors (OR2)
+  rental_name: A3-OR2 OPERATION ROVER RESCUE   00553
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: O56D
+  billing_cust: O56
+  db_name: Operation Rapid Response Sweeps Donors
+  rental_name: A3-OPER RAPID RESPONSE DONORS   00541
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: O29D
+  billing_cust: O29
+  db_name: Peace for our Troops (PFOT)
+  rental_name: A3-PFOT SWEEPS DONORS   00556
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: P47D
+  billing_cust: P47
+  db_name: Project Foster
+  rental_name: A3-PROJECT FOSTER   00542
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: P32D
+  billing_cust: P32
+  db_name: Project Toy Drop
+  rental_name: A3-PROJECT TOY DROP   00543
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: P34D
+  billing_cust: P34
+  db_name: Prostate Cancer Project Sweeps Donors
+  rental_name: A3-PROSTATE CANC PROJ SWEEPS   00544
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: P74D
+  billing_cust: P74
+  db_name: Pilots to the Rescue
+  rental_name: A3-PTTR SWEEPS DONORS   00558
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: null
+  comments: null
+- db_code: P79D
+  billing_cust: P79
+  db_name: Pennies For Pets
+  rental_name: A3-PFP SWEEPS DONOR   00517
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: null
+  comments: null
+- db_code: P89D
+  billing_cust: P89
+  db_name: Project Heal Veterans
+  rental_name: A3-PHV SWEEPS DONORS  00561
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: null
+  comments: null
+- db_code: S32D
+  billing_cust: S32
+  db_name: SAVE - Mission Recovery Sweepstake Donors
+  rental_name: A3-SAVE MISSION RECOVERY SWEEP   00545
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: S30D
+  billing_cust: S30
+  db_name: Survivors and Victims Empowered - Sweepstakes
+  rental_name: A3-SURVIVORS & VICTIMS EMPWRD  00546
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: M41D
+  billing_cust: M30
+  db_name: MDA
+  rental_name: MACULAR DEGENERATION
+  list_manager: ALL AMERICAN LIST CORP
+  lm_contact: HAWLEY
+  lrr: AWD
+  comments: null
+- db_code: P69D
+  billing_cust: P68
+  db_name: PARKINSON DONOR FILE
+  rental_name: PARKINSON RESEARCH
+  list_manager: ALL AMERICAN LIST CORP
+  lm_contact: HAWLEY
+  lrr: AWD
+  comments: null
+- db_code: U44D
+  billing_cust: U44
+  db_name: USDSA PREMIUM
+  rental_name: USDSA PREMIUM
+  list_manager: ALL AMERICAN LIST CORP
+  lm_contact: LORI
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: AMERICANS UNITED FOR LIFE
+  rental_name: AMERICANS UNITED FOR LIFE
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: RUN ORDERS FROM T11R
+- db_code: T11R
+  billing_cust: T11
+  db_name: COMMITTEE FOR JUSTICE
+  rental_name: COMMITTEE FOR JUSTICE
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: RUN ORDERS FROM T11R
+- db_code: T11R
+  billing_cust: T11
+  db_name: CHRISTIAN SENIORS ASSOCIATION
+  rental_name: CHRISTIAN SENIORS ASSOCIATION
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: RUN ORDERS FROM T11R
+- db_code: T11R
+  billing_cust: T11
+  db_name: LAW ENFORCEMENT ACTION NETWORK
+  rental_name: LEAN
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: RUN ORDERS FROM T11R
+- db_code: T11R
+  billing_cust: T11
+  db_name: PRIESTS FOR LIFE
+  rental_name: PRIESTS FOR LIFE
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: RUN ORDERS FROM T11R
+- db_code: T11R
+  billing_cust: T11
+  db_name: SECURE FREEDOM
+  rental_name: SECURE FREEDOM
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: RUN ORDERS FROM T11R
+- db_code: T11R
+  billing_cust: T11
+  db_name: STUDENTS FOR LIFE
+  rental_name: STUDENTS FOR LIFE
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: RUN ORDERS FROM T11R
+- db_code: A70D
+  billing_cust: A70
+  db_name: ANN CHILDREN'S FUND
+  rental_name: ANN CHILDREN'S FUND
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: C66D
+  billing_cust: C66
+  db_name: CENTER FOR SECURITY POLICY
+  rental_name: CENTER FOR SECURITY POLICY
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: C81D
+  billing_cust: C81
+  db_name: CITIZENS BEHIND THE BADGE
+  rental_name: CITIZENS BEHIND THE BADGE
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: C86D
+  billing_cust: C86
+  db_name: CONSERVATIVE CAUCUS
+  rental_name: AMERICANS FOR CONSTITUTIONAL LIBERTY/TCC
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: E75D
+  billing_cust: E75
+  db_name: AMERICAN ENERGY ALLIANCE (ANE)
+  rental_name: AMERICAN ENERGY ALLIANCE (ANE)
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: F12D
+  billing_cust: F12
+  db_name: FEDUP PAC
+  rental_name: FEDUP PAC
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: F27X
+  billing_cust: F27
+  db_name: FAITH & FREEDOM COALITION
+  rental_name: FAITH & FREEDOM COALITION
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: F43D
+  billing_cust: F43
+  db_name: FIDELITY CENTER FOR LAW & POLICY
+  rental_name: FIDELITY CENTER FOR LAW & POLICY
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: F41D
+  billing_cust: F41
+  db_name: CATHOLIC VOTE (FORMERLY FIDELIS)
+  rental_name: CATHOLIC VOTE
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: F41D
+  billing_cust: F41
+  db_name: CATHOLIC VOTE (FORMERLY FIDELIS)
+  rental_name: 2020 STAND WITH TRUMP CATHOLIC DONORS
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: F61D
+  billing_cust: F61
+  db_name: FLAG
+  rental_name: FLAG
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: F84D
+  billing_cust: F84
+  db_name: FREEDOMWORKS C3
+  rental_name: FREEDOMWORKS C3
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: F85D
+  billing_cust: F85
+  db_name: FREEDOMWORKS C4
+  rental_name: FREEDOMWORKS C4
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: L08D
+  billing_cust: L08
+  db_name: LIBERTY GUARD
+  rental_name: LIBERTY GUARD
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: M63D
+  billing_cust: M63
+  db_name: MOM MOTHERS FOR AMERICA
+  rental_name: MOM MOTHERS FOR AMERICA
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: M79D
+  billing_cust: M79
+  db_name: MFA MOMS FOR AMERICA ACTION
+  rental_name: MFA MOMS FOR AMERICA ACTION
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: P82D
+  billing_cust: P82
+  db_name: PAWS OF HONOR
+  rental_name: PAWS OF HONOR
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: S43D
+  billing_cust: S43
+  db_name: 60+ ASSOC
+  rental_name: 60+ ASSOC
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: S48D
+  billing_cust: S48
+  db_name: COALITION FOR SAH (CSAH)
+  rental_name: COALITION FOR SAH (CSAH) EXCHANGE or RENTAL
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: S63D
+  billing_cust: S63
+  db_name: CSAH ATA
+  rental_name: CSAH ATA
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: U19D
+  billing_cust: U19
+  db_name: USDSA
+  rental_name: USDSA
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: V19D
+  billing_cust: V19
+  db_name: VIDOL (VETERANS IN DEFENSE OF LIBERTY)
+  rental_name: VIDOL SWEEPS or CONVENTIONAL
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: W58D
+  billing_cust: W58
+  db_name: WOMEN'S RIGHTS WITHOUT FRONTIERS
+  rental_name: WOMEN'S RIGHTS WITHOUT FRONTIERS
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: Z10D
+  billing_cust: Z10
+  db_name: MATURE AMERICAN CITIZENS (AMAC)
+  rental_name: MATURE AMERICAN CITIZENS (AMAC)
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11A
+  billing_cust: T11
+  db_name: 10 MILLION VIGUERIE SUPERFILE
+  rental_name: 10 MILLION VIGUERIE SUPERFILE
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11A
+  billing_cust: T11
+  db_name: VIGUERIE STATEWIDE
+  rental_name: VIGUERIE STATEWIDE
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: 2020 STAND WITH TRUMP CONSERVATIVE HOTLINE DNRS
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: 21ST CENTURY CONSERVATIVE DONORS
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: ALLEGIANCE;CONSERVATIVE CHRISTIAN MULTI DONORS
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: AMERICAN'S CHRISTIAN VALUES IN GOV'T
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: AMERICAN'S;STOP RADICAL ISLAM
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: CONSERVATIVE SENIORS ALLIANCE
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: CONSERVATIVE SENIOR DNRS;CHRISTIAN VALUES
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: CONSERVATIVES AGAINST UNITED NATIONS
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: HIGH $ CONSERVATIVE MULTIS
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: HL GOP CAMPAIGN DONORS
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: LIBERTY DEFENDERS OF AMERICA
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: PATRIOTIC DONORS;STOP OBAMA'S RADICAL AGENDA
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: RICHARD MOURDOCK FOR SENATE 2012
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: SECURE FREEDOM RENTAL
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: SENIORS UNITED TO PROTECT SOCIAL SECURITY
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: SENIORS WHO SUPPORT PATRIOTIC CAUSES
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: UNBEATABLE DONORS' (MANY VARIATIONS)
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: VIGUERIE BEST CONSUMERS
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: VIGUERIE BEST DONORS CHARITABLE or POLITICAL
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: VIGUERIE CHRISTIAN DONORS
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: VIGUERIE HL CONSERVATIVE MULTIS
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: VIGUERIE POWERHOUSE & GOP
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: VIGUERIE POWERHOUSE CONSERVATIVE
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: VIGUERIE SUPERFILE
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL
+  rental_name: VIGUERIE'S SUPPORT TRUMP'S CONSERVATIVE AGENDA
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: P59D
+  billing_cust: P59
+  db_name: PORTCHESTER DATA LLC
+  rental_name: AMERICAN PATRIOTS;STOP RADICAL ISLAM
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: P59D
+  billing_cust: P59
+  db_name: PORTCHESTER DATA LLC
+  rental_name: BLACK TIE CONSERVATIVES DONORS
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: P59D
+  billing_cust: P59
+  db_name: PORTCHESTER DATA LLC
+  rental_name: CHRISTIANS PROTECTING RELIGIOUS FREEDOM
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: P59D
+  billing_cust: P59
+  db_name: PORTCHESTER DATA LLC
+  rental_name: CITIZENS AGAINST ILLEGAL IMMIGRATION DONORS
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: P59D
+  billing_cust: P59
+  db_name: PORTCHESTER DATA LLC
+  rental_name: DONORS FOR A CONSERVATIVE AMERICA
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: P59D
+  billing_cust: P59
+  db_name: PORTCHESTER DATA LLC
+  rental_name: RIGHT WING CONSERVATIVE MULTI DONORS
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: P59D
+  billing_cust: P59
+  db_name: PORTCHESTER DATA LLC
+  rental_name: SAVE AMERICAN SOVEREIGNTY DONORS
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: P59D
+  billing_cust: P59
+  db_name: PORTCHESTER DATA LLC
+  rental_name: SENIORS ALLIANCE DONORS
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: P59D
+  billing_cust: P59
+  db_name: PORTCHESTER DATA LLC
+  rental_name: TAX & ECONOMIC FREEDOM
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: A15R
+  billing_cust: A15
+  db_name: ALLIANCE RETIRED AMERICANS
+  rental_name: ARA
+  list_manager: CELCO
+  lm_contact: MISTY
+  lrr: AWD
+  comments: QUARTERLY
+- db_code: P88D
+  billing_cust: P88
+  db_name: PROJECT OPEN HAND
+  rental_name: PROJECT OPEN HAND
+  list_manager: CELCO
+  lm_contact: SARA
+  lrr: AWD
+  comments: null
+- db_code: J75R
+  billing_cust: J75
+  db_name: JUDICIAL WATCH RENTAL FILE
+  rental_name: JUDICIAL WATCH
+  list_manager: CONRAD DIRECT
+  lm_contact: BRENDA
+  lrr: JRH
+  comments: null
+- db_code: F57D
+  billing_cust: F57
+  db_name: FAIR
+  rental_name: FEDERATION FOR AMERICAN IMMIGRATION REFORM
+  list_manager: CONRAD DIRECT
+  lm_contact: BRENDA
+  lrr: JRH
+  comments: null
+- db_code: U02D
+  billing_cust: U02
+  db_name: U.S. TERM LIMITS
+  rental_name: U.S. TERM LIMITS
+  list_manager: CONRAD DIRECT
+  lm_contact: MICHAEL
+  lrr: JRH
+  comments: null
+- db_code: F51D
+  billing_cust: F51
+  db_name: FATHER BILL'S
+  rental_name: FATHER BILL'S MAINSPRING
+  list_manager: DATA-AXLE
+  lm_contact: null
+  lrr: AWD
+  comments: TOLD WHEN TO UPDATE
+- db_code: I18D
+  billing_cust: I18
+  db_name: INTL EYE FOUNDATION
+  rental_name: INTL EYE FOUNDATION
+  list_manager: DATA-AXLE
+  lm_contact: null
+  lrr: AWD
+  comments: null
+- db_code: S42D
+  billing_cust: S42
+  db_name: SACRED HEART SOUTHERN MISSIONS
+  rental_name: SACRED HEART AUTO LEAGUE
+  list_manager: DATA-AXLE
+  lm_contact: MAYURI
+  lrr: JRH
+  comments: null
+- db_code: S42D
+  billing_cust: S42
+  db_name: SACRED HEART SOUTHERN MISSIONS
+  rental_name: SACRED HEART LIFE TRENDS
+  list_manager: DATA-AXLE
+  lm_contact: MAYURI
+  lrr: JRH
+  comments: null
+- db_code: S42D
+  billing_cust: S42
+  db_name: SACRED HEART SOUTHERN MISSIONS
+  rental_name: SACRED HEART MASS CARD
+  list_manager: DATA-AXLE
+  lm_contact: MAYURI
+  lrr: JRH
+  comments: null
+- db_code: S42D
+  billing_cust: S42
+  db_name: SACRED HEART SOUTHERN MISSIONS
+  rental_name: SACRED HEART MASTERFILE
+  list_manager: DATA-AXLE
+  lm_contact: MAYURI
+  lrr: JRH
+  comments: null
+- db_code: S42D
+  billing_cust: S42
+  db_name: SACRED HEART SOUTHERN MISSIONS
+  rental_name: SACRED HEART SOUTHERN MISSIONS
+  list_manager: DATA-AXLE
+  lm_contact: MAYURI
+  lrr: JRH
+  comments: null
+- db_code: S42D
+  billing_cust: S42
+  db_name: SACRED HEART SOUTHERN MISSIONS
+  rental_name: SACRED HEART SOUTHERN MISSIONS SPANISH DNRS
+  list_manager: DATA-AXLE
+  lm_contact: MAYURI
+  lrr: JRH
+  comments: null
+- db_code: R51D
+  billing_cust: R51
+  db_name: ROSIE'S PLACE
+  rental_name: ROSIE'S PLACE
+  list_manager: DATA-AXLE
+  lm_contact: MAYURI
+  lrr: LAH
+  comments: null
+- db_code: A52D
+  billing_cust: A68
+  db_name: ABANDONED CHILDRENS FUND
+  rental_name: ABANDONED CHILDRENS FUND
+  list_manager: KEY ACQUISITION
+  lm_contact: STACEY
+  lrr: JRH
+  comments: null
+- db_code: I12D
+  billing_cust: I13
+  db_name: CHILDRENS HUNGER RELIEF FUND
+  rental_name: CHILDRENS HUNGER RELIEF FUND
+  list_manager: KEY ACQUISITION
+  lm_contact: STACEY
+  lrr: JRH
+  comments: null
+- db_code: S05D
+  billing_cust: S15
+  db_name: AID FOR STARVING CHILDREN
+  rental_name: AID FOR STARVING CHILDREN
+  list_manager: KEY ACQUISITION
+  lm_contact: LIZ
+  lrr: JRH
+  comments: null
+- db_code: S52D
+  billing_cust: S52D
+  db_name: SBI - ST. BONAVENTURE INDIAN
+  rental_name: ST. BONAVENTURE INDIAN MISSION AND SCHOOL SWEEPS
+  list_manager: KEY ACQUISITION
+  lm_contact: LIZ
+  lrr: JRH
+  comments: null
+- db_code: T11R
+  billing_cust: T11
+  db_name: TVC LIST RENTAL ACC
+  rental_name: ALLIANCE OF CONSERVATIVE CATHOLIC DONORS
+  list_manager: MARY E GRANGER
+  lm_contact: ADAM
+  lrr: AWD
+  comments: null
+- db_code: J30D
+  billing_cust: J30
+  db_name: JEWISH WAR VETERANS
+  rental_name: JEWISH WAR VETERANS
+  list_manager: NEGEV DIRECT MKTG
+  lm_contact: null
+  lrr: LAH
+  comments: null
+- db_code: N85A
+  billing_cust: N85
+  db_name: NHES
+  rental_name: NATL HUMANE EDU SOCIETY
+  list_manager: NITN
+  lm_contact: CHERYL/JEN
+  lrr: AWD
+  comments: null
+- db_code: P12D
+  billing_cust: P24
+  db_name: PREVENT BLINDNESS
+  rental_name: PREVENT BLINDNESS
+  list_manager: NITN
+  lm_contact: CHERYL/JEN
+  lrr: AWD
+  comments: WHEN REQUESTED
+- db_code: U90D
+  billing_cust: U90
+  db_name: UNITED SPINAL ASSOCIATION
+  rental_name: UNITED SPINAL ASSOCIATION FUNRAISERS
+  list_manager: NITN
+  lm_contact: CHERYL/JEN
+  lrr: AWD
+  comments: null
+- db_code: U90D
+  billing_cust: U90
+  db_name: UNITED SPINAL ASSOCIATION
+  rental_name: VETSFIRST
+  list_manager: NITN
+  lm_contact: CHERYL/JEN
+  lrr: AWD
+  comments: null
+- db_code: A98D
+  billing_cust: A98
+  db_name: AMERICAN BIBLE SOCIETY
+  rental_name: AMERICAN BIBLE SOCIETY
+  list_manager: RKD GROUP
+  lm_contact: BRITTANY
+  lrr: JRH
+  comments: null
+- db_code: F72D
+  billing_cust: F72
+  db_name: FREEDOM SERVICE DOGS
+  rental_name: FREEDOM SERVICE DOGS
+  list_manager: RKD GROUP
+  lm_contact: BRITTANY
+  lrr: JRH
+  comments: null
+- db_code: G27A
+  billing_cust: G27
+  db_name: GUIDE DOGS FOR THE BLIND
+  rental_name: GUIDE DOGS FOR THE BLIND
+  list_manager: RKD GROUP
+  lm_contact: BRITTANY
+  lrr: JRH
+  comments: null
+- db_code: S56D
+  billing_cust: S56
+  db_name: SUSAN G KOMEN
+  rental_name: SUSAN G KOMEN
+  list_manager: RKD GROUP
+  lm_contact: BRITTANY
+  lrr: JRH
+  comments: null
+- db_code: T14A
+  billing_cust: T15
+  db_name: TOYS FOR TOTS
+  rental_name: MTFT
+  list_manager: RKD GROUP
+  lm_contact: BRITTANY
+  lrr: null
+  comments: null
+- db_code: T39D
+  billing_cust: T39
+  db_name: TX CHILDREN'S HOSPITAL
+  rental_name: TX CHILDREN'S HOSPITAL
+  list_manager: RKD GROUP
+  lm_contact: BRITTANY
+  lrr: JRH
+  comments: null
+- db_code: E42D
+  billing_cust: E42
+  db_name: EANGUS
+  rental_name: EANGUS
+  list_manager: RMI DIRECT
+  lm_contact: ALICIA
+  lrr: JRH
+  comments: null
+- db_code: H67D
+  billing_cust: H67
+  db_name: HOTLINE SENIORS SUPERFILE
+  rental_name: HOTLINE SENIORS SUPERFILE
+  list_manager: RMI DIRECT
+  lm_contact: ALICIA
+  lrr: JRH
+  comments: null
+- db_code: J44D
+  billing_cust: J44
+  db_name: JUVENILE DIABETES RENTAL FILE
+  rental_name: JUVENILE DIABETES
+  list_manager: RMI DIRECT
+  lm_contact: DEB
+  lrr: JRH
+  comments: null
+- db_code: T34D
+  billing_cust: T33
+  db_name: SENIOR CITIZENS LEAGUE TSCL
+  rental_name: DIRECT MAIL SENIOR DONORS
+  list_manager: RMI DIRECT
+  lm_contact: ALICIA
+  lrr: JRH
+  comments: null
+- db_code: T34D
+  billing_cust: T33
+  db_name: SENIOR CITIZENS LEAGUE TSCL
+  rental_name: SENIORS FOR EQUITABLE RETIREMENT
+  list_manager: RMI DIRECT
+  lm_contact: ALICIA
+  lrr: JRH
+  comments: null
+- db_code: M24R
+  billing_cust: M24
+  db_name: MATURE HEALTH MASTERFILE
+  rental_name: MATURE HEALTH 50+  /  DEVOTED CATHOLIC DONORS
+  list_manager: WASHINGTON LIST
+  lm_contact: REGGIE/ERIN
+  lrr: LAH
+  comments: LAH RUNS UPDATES
+- db_code: M24O
+  billing_cust: M24
+  db_name: MATURE HEALTH SWEEPS NONDONORS
+  rental_name: MATURE HEALTH SWEEPS NONDONORS
+  list_manager: WASHINGTON LIST
+  lm_contact: REGGIE/ERIN
+  lrr: LAH
+  comments: RARELY GET ORDERS FOR THIS DATABASE
+- db_code: M24N
+  billing_cust: M24
+  db_name: MATURE HEALTH NONDONOR
+  rental_name: MATURE HEALTH NONDONOR
+  list_manager: WASHINGTON LIST
+  lm_contact: REGGIE/ERIN
+  lrr: LAH
+  comments: RARELY GET ORDERS FOR THIS DATABASE
+- db_code: W12D
+  billing_cust: W12
+  db_name: WWP
+  rental_name: WOUNDED WARRIER PROJECT
+  list_manager: WE ARE MOORE
+  lm_contact: MICHELLE
+  lrr: AWD
+  comments: null
+- db_code: N15R
+  billing_cust: N15
+  db_name: NEWPORT CREATIVE SWEEPS MASTER
+  rental_name: 3-SDCA CHARITABLE APPEALS MF
+  list_manager: ADSTRA DATA
+  lm_contact: null
+  lrr: null
+  comments: null

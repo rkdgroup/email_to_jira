@@ -59,10 +59,15 @@ def _find_supplementary_files(pdf_path: str, order_number: str) -> list[Path]:
     return matches
 
 
-def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False) -> dict:
+def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
+                broker_hint: str = "") -> dict:
     """
     Process a single PDF purchase order.
     Returns dict with keys: success, ticket_key, source, warnings, errors.
+
+    broker_hint: optional broker key (e.g. "kap") derived from context outside the PDF
+                 (e.g. sender email domain). Used as override before text-based detection
+                 so orders that lack standard header fingerprints are still routed correctly.
     """
     from tools_pdf import extract_pdf_text
     from parsers import detect_broker, PARSER_REGISTRY
@@ -86,7 +91,7 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False) -> 
         try:
             for i, page_path in enumerate(page_paths):
                 log.info("--- Page %d/%d ---", i + 1, page_count)
-                r = process_pdf(page_path, dry_run=dry_run, verbose=verbose)
+                r = process_pdf(page_path, dry_run=dry_run, verbose=verbose, broker_hint=broker_hint)
                 results.append(r)
         finally:
             import shutil
@@ -104,7 +109,17 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False) -> 
         log.warning("Low text extraction: %s", text[:120])
 
     # Step 2: Detect broker and parse
-    match = detect_broker(text)
+    # broker_hint (from caller context, e.g. sender email domain) takes priority over
+    # text-based fingerprint detection — useful when the PDF lacks standard header markers.
+    match = None
+    if broker_hint and broker_hint in PARSER_REGISTRY:
+        log.info("Broker hint supplied: %s — skipping text detection", broker_hint)
+        from parsers import BrokerMatch, CONFIDENCE_RULE_BASED
+        match = BrokerMatch(broker_key=broker_hint, confidence=CONFIDENCE_RULE_BASED,
+                            matched_patterns=("hint",))
+    else:
+        match = detect_broker(text)
+
     if match:
         log.info("Broker detected: %s (confidence %.0f%%)", match.broker_key, match.confidence * 100)
         parser = PARSER_REGISTRY[match.broker_key]

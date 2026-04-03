@@ -124,6 +124,7 @@ class RmiDirectParser(BaseBrokerParser):
         mailer_name = ""
         list_name = ""
         offer = ""
+        segment_from_bottom = ""
 
         day_idx = -1
         for i, ln in enumerate(lines):
@@ -144,8 +145,10 @@ class RmiDirectParser(BaseBrokerParser):
                     continue
                 if re.match(r"^[\d,.]+/[MF]$", ln):
                     continue
-                # Skip short all-caps words that are select values (STATE, DOLLAR, etc.)
+                # Skip short all-caps tokens (e.g. "STATE", "DOLLAR") — they are selection
+                # type codes, not mailer/offer/list names; captured separately if needed
                 if re.match(r"^[A-Z]+$", ln) and len(ln) <= 10:
+                    segment_from_bottom = ln  # save as candidate segment value
                     continue
                 if len(ln) > 2:
                     end_values.insert(0, ln)
@@ -233,7 +236,35 @@ class RmiDirectParser(BaseBrokerParser):
         other_fees = self._detect_state_omits(omission_description)
 
         # --- Segment criteria ---
-        segment_criteria = self._find(text, r"(?:Selects?|Segment)[:\s]+([^\n]+)")
+        # RMI layout: the segment line always appears immediately after the RMI job number
+        # (e.g. "RMI40778") in the clearance block, just before the Omit line.
+        # Anchor to the job number rather than content markers so ANY segment is captured.
+        # Fallback 1: any non-trivial line between job# and Omit without criteria markers.
+        # Fallback 2: single-word all-caps type code saved from the bottom column (e.g. "STATE").
+        segment_criteria = ""
+        if clearance_idx > 0:
+            rmi_job_idx = -1
+            for i in range(clearance_idx + 1, min(clearance_idx + 8, len(lines))):
+                if re.match(r"^RMI\d+$", lines[i], re.IGNORECASE):
+                    rmi_job_idx = i
+                    break
+
+            if rmi_job_idx >= 0:
+                # The segment is the very next non-empty line after the job number
+                for i in range(rmi_job_idx + 1, min(rmi_job_idx + 4, len(lines))):
+                    ln = lines[i]
+                    if re.match(r"^Omit", ln, re.IGNORECASE) or ln in ("FTP", "Email", "E-mail"):
+                        break
+                    if re.match(r"^[\d,]+$", ln):
+                        continue
+                    if (len(ln) > 2 and
+                            not re.search(r"notify|cancel|approv|agent|merge|confirm", ln, re.IGNORECASE)):
+                        segment_criteria = ln
+                        break
+
+        # Fallback: single-word type code captured from bottom section (e.g. "STATE", "DOLLAR")
+        if not segment_criteria and segment_from_bottom:
+            segment_criteria = segment_from_bottom
 
         return ParseResult(
             source=f"rule:{self.broker_key}",

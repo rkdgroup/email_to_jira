@@ -58,6 +58,16 @@ PROCESSED_IDS_FILE  = _SCRIPT_DIR / "processed_ids.json"  # message IDs already 
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
+# Sender domain → broker key.  Used to route orders that lack standard PDF fingerprints.
+SENDER_BROKER_MAP = {
+    "keyacquisition.com":         "kap",
+    "keyacquisitionpartners.com": "kap",
+    "rmidirect.com":              "rmi_direct",
+    "adstradata.com":             "adstra",
+    "conraddirect.com":           "conrad_direct",
+    "washingtonlists.com":        "washington_lists",
+}
+
 
 def _mailbox_base() -> str:
     return f"{GRAPH_BASE}/users/{SHARED_MAILBOX}"
@@ -213,6 +223,43 @@ def _add_jira_comment(ticket_key: str, subject: str, sender: str, body: str) -> 
         log.info("Added follow-up comment to %s", ticket_key)
 
 
+def _fetch_full_body(token: str, msg_id: str) -> str:
+    """Fetch the full message body as plain text.
+    Requests text/plain explicitly to avoid HTML <style> bloat pushing
+    key content past the broker detection scan window."""
+    resp = requests.get(
+        f"{_mailbox_base()}/messages/{msg_id}",
+        headers={**_headers(token), "Prefer": 'outlook.body-content-type="text"'},
+        params={"$select": "body"},
+        timeout=20,
+    )
+    resp.raise_for_status()
+    return resp.json().get("body", {}).get("content", "").strip()
+
+
+def _generate_pdf_from_text(text: str, subject: str = "") -> str:
+    """Generate a PDF from plain text using PyMuPDF. Returns temp file path.
+    Writes line-by-line across multiple pages so no content is ever truncated."""
+    import fitz
+    doc = fitz.open()
+    full_text = f"{subject}\n\n{text}" if subject else text
+    lines = full_text.splitlines()
+    page = doc.new_page()
+    y = 50
+    for line in lines:
+        if y > 760:
+            page = doc.new_page()
+            y = 50
+        page.insert_text((50, y), line, fontsize=10, fontname="helv")
+        y += 14
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    tmp_path = tmp.name
+    tmp.close()
+    doc.save(tmp_path)
+    doc.close()
+    return tmp_path
+
+
 def _download_attachment(token: str, msg_id: str, att: dict, suffix: str) -> str | None:
     """Download an attachment and save to a temp file. Returns temp path or None on failure."""
     try:
@@ -236,6 +283,13 @@ def process_message(token: str, message: dict, failed_folder_id: str, processed_
     sender          = message.get("from", {}).get("emailAddress", {}).get("address", "").lower()
     conversation_id = message.get("conversationId", "")
 
+    # Derive broker hint from sender domain so orders with non-standard PDF headers
+    # (e.g. KAP emails sent from no-reply@keyacquisition.com) are routed correctly.
+    sender_domain  = sender.split("@")[-1] if "@" in sender else ""
+    broker_hint    = SENDER_BROKER_MAP.get(sender_domain, "")
+    if broker_hint:
+        log.info("Broker hint from sender domain %r: %s", sender_domain, broker_hint)
+
     log.info("Processing: %r from %s", subject, sender)
 
     # If thread already has a ticket, add follow-up as comment
@@ -252,31 +306,43 @@ def process_message(token: str, message: dict, failed_folder_id: str, processed_
         _mark_processed(msg_id)
         return
 
-    # Fetch all attachments
+    # Fetch all attachments (include isInline to catch embedded PDFs)
     data     = _get(token, f"{_mailbox_base()}/messages/{msg_id}/attachments",
-                    params={"$select": "id,name,contentType"})
+                    params={"$select": "id,name,contentType,isInline"})
     all_atts = data.get("value", [])
 
+    log.info("Attachments found (%d): %s", len(all_atts),
+             [(a.get("name"), a.get("contentType"), a.get("isInline")) for a in all_atts])
+
     pdf_atts   = [a for a in all_atts
-                  if a.get("name", "").lower().endswith(".pdf")
-                  or "pdf" in a.get("contentType", "").lower()]
+                  if not a.get("isInline")
+                  and (a.get("name", "").lower().endswith(".pdf")
+                       or "pdf" in a.get("contentType", "").lower())]
     other_atts = [a for a in all_atts if a not in pdf_atts]
 
     if not pdf_atts:
-        log.debug("No PDF in message %r — skipping", subject)
-        _mark_processed(msg_id)
-        return
+        log.info("No PDF attachment in %r — generating PDF from email body", subject)
+        body_text = _fetch_full_body(token, msg_id)
+        if not body_text:
+            log.warning("No PDF and empty body in %r — skipping", subject)
+            _mark_processed(msg_id)
+            return
+        pdf_atts = [{"_generated": True, "body_text": body_text, "subject": subject}]
 
     any_failed  = False
     ticket_keys = []
     for att in pdf_atts:
-        att_name = att.get("name", "attachment.pdf")
-        tmp_path = _download_attachment(token, msg_id, att, ".pdf")
+        if att.get("_generated"):
+            att_name = att.get("subject") or "email_body"
+            tmp_path = _generate_pdf_from_text(att["body_text"], att["subject"])
+        else:
+            att_name = att.get("name", "attachment.pdf")
+            tmp_path = _download_attachment(token, msg_id, att, ".pdf")
         if not tmp_path:
             any_failed = True
             continue
         try:
-            result = process_pdf(tmp_path)
+            result = process_pdf(tmp_path, broker_hint=broker_hint)
             if result.get("success"):
                 key = result.get("ticket_key")
                 log.info("Ticket created: %s from %r", key, att_name)

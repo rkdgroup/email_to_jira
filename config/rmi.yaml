@@ -1,0 +1,40 @@
+- db_code: E42D
+  billing_cust: E42
+  db_name: EANGUS
+  rental_name: EANGUS
+  list_manager: RMI DIRECT
+  lm_contact: ALICIA
+  lrr: JRH
+  comments: null
+- db_code: H67D
+  billing_cust: H67
+  db_name: HOTLINE SENIORS SUPERFILE
+  rental_name: HOTLINE SENIORS SUPERFILE
+  list_manager: RMI DIRECT
+  lm_contact: ALICIA
+  lrr: JRH
+  comments: null
+- db_code: J44D
+  billing_cust: J44D
+  db_name: JUVENILE DIABETES RENTAL FILE
+  rental_name: JUVENILE DIABETES
+  list_manager: RMI DIRECT
+  lm_contact: DEB
+  lrr: JRH
+  comments: null
+- db_code: T34D
+  billing_cust: T33
+  db_name: SENIOR CITIZENS LEAGUE TSCL
+  rental_name: DIRECT MAIL SENIOR DONORS
+  list_manager: RMI DIRECT
+  lm_contact: ALICIA
+  lrr: JRH
+  comments: null
+- db_code: T34D
+  billing_cust: T33
+  db_name: SENIOR CITIZENS LEAGUE TSCL
+  rental_name: SENIORS FOR EQUITABLE RETIREMENT
+  list_manager: RMI DIRECT
+  lm_contact: ALICIA
+  lrr: JRH
+  comments: null

@@ -1,12 +1,12 @@
 """
-Client lookup from Excel file (NEW LR CLIENT LIST 2026.xlsx).
+Client lookup from YAML config files (config/*.yaml).
 
 Enriches billable_account, db_code, list_manager from the client database.
 
 Lookup order:
-  1. Broker-specific sheet (e.g. AMLC sheet) — match rental_name against
+  1. Broker-specific YAML (e.g. config/rmi.yaml) — match rental_name against
      list_name then mailer_name (higher precision)
-  2. Full client sheet — fuzzy name match on rental_name / db_name (fallback)
+  2. Full client YAML (config/full_client_list.yaml) — fuzzy name match (fallback)
 """
 
 import re
@@ -15,29 +15,28 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-_BROKER_EXCEL   = Path(__file__).parent / "NEW LR CLIENT LIST 2026.xlsx"
-_FALLBACK_EXCEL = Path(__file__).parent / "broker_pdf" / "NEW LR CLIENT LIST 2026 1.xlsx"
+_CONFIG_DIR = Path(__file__).parent / "config"
 
-# Map list_manager values → sheet name in the broker Excel
-_MANAGER_TO_SHEET = {
-    "AMLC":             "AMLC",
-    "ADSTRA":           "ADSTRA",
-    "AALC":             "AALC",
-    "CELCO":            "CELCO",
-    "CONRAD":           "CONRAD",
-    "DATA-AXLE":        "DATA-AXLE",
-    "KAP":              "KAP",
-    "MARY E GRANGER":   "MARY E GRANGER",
-    "NEGEV":            "NEGEV",
-    "NAMES IN THE NEWS":"NITN",
-    "RKD":              "RKD",
-    "RMI":              "RMI",
-    "WASHINGTON LISTS": "WASHINGTON LIST",
-    "WE ARE MOORE":     "WE ARE MOORE",
+# Map list_manager values → YAML filename (without .yaml)
+_MANAGER_TO_FILE = {
+    "AMLC":             "amlc",
+    "ADSTRA":           "adstra",
+    "AALC":             "aalc",
+    "CELCO":            "celco",
+    "CONRAD":           "conrad",
+    "DATA-AXLE":        "data_axle",
+    "KAP":              "kap",
+    "MARY E GRANGER":   "mary_e_granger",
+    "NEGEV":            "negev",
+    "NAMES IN THE NEWS":"nitn",
+    "RKD":              "rkd",
+    "RMI":              "rmi",
+    "WASHINGTON LISTS": "washington_list",
+    "WE ARE MOORE":     "we_are_moore",
 }
 
-_sheet_cache:   dict[str, list[dict]] = {}
-_client_cache:  list | None = None
+_sheet_cache:  dict[str, list[dict]] = {}
+_client_cache: list | None = None
 _WORD_CLEAN_RE = re.compile(r"[^a-z0-9 ]")
 
 
@@ -56,97 +55,47 @@ def _word_overlap(a: str, b: str) -> float:
     return matches / len(wa)
 
 
-def _clean_billing(raw: str) -> str:
-    """Strip parenthetical suffixes: 'T11 (A42D)' → 'T11'."""
-    return re.sub(r"\s*\(.*?\)", "", raw).strip()
+def _load_yaml(path: Path) -> list[dict]:
+    import yaml
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or []
+        return [r for r in data if r.get("db_code")]
+    except Exception as e:
+        log.warning("Failed to load %s: %s", path, e)
+        return []
 
 
 def _load_broker_sheet(list_manager: str) -> list[dict]:
-    """Load the broker-specific sheet from NEW LR CLIENT LIST 2026.xlsx. Cached."""
-    sheet_name = _MANAGER_TO_SHEET.get((list_manager or "").upper().strip())
-    if not sheet_name:
+    """Load broker-specific YAML. Cached."""
+    file_key = _MANAGER_TO_FILE.get((list_manager or "").upper().strip())
+    if not file_key:
         return []
-    if sheet_name in _sheet_cache:
-        return _sheet_cache[sheet_name]
+    if file_key in _sheet_cache:
+        return _sheet_cache[file_key]
 
-    if not _BROKER_EXCEL.exists():
-        log.warning("Broker Excel not found: %s", _BROKER_EXCEL)
-        _sheet_cache[sheet_name] = []
-        return []
-
-    try:
-        import openpyxl
-        wb = openpyxl.load_workbook(str(_BROKER_EXCEL), read_only=True)
-        if sheet_name not in wb.sheetnames:
-            log.warning("Sheet %r not found in %s", sheet_name, _BROKER_EXCEL.name)
-            _sheet_cache[sheet_name] = []
-            return []
-
-        ws = wb[sheet_name]
-        rows = []
-        for row in ws.iter_rows(min_row=2, max_col=8, values_only=True):
-            db_code     = str(row[0] or "").strip()
-            billing_raw = str(row[1] or "").strip()
-            db_name     = str(row[2] or "").strip()
-            rental_name = str(row[3] or "").strip()
-            lm          = str(row[4] or "").strip()
-            lm_contact  = str(row[5] or "").strip()
-            if db_code:
-                rows.append({
-                    "db_code":      db_code,
-                    "billing_cust": _clean_billing(billing_raw),
-                    "db_name":      db_name,
-                    "rental_name":  rental_name,
-                    "list_manager": lm,
-                    "lm_contact":   lm_contact,
-                })
-        wb.close()
-        log.info("Loaded %d rows from sheet %r", len(rows), sheet_name)
-        _sheet_cache[sheet_name] = rows
-        return rows
-
-    except Exception as e:
-        log.warning("Failed to load broker sheet %r: %s", sheet_name, e)
-        _sheet_cache[sheet_name] = []
+    path = _CONFIG_DIR / f"{file_key}.yaml"
+    if not path.exists():
+        log.warning("Broker YAML not found: %s", path)
+        _sheet_cache[file_key] = []
         return []
 
+    rows = _load_yaml(path)
+    log.info("Loaded %d rows from %s", len(rows), path.name)
+    _sheet_cache[file_key] = rows
+    return rows
 
-def _load_all_clients(excel_path: str = None) -> list[dict]:
-    """Load full client list (LIST RENTAL FULL CLIENT SHEET). Cached."""
+
+def _load_all_clients() -> list[dict]:
+    """Load full client list (config/full_client_list.yaml). Cached."""
     global _client_cache
     if _client_cache is not None:
         return _client_cache
 
-    path = excel_path or str(_BROKER_EXCEL if _BROKER_EXCEL.exists() else _FALLBACK_EXCEL)
-    try:
-        import openpyxl
-        wb = openpyxl.load_workbook(path, read_only=True)
-        ws = wb.active
-        clients = []
-        for row in ws.iter_rows(min_row=2, max_col=8, values_only=True):
-            db_code     = str(row[0] or "").strip()
-            billing_raw = str(row[1] or "").strip()
-            db_name     = str(row[2] or "").strip()
-            rental_name = str(row[3] or "").strip()
-            lm          = str(row[4] or "").strip()
-            lm_contact  = str(row[5] or "").strip()
-            if db_code or billing_raw:
-                clients.append({
-                    "db_code":      db_code,
-                    "billing_cust": _clean_billing(billing_raw),
-                    "db_name":      db_name,
-                    "rental_name":  rental_name,
-                    "list_manager": lm,
-                    "lm_contact":   lm_contact,
-                })
-        wb.close()
-        log.info("Loaded %d clients from full sheet", len(clients))
-        _client_cache = clients
-        return _client_cache
-    except Exception as e:
-        log.warning("Failed to load client Excel: %s", e)
-        _client_cache = []
-        return []
+    path = _CONFIG_DIR / "full_client_list.yaml"
+    _client_cache = _load_yaml(path)
+    log.info("Loaded %d clients from full_client_list.yaml", len(_client_cache))
+    return _client_cache
 
 
 def _best_match(rows: list[dict], *names: str) -> tuple[dict | None, float]:
@@ -157,7 +106,7 @@ def _best_match(rows: list[dict], *names: str) -> tuple[dict | None, float]:
             if not name:
                 continue
             for field in ("rental_name", "db_name"):
-                score = _word_overlap(name, row.get(field, ""))
+                score = _word_overlap(name, row.get(field, "") or "")
                 if score > best_score:
                     best_score, best = score, row
     return best, best_score
@@ -165,10 +114,10 @@ def _best_match(rows: list[dict], *names: str) -> tuple[dict | None, float]:
 
 def _row_to_result(row: dict) -> dict:
     return {
-        "billable_account": row["billing_cust"],
-        "list_manager":     row["list_manager"],
-        "db_code":          row["db_code"],
-        "lm_contact":       row["lm_contact"],
+        "billable_account": row.get("billing_cust") or "",
+        "list_manager":     row.get("list_manager") or "",
+        "db_code":          row.get("db_code") or "",
+        "lm_contact":       row.get("lm_contact") or "",
     }
 
 
@@ -179,12 +128,13 @@ def enrich_fields(
     db_code:      str = "",
 ) -> dict:
     """
-    Look up db_code, billable_account, and list_manager from Excel.
+    Look up db_code, billable_account, and list_manager from YAML config.
 
     Priority:
-      1. Exact db_code match in broker sheet or full sheet
-      2. Broker-specific sheet: fuzzy match on list_name, then mailer_name (threshold 0.4)
-      3. Full client sheet: fuzzy match on list_name (threshold 0.5)
+      1. Exact db_code match in broker YAML or full YAML
+      2. Broker-specific YAML: fuzzy match on list_name, then mailer_name (threshold 0.4)
+      3. Cross-broker YAMLs: fuzzy match (threshold 0.5)
+      4. Full client YAML: fuzzy match on list_name (threshold 0.5)
 
     Returns dict with billable_account, list_manager, db_code, lm_contact.
     Empty dict if no match found.
@@ -192,33 +142,35 @@ def enrich_fields(
     # 1. Exact db_code match
     if db_code:
         for row in _load_broker_sheet(list_manager) + _load_all_clients():
-            if row["db_code"].upper().strip() == db_code.upper().strip():
+            if row.get("db_code", "").upper().strip() == db_code.upper().strip():
                 return _row_to_result(row)
 
-    # 2. Broker-specific sheet — match list_name then mailer_name
+    # 2. Broker-specific YAML
     broker_rows = _load_broker_sheet(list_manager)
     if broker_rows:
         best, score = _best_match(broker_rows, list_name, mailer_name)
         if best and score >= 0.4:
-            log.info("Broker sheet match (score=%.2f): %s -> %s", score, list_name or mailer_name, best["db_code"])
+            log.info("Broker YAML match (score=%.2f): %s -> %s",
+                     score, list_name or mailer_name, best["db_code"])
             return _row_to_result(best)
 
-    # 3. All other broker sheets (cross-broker fallback)
-    for mgr_key, sheet_name in _MANAGER_TO_SHEET.items():
+    # 3. Cross-broker fallback
+    for mgr_key, file_key in _MANAGER_TO_FILE.items():
         if mgr_key == (list_manager or "").upper().strip():
-            continue  # already tried
+            continue
         rows = _load_broker_sheet(mgr_key)
         if not rows:
             continue
         best, score = _best_match(rows, list_name, mailer_name)
         if best and score >= 0.5:
-            log.info("Cross-broker sheet %r match (score=%.2f): %s -> %s", sheet_name, score, list_name or mailer_name, best["db_code"])
+            log.info("Cross-broker YAML %r match (score=%.2f): %s -> %s",
+                     file_key, score, list_name or mailer_name, best["db_code"])
             return _row_to_result(best)
 
-    # 4. Full client sheet fallback
+    # 4. Full client YAML fallback
     best, score = _best_match(_load_all_clients(), list_name)
     if best and score >= 0.5:
-        log.info("Full sheet match (score=%.2f): %s -> %s", score, list_name, best["db_code"])
+        log.info("Full YAML match (score=%.2f): %s -> %s", score, list_name, best["db_code"])
         return _row_to_result(best)
 
     return {}

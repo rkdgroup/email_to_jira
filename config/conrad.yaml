@@ -1,0 +1,24 @@
+- db_code: J75R
+  billing_cust: J75
+  db_name: JUDICIAL WATCH RENTAL FILE
+  rental_name: JUDICIAL WATCH
+  list_manager: CONRAD DIRECT
+  lm_contact: BRENDA
+  lrr: JRH
+  comments: null
+- db_code: F57D
+  billing_cust: F57
+  db_name: FAIR
+  rental_name: FEDERATION FOR AMERICAN IMMIGRATION REFORM
+  list_manager: CONRAD DIRECT
+  lm_contact: BRENDA
+  lrr: JRH
+  comments: null
+- db_code: U02D
+  billing_cust: U02
+  db_name: U.S. TERM LIMITS
+  rental_name: U.S. TERM LIMITS
+  list_manager: CONRAD DIRECT
+  lm_contact: MICHAEL
+  lrr: JRH
+  comments: null

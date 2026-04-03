@@ -1,0 +1,16 @@
+- db_code: A15R
+  billing_cust: A15
+  db_name: ALLIANCE RETIRED AMERICANS
+  rental_name: ARA
+  list_manager: CELCO
+  lm_contact: MISTY
+  lrr: AWD
+  comments: QUARTERLY
+- db_code: P88D
+  billing_cust: P88
+  db_name: PROJECT OPEN HAND
+  rental_name: PROJECT OPEN HAND
+  list_manager: CELCO
+  lm_contact: SARA
+  lrr: AWD
+  comments: null

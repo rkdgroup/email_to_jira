@@ -1,0 +1,40 @@
+- db_code: J30D
+  billing_cust: J30
+  db_name: JEWISH WAR VETERANS
+  rental_name: JEWISH WAR VETERANS
+  list_manager: NEGEV DIRECT MKTG
+  lm_contact: null
+  lrr: LAH
+  comments: null
+- db_code: M24R
+  billing_cust: M24R
+  db_name: MATURE HEALTH MASTERFILE
+  rental_name: MATURE HEALTH 50+  /  DEVOTED CATHOLIC DONORS
+  list_manager: WASHINGTON LIST
+  lm_contact: REGGIE/ERIN
+  lrr: LAH
+  comments: LAH RUNS UPDATES
+- db_code: M24O
+  billing_cust: M24R
+  db_name: MATURE HEALTH SWEEPS NONDONORS
+  rental_name: MATURE HEALTH SWEEPS NONDONORS
+  list_manager: WASHINGTON LIST
+  lm_contact: REGGIE/ERIN
+  lrr: LAH
+  comments: RARELY GET ORDERS FOR THIS DATABASE
+- db_code: M24N
+  billing_cust: M24R
+  db_name: MATURE HEALTH NONDONOR
+  rental_name: MATURE HEALTH NONDONOR
+  list_manager: WASHINGTON LIST
+  lm_contact: REGGIE/ERIN
+  lrr: LAH
+  comments: RARELY GET ORDERS FOR THIS DATABASE
+- db_code: R51D
+  billing_cust: R51
+  db_name: ROSIE'S PLACE
+  rental_name: ROSIE'S PLACE
+  list_manager: DATA-AXLE
+  lm_contact: MAYURI
+  lrr: LAH
+  comments: null

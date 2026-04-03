@@ -1,0 +1,16 @@
+- db_code: T14A
+  billing_cust: T15
+  db_name: TOYS FOR TOTS
+  rental_name: MTFT
+  list_manager: WE ARE MOORE
+  lm_contact: MICHELLE
+  lrr: JRH
+  comments: null
+- db_code: W12D
+  billing_cust: W12
+  db_name: WWP
+  rental_name: WOUNDED WARRIER PROJECT
+  list_manager: WE ARE MOORE
+  lm_contact: MICHELLE
+  lrr: AWD
+  comments: null

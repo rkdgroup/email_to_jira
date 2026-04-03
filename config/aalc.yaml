@@ -1,0 +1,24 @@
+- db_code: M41D
+  billing_cust: M30
+  db_name: MDA
+  rental_name: MACULAR DEGENERATION
+  list_manager: ALL AMERICAN LIST CORP
+  lm_contact: HAWLEY
+  lrr: AWD
+  comments: null
+- db_code: P69D
+  billing_cust: P68
+  db_name: PARKINSON DONOR FILE
+  rental_name: PARKINSON RESEARCH
+  list_manager: ALL AMERICAN LIST CORP
+  lm_contact: HAWLEY
+  lrr: AWD
+  comments: null
+- db_code: U44D
+  billing_cust: U44
+  db_name: USDSA PREMIUM
+  rental_name: USDSA PREMIUM
+  list_manager: ALL AMERICAN LIST CORP
+  lm_contact: LORI
+  lrr: AWD
+  comments: null

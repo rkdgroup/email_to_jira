@@ -6,3 +6,4 @@ pymupdf4llm
 openpyxl
 python-dotenv
 msal
+pyyaml

@@ -1,0 +1,24 @@
+- db_code: M24R
+  billing_cust: M24R
+  db_name: MATURE HEALTH MASTERFILE
+  rental_name: MATURE HEALTH 50+  /  DEVOTED CATHOLIC DONORS
+  list_manager: WASHINGTON LIST
+  lm_contact: REGGIE/ERIN
+  lrr: LAH
+  comments: LAH RUNS UPDATES
+- db_code: M24O
+  billing_cust: M24R
+  db_name: MATURE HEALTH SWEEPS NONDONORS
+  rental_name: MATURE HEALTH SWEEPS NONDONORS
+  list_manager: WASHINGTON LIST
+  lm_contact: REGGIE/ERIN
+  lrr: LAH
+  comments: RARELY GET ORDERS FOR THIS DATABASE
+- db_code: M24N
+  billing_cust: M24R
+  db_name: MATURE HEALTH NONDONOR
+  rental_name: MATURE HEALTH NONDONOR
+  list_manager: WASHINGTON LIST
+  lm_contact: REGGIE/ERIN
+  lrr: LAH
+  comments: RARELY GET ORDERS FOR THIS DATABASE

@@ -1,0 +1,80 @@
+- db_code: F51D
+  billing_cust: F51
+  db_name: FATHER BILL'S
+  rental_name: FATHER BILL'S MAINSPRING
+  list_manager: DATA-AXLE
+  lm_contact: null
+  lrr: AWD
+  comments: TOLD WHEN TO UPDATE
+- db_code: I18D
+  billing_cust: I18
+  db_name: INTL EYE FOUNDATION
+  rental_name: INTL EYE FOUNDATION
+  list_manager: DATA-AXLE
+  lm_contact: null
+  lrr: AWD
+  comments: null
+- db_code: M47R
+  billing_cust: M48
+  db_name: MVLA & MVLA HIGH DOLLAR
+  rental_name: MOUNT VERNON LADIES ASSOCIATION
+  list_manager: DATA-AXLE
+  lm_contact: null
+  lrr: AWD
+  comments: null
+- db_code: S42D
+  billing_cust: S42
+  db_name: SACRED HEART SOUTHERN MISSIONS
+  rental_name: SACRED HEART AUTO LEAGUE
+  list_manager: DATA-AXLE
+  lm_contact: MAYURI
+  lrr: JRH
+  comments: null
+- db_code: S42D
+  billing_cust: S42
+  db_name: SACRED HEART SOUTHERN MISSIONS
+  rental_name: SACRED HEART LIFE TRENDS
+  list_manager: DATA-AXLE
+  lm_contact: MAYURI
+  lrr: JRH
+  comments: null
+- db_code: S42D
+  billing_cust: S42
+  db_name: SACRED HEART SOUTHERN MISSIONS
+  rental_name: SACRED HEART MASS CARD
+  list_manager: DATA-AXLE
+  lm_contact: MAYURI
+  lrr: JRH
+  comments: null
+- db_code: S42D
+  billing_cust: S42
+  db_name: SACRED HEART SOUTHERN MISSIONS
+  rental_name: SACRED HEART MASTERFILE
+  list_manager: DATA-AXLE
+  lm_contact: MAYURI
+  lrr: JRH
+  comments: null
+- db_code: S42D
+  billing_cust: S42
+  db_name: SACRED HEART SOUTHERN MISSIONS
+  rental_name: SACRED HEART SOUTHERN MISSIONS
+  list_manager: DATA-AXLE
+  lm_contact: MAYURI
+  lrr: JRH
+  comments: null
+- db_code: S42D
+  billing_cust: S42
+  db_name: SACRED HEART SOUTHERN MISSIONS
+  rental_name: SACRED HEART SOUTHERN MISSIONS SPANISH DNRS
+  list_manager: DATA-AXLE
+  lm_contact: MAYURI
+  lrr: JRH
+  comments: null
+- db_code: N48A
+  billing_cust: N48
+  db_name: THE NATIONAL SHRINE
+  rental_name: BASILICA;NATL SHRINE;IMMACULATE CONCEPTION
+  list_manager: DATA-AXLE
+  lm_contact: CARMEN
+  lrr: JRH
+  comments: null
