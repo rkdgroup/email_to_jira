@@ -7,16 +7,13 @@ Auth: Microsoft Graph API with MSAL ROPC flow (username + password).
       Requires MS_CLIENT_ID, MS_CLIENT_SECRET, MS_SERVICE_ACCOUNT, MS_SERVICE_PASSWORD, MS_TENANT_ID.
 
 Usage:
-    python email_scanner.py            # run once
-    python email_scanner.py --loop     # run every 5 minutes (always-on)
+    python email_scanner.py    # run once — intended to be triggered by Jenkins every 5 minutes
 """
 
 import os
 import sys
 import json
-import time
 import logging
-import argparse
 import tempfile
 import base64
 import requests
@@ -48,8 +45,7 @@ log = logging.getLogger(__name__)
 # ── Config ────────────────────────────────────────────────────────────────────
 CLIENT_ID        = os.getenv("MS_CLIENT_ID", "")
 TENANT_ID        = os.getenv("MS_TENANT_ID", "common")
-SCOPES        = ["Mail.Read", "Mail.ReadWrite", "Mail.Read.Shared", "Mail.ReadWrite.Shared"]
-POLL_INTERVAL = 60  # 5 minutes
+SCOPES = ["Mail.Read", "Mail.ReadWrite", "Mail.Read.Shared", "Mail.ReadWrite.Shared"]
 
 SHARED_MAILBOX        = os.getenv("IMAP_EMAIL", "Listfulfillment@data-management.com")
 SOURCE_FOLDER         = "List Rental"
@@ -403,21 +399,7 @@ def run_scan() -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="DSLF Email Scanner")
-    parser.add_argument("--loop", action="store_true",
-                        help=f"Run every {POLL_INTERVAL // 60} minutes")
-    args = parser.parse_args()
-
-    if args.loop:
-        log.info("Started — polling every %d minutes.", POLL_INTERVAL // 60)
-        while True:
-            try:
-                run_scan()
-            except Exception as e:
-                log.error("Scan error: %s", e)
-            time.sleep(POLL_INTERVAL)
-    else:
-        run_scan()
+    run_scan()
 
 
 if __name__ == "__main__":
