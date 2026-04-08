@@ -31,13 +31,16 @@ sys.path.insert(0, str(_PROJECT_DIR))
 load_dotenv(_PROJECT_DIR / ".env")
 
 # ── Logging ───────────────────────────────────────────────────────────────────
+_LOG_DIR = _SCRIPT_DIR / "logs"
+_LOG_DIR.mkdir(exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler(_SCRIPT_DIR / "logs" / "email_scanner.log"),
+        logging.FileHandler(_LOG_DIR / "email_scanner.log"),
     ],
 )
 log = logging.getLogger(__name__)
