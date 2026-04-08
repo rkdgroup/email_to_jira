@@ -10,6 +10,7 @@ Lookup order:
 """
 
 import re
+import json
 import logging
 from pathlib import Path
 
@@ -35,8 +36,11 @@ _MANAGER_TO_FILE = {
     "WE ARE MOORE":     "we_are_moore",
 }
 
-_sheet_cache:  dict[str, list[dict]] = {}
-_client_cache: list | None = None
+_LEARNED_PATTERNS_FILE = Path(__file__).parent / "ticket_scanner" / "learned_patterns.json"
+
+_sheet_cache:    dict[str, list[dict]] = {}
+_client_cache:   list | None = None
+_learned_cache:  dict | None = None
 _WORD_CLEAN_RE = re.compile(r"[^a-z0-9 ]")
 
 
@@ -112,6 +116,53 @@ def _best_match(rows: list[dict], *names: str) -> tuple[dict | None, float]:
     return best, best_score
 
 
+def _load_learned_patterns() -> dict:
+    global _learned_cache
+    if _learned_cache is not None:
+        return _learned_cache
+    if not _LEARNED_PATTERNS_FILE.exists():
+        _learned_cache = {}
+        return _learned_cache
+    try:
+        _learned_cache = json.loads(_LEARNED_PATTERNS_FILE.read_text())
+    except Exception as e:
+        log.warning("Could not load learned_patterns.json: %s", e)
+        _learned_cache = {}
+    return _learned_cache
+
+
+def _learned_lookup(list_name: str, mailer_name: str) -> dict:
+    """
+    Fuzzy match against Jira-learned patterns (Lee's tickets).
+    Patterns are keyed by List Name — matches list_name input first,
+    then falls back to mailer_name.
+    """
+    patterns = _load_learned_patterns()
+    if not patterns:
+        return {}
+
+    # Prefer list_name match (keys are list names); fall back to mailer_name
+    for query in (list_name, mailer_name):
+        if not query:
+            continue
+        best_key, best_score = None, 0.0
+        for pkey in patterns:
+            score = _word_overlap(query, pkey)
+            if score > best_score:
+                best_score, best_key = score, pkey
+        if best_key and best_score >= 0.5:
+            p = patterns[best_key]
+            log.info("Learned pattern match (score=%.2f): %s -> %s",
+                     best_score, query, p.get("client_db"))
+            return {
+                "billable_account": p.get("billable_account", ""),
+                "list_manager":     p.get("list_manager", ""),
+                "db_code":          p.get("client_db", ""),
+                "lm_contact":       "",
+            }
+    return {}
+
+
 def _row_to_result(row: dict) -> dict:
     return {
         "billable_account": row.get("billing_cust") or "",
@@ -172,6 +223,11 @@ def enrich_fields(
     if best and score >= 0.5:
         log.info("Full YAML match (score=%.2f): %s -> %s", score, list_name, best["db_code"])
         return _row_to_result(best)
+
+    # 5. Learned patterns from Lee's Jira tickets
+    result = _learned_lookup(list_name, mailer_name)
+    if result:
+        return result
 
     return {}
 

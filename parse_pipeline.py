@@ -174,7 +174,7 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
         flag_for_review("Duplicate PO", f"PO {result.mailer_po} already exists: {keys}")
         return {"success": False, "source": result.source, "errors": [f"Duplicate: {keys}"]}
 
-    # Step 5: Enrich fields from Excel client list
+    # Step 5: Enrich fields from YAML config files
     enriched = enrich_fields(
         list_name=result.list_name or "",
         mailer_name=result.mailer_name or "",

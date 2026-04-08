@@ -24,7 +24,7 @@ No test framework, linter, or CI/CD configured. Testing is manual against PDFs i
 ## Dependencies
 
 ```bash
-pip install anthropic requests pymupdf pdfminer.six pymupdf4llm openpyxl python-dotenv
+pip install anthropic requests pymupdf pdfminer.six pymupdf4llm python-dotenv msal pyyaml
 ```
 
 Credentials in `.env`: `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `ANTHROPIC_API_KEY`.

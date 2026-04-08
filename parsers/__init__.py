@@ -64,8 +64,7 @@ _RULES = [
         re.compile(r"(?:Exchange|Rental)\s*Instruction", re.IGNORECASE),
     ]),
     ("kap", [
-        re.compile(r"LIST\s+MANAGEMENT\s+DIVISION", re.IGNORECASE),
-        re.compile(r"KAP\s+ORDER", re.IGNORECASE),
+        re.compile(r"KAP\s+Order|keyacquisitionpartners\.com|keyacquisition\.com|LIST\s+MANAGEMENT\s+DIVISION", re.IGNORECASE),
     ]),
     ("washington_lists", [
         re.compile(r"Washington\s+Lists,?\s+Inc", re.IGNORECASE),

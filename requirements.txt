@@ -3,7 +3,6 @@ requests
 pymupdf
 pdfminer.six
 pymupdf4llm
-openpyxl
 python-dotenv
 msal
 pyyaml

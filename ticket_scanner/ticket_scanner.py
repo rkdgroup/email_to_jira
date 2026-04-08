@@ -28,13 +28,15 @@ JIRA_BASE_URL = os.getenv("JIRA_BASE_URL", "https://rkdgroup.atlassian.net")
 JIRA_EMAIL    = os.getenv("JIRA_EMAIL")
 JIRA_TOKEN    = os.getenv("JIRA_API_TOKEN")
 PROJECT_KEY   = "DSLF"
-STATE_FILE    = Path(__file__).parent / "scanner_state.json"
-REPORTS_DIR   = Path(__file__).parent / "reports"
+STATE_FILE             = Path(__file__).parent / "scanner_state.json"
+REPORTS_DIR            = Path(__file__).parent / "reports"
+LEARNED_PATTERNS_FILE  = Path(__file__).parent / "learned_patterns.json"
 
 FIELDS = [
     "summary", "created",
     "customfield_12191",  # Billable Account
     "customfield_12155",  # Client Database
+    "customfield_12156",  # Seed Database
     "customfield_12192",  # Manager Order Number
     "customfield_12193",  # Mailer PO
     "customfield_12194",  # Mailer Name
@@ -226,6 +228,137 @@ def save_report(content: str) -> Path:
     return path
 
 
+# --- Learn from reporter ---
+
+def fetch_tickets_by_reporter(reporter_display_name: str) -> list[dict]:
+    """Fetch all DSLF tickets created by a specific reporter, oldest first."""
+    all_issues = []
+    start = 0
+    batch = 50
+    jql = f'project = {PROJECT_KEY} AND reporter = "{reporter_display_name}" ORDER BY created ASC'
+
+    while True:
+        params = {
+            "jql": jql,
+            "startAt": start,
+            "maxResults": batch,
+            "fields": ",".join(FIELDS),
+        }
+        resp = requests.get(
+            f"{JIRA_BASE_URL}/rest/api/3/search/jql",
+            auth=_auth(),
+            headers={"Accept": "application/json"},
+            params=params,
+            timeout=20,
+        )
+        if resp.status_code != 200:
+            log.error("Jira search failed: %s %s", resp.status_code, resp.text[:200])
+            break
+
+        data = resp.json()
+        issues = data.get("issues", [])
+        all_issues.extend(issues)
+
+        if start + batch >= data.get("total", 0):
+            break
+        start += batch
+
+    return all_issues
+
+
+def learn_from_tickets(issues: list[dict]) -> int:
+    """
+    Extract List Name → DB code mappings from tickets and save to learned_patterns.json.
+    Keys by List Name (the donor list being rented) — stable, consistent with YAML structure.
+    Falls back to Mailer Name if List Name is empty.
+    Skips tickets missing Billable Account or Client Database.
+    Returns count of patterns saved.
+    """
+    patterns = {}
+    if LEARNED_PATTERNS_FILE.exists():
+        try:
+            patterns = json.loads(LEARNED_PATTERNS_FILE.read_text())
+        except Exception:
+            patterns = {}
+
+    learned = 0
+    for issue in issues:
+        key    = issue["key"]
+        fields = issue["fields"]
+
+        # Key by List Name (which list is being rented — determines DB code)
+        # Fall back to Mailer Name only if List Name is absent
+        list_name   = (fields.get("customfield_12234") or "").strip().upper()
+        mailer_name = (fields.get("customfield_12194") or "").strip().upper()
+        pattern_key = list_name or mailer_name
+        if not pattern_key:
+            continue
+
+        billable  = _select_val(issue, "customfield_12191")
+        client_db = _select_val(issue, "customfield_12155")
+        seed_db   = _select_val(issue, "customfield_12156")
+
+        if not billable or not client_db:
+            log.debug("  %s skipped — missing Billable or Client DB", key)
+            continue
+
+        list_manager    = (fields.get("customfield_12231") or "").strip()
+        requestor_name  = (fields.get("customfield_12232") or "").strip()
+        requestor_email = (fields.get("customfield_12233") or "").strip()
+        ship_to_email   = (fields.get("customfield_12275") or "").strip()
+        shipping_method = _select_val(issue, "customfield_12276")
+
+        entry = patterns.setdefault(pattern_key, {
+            "billable_account": "",
+            "client_db": "",
+            "seed_db": "",
+            "list_manager": "",
+            "mailer_name": "",
+            "requestor_name": "",
+            "requestor_email": "",
+            "ship_to_email": "",
+            "shipping_method": "",
+            "seen_in": [],
+        })
+
+        # Latest ticket wins for DB codes (list→DB mapping is stable)
+        entry["billable_account"] = billable
+        entry["client_db"]        = client_db
+        if seed_db:
+            entry["seed_db"] = seed_db
+        if list_manager:
+            entry["list_manager"] = list_manager
+        if mailer_name:
+            entry["mailer_name"] = mailer_name
+        if requestor_name:
+            entry["requestor_name"] = requestor_name
+        if requestor_email:
+            entry["requestor_email"] = requestor_email
+        if ship_to_email:
+            entry["ship_to_email"] = ship_to_email
+        if shipping_method:
+            entry["shipping_method"] = shipping_method
+        if key not in entry["seen_in"]:
+            entry["seen_in"].append(key)
+
+        learned += 1
+        log.info("  Learned: %s → %s / %s / %s", pattern_key, billable, client_db, seed_db)
+
+    LEARNED_PATTERNS_FILE.write_text(json.dumps(patterns, indent=2))
+    return learned
+
+
+def run_learn(reporter: str) -> None:
+    log.info("Fetching tickets by reporter: %r", reporter)
+    issues = fetch_tickets_by_reporter(reporter)
+    if not issues:
+        log.warning("No tickets found for reporter %r", reporter)
+        return
+    log.info("Found %d ticket(s) — extracting patterns...", len(issues))
+    count = learn_from_tickets(issues)
+    log.info("Done. %d pattern(s) saved to %s", count, LEARNED_PATTERNS_FILE)
+
+
 # --- Main ---
 
 def run_scan():
@@ -269,7 +402,15 @@ def main():
                         help="Run repeatedly every N minutes")
     parser.add_argument("--reset", action="store_true",
                         help="Clear saved state and scan all tickets")
+    parser.add_argument("--learn", action="store_true",
+                        help="Learn field patterns from a reporter's tickets")
+    parser.add_argument("--reporter", default="Lee Ann Hazelwood",
+                        help="Reporter display name to learn from (default: Lee Ann Hazelwood)")
     args = parser.parse_args()
+
+    if args.learn:
+        run_learn(args.reporter)
+        return
 
     if args.reset:
         STATE_FILE.unlink(missing_ok=True)

@@ -187,7 +187,16 @@ class RkdGroupParser(BaseBrokerParser):
         result["special_seed_instructions"] = self._extract_special_seed_instructions(text)
 
         # --- Segment criteria ---
-        result["segment_criteria"] = self._find(text, r"(?:Selects?|Segment)[:\s]+([^\n]+)")
+        # In the columnar layout, Segment: label has no inline value.
+        # The actual criteria appears as the first content line after Way Bill #: / Attn To: labels.
+        result["segment_criteria"] = ""
+        if way_bill_idx >= 0:
+            for j in range(way_bill_idx + 1, min(way_bill_idx + 8, len(lines))):
+                candidate = lines[j]
+                if (not candidate.endswith(":") and len(candidate) > 4 and
+                        re.search(r"\$|\bmonth|\bdonor|\bomit|\bselect|\+", candidate, re.IGNORECASE)):
+                    result["segment_criteria"] = candidate
+                    break
 
         # --- Other fees: auto-detect State Omits ---
         result["other_fees"] = self._detect_state_omits(result["omission_description"])

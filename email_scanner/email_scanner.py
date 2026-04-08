@@ -2,13 +2,13 @@
 DSLF Email Scanner — polls the "List Rental" folder in the shared Outlook mailbox,
 downloads PDF attachments, and creates DSLF Jira tickets via the existing pipeline.
 
-Auth: Microsoft Graph API with MSAL device-code flow.
-      Logs in once via browser; token cached in token_cache.bin for future runs.
+Auth: Microsoft Graph API with MSAL ROPC flow (username + password).
+      Authenticates as service account on every run using credentials from .env.
+      Requires MS_CLIENT_ID, MS_CLIENT_SECRET, MS_SERVICE_ACCOUNT, MS_SERVICE_PASSWORD, MS_TENANT_ID.
 
 Usage:
     python email_scanner.py            # run once
     python email_scanner.py --loop     # run every 5 minutes (always-on)
-    python email_scanner.py --login    # force re-login (clear token cache)
 """
 
 import os
@@ -45,9 +45,8 @@ log = logging.getLogger(__name__)
 # ── Config ────────────────────────────────────────────────────────────────────
 CLIENT_ID        = os.getenv("MS_CLIENT_ID", "")
 TENANT_ID        = os.getenv("MS_TENANT_ID", "common")
-SCOPES           = ["Mail.Read", "Mail.ReadWrite", "Mail.Read.Shared", "Mail.ReadWrite.Shared"]
-TOKEN_CACHE_FILE = _SCRIPT_DIR / "token_cache.bin"
-POLL_INTERVAL    = 60  # 5 minutes
+SCOPES        = ["Mail.Read", "Mail.ReadWrite", "Mail.Read.Shared", "Mail.ReadWrite.Shared"]
+POLL_INTERVAL = 60  # 5 minutes
 
 SHARED_MAILBOX        = os.getenv("IMAP_EMAIL", "Listfulfillment@data-management.com")
 SOURCE_FOLDER         = "List Rental"
@@ -78,53 +77,31 @@ def _mailbox_base() -> str:
 def get_access_token(force_login: bool = False) -> str:
     import msal
 
-    if not CLIENT_ID:
-        log.error("MS_CLIENT_ID not set in .env")
+    CLIENT_SECRET = os.getenv("MS_CLIENT_SECRET", "")
+    USERNAME      = os.getenv("MS_SERVICE_ACCOUNT", "")
+    PASSWORD      = os.getenv("MS_SERVICE_PASSWORD", "")
+
+    if not CLIENT_ID or not CLIENT_SECRET or not USERNAME or not PASSWORD:
+        log.error("MS_CLIENT_ID, MS_CLIENT_SECRET, MS_SERVICE_ACCOUNT, MS_SERVICE_PASSWORD must be set in .env")
         sys.exit(1)
 
-    if force_login and TOKEN_CACHE_FILE.exists():
-        TOKEN_CACHE_FILE.unlink()
-        log.info("Token cache cleared.")
-
-    cache = msal.SerializableTokenCache()
-    if TOKEN_CACHE_FILE.exists():
-        cache.deserialize(TOKEN_CACHE_FILE.read_text())
-
-    app = msal.PublicClientApplication(
+    app = msal.ConfidentialClientApplication(
         CLIENT_ID,
         authority=f"https://login.microsoftonline.com/{TENANT_ID}",
-        token_cache=cache,
+        client_credential=CLIENT_SECRET,
     )
 
-    # Try silent refresh first
-    accounts = app.get_accounts()
-    if accounts and not force_login:
-        result = app.acquire_token_silent(SCOPES, account=accounts[0])
-        if result and "access_token" in result:
-            if cache.has_state_changed:
-                TOKEN_CACHE_FILE.write_text(cache.serialize())
-            return result["access_token"]
+    result = app.acquire_token_by_username_password(
+        username=USERNAME,
+        password=PASSWORD,
+        scopes=SCOPES,
+    )
 
-    # Device code flow
-    flow = app.initiate_device_flow(scopes=SCOPES)
-    if "user_code" not in flow:
-        log.error("Device flow failed: %s", flow)
-        sys.exit(1)
-
-    print("\n" + "=" * 60)
-    print("LOGIN REQUIRED — open the URL below and enter the code")
-    print("=" * 60)
-    print(flow["message"])
-    print("=" * 60 + "\n")
-
-    result = app.acquire_token_by_device_flow(flow)
     if "access_token" not in result:
         log.error("Auth failed: %s", result.get("error_description", result))
         sys.exit(1)
 
-    if cache.has_state_changed:
-        TOKEN_CACHE_FILE.write_text(cache.serialize())
-    log.info("Authenticated and token cached.")
+    log.info("Authenticated as %s", USERNAME)
     return result["access_token"]
 
 
@@ -424,13 +401,9 @@ def run_scan() -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="DSLF Email Scanner")
-    parser.add_argument("--loop",  action="store_true",
+    parser.add_argument("--loop", action="store_true",
                         help=f"Run every {POLL_INTERVAL // 60} minutes")
-    parser.add_argument("--login", action="store_true",
-                        help="Force re-login")
     args = parser.parse_args()
-
-    get_access_token(force_login=args.login)
 
     if args.loop:
         log.info("Started — polling every %d minutes.", POLL_INTERVAL // 60)

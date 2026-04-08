@@ -57,12 +57,10 @@ class AdstraParser(BaseBrokerParser):
             m = re.search(r"SHIP\s+TO:\s*([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
             ship_to_email = m.group(1) if m else ""
 
-        # --- Requestor (Contact block near BOBBI DURRETT / ADSTRADATA) ---
+        # --- Requestor (Contact block near ADSTRADATA) ---
         requestor_name = self._find(text, r"Contact:\s*([A-Z][A-Z\s]+?)(?:\n|$)")
-        requestor_name = requestor_name.strip().title() if requestor_name else "Bobbi Durrett"
+        requestor_name = requestor_name.strip().title() if requestor_name else ""
         requestor_email = self._find(text, r"([\w.+-]+@adstradata\.com)", group=1)
-        if not requestor_email:
-            requestor_email = "BOBBI.DURRETT@ADSTRADATA.COM"
 
         # --- Shipping instructions ---
         shipping_instructions = f"CC: {requestor_email}" if requestor_email else ""

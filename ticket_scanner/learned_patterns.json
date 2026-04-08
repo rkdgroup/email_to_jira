@@ -1,0 +1,549 @@
+{
+  "CMN": {
+    "billable_account": "W12",
+    "client_db": "W12D",
+    "seed_db": "W12S",
+    "list_manager": "WE ARE MOORE",
+    "requestor_name": "MICHELLE NAY",
+    "requestor_email": "MNAY@WEAREMOORE.COM",
+    "ship_to_email": "HVEDDER@PEACHTREEDATA.COM",
+    "shipping_method": "Email",
+    "seen_in": [
+      "DSLF-4"
+    ]
+  },
+  "HEALTHY DIRECTIONS LLC": {
+    "billable_account": "H67",
+    "client_db": "H67D",
+    "seed_db": "H67S",
+    "list_manager": "RMI",
+    "requestor_name": "ALICIA GALLAGHER",
+    "requestor_email": "AGALLAGHER@RMIDIRECT.COM",
+    "ship_to_email": "ftp2.dovetaildatabase.com",
+    "shipping_method": "FTP",
+    "seen_in": [
+      "DSLF-6",
+      "DSLF-7",
+      "DSLF-8",
+      "DSLF-9"
+    ]
+  },
+  "CSAH-ATA": {
+    "billable_account": "T33",
+    "client_db": "T34D",
+    "seed_db": "T34S",
+    "list_manager": "RMI",
+    "requestor_name": "Alicia Gallagher",
+    "requestor_email": "agallagher@rmidirect.com",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "Email",
+    "seen_in": [
+      "DSLF-10",
+      "DSLF-11",
+      "DSLF-12",
+      "DSLF-13"
+    ]
+  },
+  "FLAG": {
+    "billable_account": "C69",
+    "client_db": "C69D",
+    "seed_db": "C69S",
+    "list_manager": "ADSTRA",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "Email",
+    "seen_in": [
+      "DSLF-14",
+      "DSLF-15",
+      "DSLF-16",
+      "DSLF-17",
+      "DSLF-18",
+      "DSLF-19",
+      "DSLF-20",
+      "DSLF-21",
+      "DSLF-22",
+      "DSLF-23",
+      "DSLF-24",
+      "DSLF-25",
+      "DSLF-54",
+      "DSLF-55"
+    ]
+  },
+  "PMI INSURANCE CO": {
+    "billable_account": "M24",
+    "client_db": "M24R",
+    "seed_db": "M24S",
+    "list_manager": "WASHINGTON LISTS",
+    "requestor_name": "Reggie Gwira",
+    "requestor_email": "rgwira@washingtonlists.com",
+    "ship_to_email": "",
+    "shipping_method": "FTP",
+    "seen_in": [
+      "DSLF-26",
+      "DSLF-27",
+      "DSLF-28",
+      "DSLF-29"
+    ]
+  },
+  "CHF": {
+    "billable_account": "B28",
+    "client_db": "B28D",
+    "seed_db": "B28S",
+    "list_manager": "ADSTRA",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "CONVERT@SATURNCORP.COM, BOBBI.DURRETT@ADSTRADATA.COM",
+    "shipping_method": "FTP",
+    "seen_in": [
+      "DSLF-31",
+      "DSLF-32",
+      "DSLF-33",
+      "DSLF-34",
+      "DSLF-35",
+      "DSLF-36",
+      "DSLF-37"
+    ]
+  },
+  "USDSA": {
+    "billable_account": "P89",
+    "client_db": "P89D",
+    "seed_db": "P89S",
+    "list_manager": "ADSTRA",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "Email",
+    "seen_in": [
+      "DSLF-38",
+      "DSLF-39",
+      "DSLF-40",
+      "DSLF-41",
+      "DSLF-42",
+      "DSLF-43",
+      "DSLF-44",
+      "DSLF-45"
+    ]
+  },
+  "60+ ASSOC": {
+    "billable_account": "P89",
+    "client_db": "P89D",
+    "seed_db": "P89S",
+    "list_manager": "ADSTRA",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "",
+    "seen_in": [
+      "DSLF-46",
+      "DSLF-47",
+      "DSLF-48",
+      "DSLF-49",
+      "DSLF-50",
+      "DSLF-51",
+      "DSLF-52",
+      "DSLF-53"
+    ]
+  },
+  "WWP": {
+    "billable_account": "W12",
+    "client_db": "W12D",
+    "seed_db": "W12S",
+    "list_manager": "WE ARE MOORE",
+    "mailer_name": "CMN",
+    "requestor_name": "MICHELLE NAY",
+    "requestor_email": "MNAY@WEAREMOORE.COM",
+    "ship_to_email": "HVEDDER@PEACHTREEDATA.COM",
+    "shipping_method": "Email",
+    "seen_in": [
+      "DSLF-4"
+    ]
+  },
+  "HOTLINE SENIOR SUPERFILE": {
+    "billable_account": "H67",
+    "client_db": "H67D",
+    "seed_db": "H67S",
+    "list_manager": "RMI",
+    "mailer_name": "HEALTHY DIRECTIONS LLC",
+    "requestor_name": "ALICIA GALLAGHER",
+    "requestor_email": "AGALLAGHER@RMIDIRECT.COM",
+    "ship_to_email": "ftp2.dovetaildatabase.com",
+    "shipping_method": "FTP",
+    "seen_in": [
+      "DSLF-6",
+      "DSLF-7",
+      "DSLF-8",
+      "DSLF-9"
+    ]
+  },
+  "DIRECT MAIL SENIOR DONORS": {
+    "billable_account": "T33",
+    "client_db": "T34D",
+    "seed_db": "T34S",
+    "list_manager": "RMI",
+    "mailer_name": "CSAH-ATA",
+    "requestor_name": "Alicia Gallagher",
+    "requestor_email": "agallagher@rmidirect.com",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "Email",
+    "seen_in": [
+      "DSLF-10",
+      "DSLF-11",
+      "DSLF-12",
+      "DSLF-13"
+    ]
+  },
+  "BCP": {
+    "billable_account": "B28",
+    "client_db": "B28D",
+    "seed_db": "B28S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "CHF",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "CONVERT@SATURNCORP.COM, BOBBI.DURRETT@ADSTRADATA.COM",
+    "shipping_method": "FTP",
+    "seen_in": [
+      "DSLF-14",
+      "DSLF-15",
+      "DSLF-16",
+      "DSLF-17",
+      "DSLF-37"
+    ]
+  },
+  "PFOT": {
+    "billable_account": "O29",
+    "client_db": "O29D",
+    "seed_db": "O29S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "FLAG",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "Email",
+    "seen_in": [
+      "DSLF-18",
+      "DSLF-19",
+      "DSLF-20",
+      "DSLF-21"
+    ]
+  },
+  "PF": {
+    "billable_account": "P47",
+    "client_db": "P47D",
+    "seed_db": "P47S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "60+ ASSOC",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "Email",
+    "seen_in": [
+      "DSLF-22",
+      "DSLF-23",
+      "DSLF-24",
+      "DSLF-25",
+      "DSLF-43",
+      "DSLF-52"
+    ]
+  },
+  "MATURE HEALTH": {
+    "billable_account": "M24",
+    "client_db": "M24R",
+    "seed_db": "M24S",
+    "list_manager": "WASHINGTON LISTS",
+    "mailer_name": "PMI INSURANCE CO",
+    "requestor_name": "Reggie Gwira",
+    "requestor_email": "rgwira@washingtonlists.com",
+    "ship_to_email": "",
+    "shipping_method": "FTP",
+    "seen_in": [
+      "DSLF-26",
+      "DSLF-27",
+      "DSLF-28",
+      "DSLF-29"
+    ]
+  },
+  "OR2 OPERATION ROVER RESCUE": {
+    "billable_account": "O16",
+    "client_db": "O16D",
+    "seed_db": "O16S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "CHF",
+    "requestor_name": "Bobbi Durrett",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "CONVERT@SATURNCORP.COM, BOBBI.DURRETT@ADSTRADATA.COM",
+    "shipping_method": "FTP",
+    "seen_in": [
+      "DSLF-31"
+    ]
+  },
+  "KWN": {
+    "billable_account": "K40",
+    "client_db": "K40D",
+    "seed_db": "K40S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "CHF",
+    "requestor_name": "Bobbi Durrett",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "CONVERT@SATURNCORP.COM, BOBBI.DURRETT@ADSTRADATA.COM",
+    "shipping_method": "FTP",
+    "seen_in": [
+      "DSLF-32"
+    ]
+  },
+  "ACF": {
+    "billable_account": "A16",
+    "client_db": "A16D",
+    "seed_db": "A16S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "CHF",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "CONVERT@SATURNCORP.COM, BOBBI.DURRETT@ADSTRADATA.COM",
+    "shipping_method": "FTP",
+    "seen_in": [
+      "DSLF-33"
+    ]
+  },
+  "CWS": {
+    "billable_account": "C02",
+    "client_db": "C02D",
+    "seed_db": "C02S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "CHF",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "CONVERT@SATURNCORP.COM, BOBBI.DURRETT@ADSTRADATA.COM",
+    "shipping_method": "FTP",
+    "seen_in": [
+      "DSLF-34"
+    ]
+  },
+  "FCL": {
+    "billable_account": "F58",
+    "client_db": "F58D",
+    "seed_db": "F58S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "60+ ASSOC",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "FTP",
+    "seen_in": [
+      "DSLF-35",
+      "DSLF-51"
+    ]
+  },
+  "SAVE": {
+    "billable_account": "S30",
+    "client_db": "S30D",
+    "seed_db": "S30S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "CHF",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "CONVERT@SATURNCORP.COM, BOBBI.DURRETT@ADSTRADATA.COM",
+    "shipping_method": "FTP",
+    "seen_in": [
+      "DSLF-36"
+    ]
+  },
+  "DDF": {
+    "billable_account": "D23",
+    "client_db": "D22D",
+    "seed_db": "D22S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "USDSA",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "Email",
+    "seen_in": [
+      "DSLF-38"
+    ]
+  },
+  "ACBF": {
+    "billable_account": "A69",
+    "client_db": "A69D",
+    "seed_db": "A69S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "USDSA",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "Email",
+    "seen_in": [
+      "DSLF-39"
+    ]
+  },
+  "FCF": {
+    "billable_account": "F45",
+    "client_db": "F45D",
+    "seed_db": "F45S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "USDSA",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "Email",
+    "seen_in": [
+      "DSLF-40"
+    ]
+  },
+  "ORR": {
+    "billable_account": "O56",
+    "client_db": "O56D",
+    "seed_db": "O56S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "USDSA",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "Email",
+    "seen_in": [
+      "DSLF-41"
+    ]
+  },
+  "NCF": {
+    "billable_account": "N92",
+    "client_db": "N92D",
+    "seed_db": "N92S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "USDSA",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "Email",
+    "seen_in": [
+      "DSLF-42"
+    ]
+  },
+  "NCCI": {
+    "billable_account": "N71",
+    "client_db": "N71D",
+    "seed_db": "N71S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "USDSA",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "Email",
+    "seen_in": [
+      "DSLF-44"
+    ]
+  },
+  "PHV": {
+    "billable_account": "P89",
+    "client_db": "P89D",
+    "seed_db": "P89S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "60+ ASSOC",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "Email",
+    "seen_in": [
+      "DSLF-45",
+      "DSLF-53"
+    ]
+  },
+  "PTD": {
+    "billable_account": "P32",
+    "client_db": "P32D",
+    "seed_db": "P32S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "60+ ASSOC",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "",
+    "seen_in": [
+      "DSLF-46"
+    ]
+  },
+  "CPP": {
+    "billable_account": "C21",
+    "client_db": "C21D",
+    "seed_db": "C21S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "60+ ASSOC",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "",
+    "seen_in": [
+      "DSLF-47"
+    ]
+  },
+  "FEP": {
+    "billable_account": "F65",
+    "client_db": "F65D",
+    "seed_db": "F65S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "60+ ASSOC",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "",
+    "seen_in": [
+      "DSLF-48"
+    ]
+  },
+  "HOC": {
+    "billable_account": "A12",
+    "client_db": "A12D",
+    "seed_db": "A12S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "60+ ASSOC",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "",
+    "seen_in": [
+      "DSLF-49"
+    ]
+  },
+  "CFM": {
+    "billable_account": "C12",
+    "client_db": "C12D",
+    "seed_db": "C12S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "60+ ASSOC",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "",
+    "seen_in": [
+      "DSLF-50"
+    ]
+  },
+  "ACR": {
+    "billable_account": "A18",
+    "client_db": "A18D",
+    "seed_db": "A18S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "FLAG",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "",
+    "seen_in": [
+      "DSLF-54"
+    ]
+  },
+  "CCCF": {
+    "billable_account": "C69",
+    "client_db": "C69D",
+    "seed_db": "C69S",
+    "list_manager": "ADSTRA",
+    "mailer_name": "FLAG",
+    "requestor_name": "BOBBI DURRETT",
+    "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM",
+    "ship_to_email": "TLIBRARIAN@DATA-MANAGEMENT.COM",
+    "shipping_method": "",
+    "seen_in": [
+      "DSLF-55"
+    ]
+  }
+}
