@@ -60,7 +60,8 @@ Return ONLY a JSON object with these exact field names:
   "shipping_method": "Email or FTP or Other",
   "shipping_instructions": "CC: email@domain.com",
   "omission_description": "",
-  "other_fees": ""
+  "other_fees": "",
+  "segment_criteria": ""
 }
 
 All date fields must be YYYY-MM-DD format.
@@ -137,6 +138,7 @@ def claude_fallback_parse(text: str):
             shipping_instructions=str(data.get("shipping_instructions", "")),
             omission_description=str(data.get("omission_description", "")),
             other_fees=str(data.get("other_fees", "")),
+            segment_criteria=str(data.get("segment_criteria", "")),
             warnings=("Processed by Claude fallback",),
         )
 
