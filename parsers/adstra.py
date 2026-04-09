@@ -69,10 +69,20 @@ class AdstraParser(BaseBrokerParser):
         omission_description = self._find(text, r"OMIT:\s*(.+?)(?:\n|SHIP\s+TO)", group=1).strip()
 
         # --- Segment criteria ---
-        # Try Pull Description first (most reliable on Adstra orders), then Selects:
-        segment_criteria = self._find(text, r"Pull\s+Description:\s*([^\n]+)", group=1).strip()
-        if not segment_criteria:
-            segment_criteria = self._find(text, r"Selects:[ \t]*([^\n]+)", group=1).strip()
+        # Pull Description is multiline; capture until blank line or L/O Ref:
+        pd_match = re.search(r"Pull\s+Description:\s*(.*?)(?:\n\s*\n|\nL/O\s+Ref:)", text, re.IGNORECASE | re.DOTALL)
+        if pd_match:
+            # Clean each line: strip leading row-number digit artifact (e.g. "4M" → "M")
+            pd_lines = [re.sub(r"^\d+(?=[A-Z])", "", ln.strip()) for ln in pd_match.group(1).splitlines() if ln.strip()]
+            segment_criteria = "\n".join(pd_lines)
+        else:
+            # Fall back to Selects: field (may be multiline too)
+            sel_match = re.search(r"Selects:\s*(.*?)(?:\n\s*\n|\nPrice:)", text, re.IGNORECASE | re.DOTALL)
+            if sel_match:
+                sel_lines = [ln.strip() for ln in sel_match.group(1).splitlines() if ln.strip()]
+                segment_criteria = "\n".join(sel_lines)
+            else:
+                segment_criteria = ""
         # Discard bare label-only captures like "Price:" with no actual value
         if segment_criteria and re.match(r"^[\w\s]+:$", segment_criteria):
             segment_criteria = ""

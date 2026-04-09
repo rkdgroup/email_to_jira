@@ -296,7 +296,11 @@ def _build_adf_description(result) -> dict:
     avail = result.availability_rule or "standard"
     lm_items.append(f"Quantity: {qty_fmt} ({avail})")
     if result.segment_criteria:
-        lm_items.append(f"Selection: {result.segment_criteria}")
+        sel_lines = result.segment_criteria.splitlines()
+        lm_items.append(f"Selection: {sel_lines[0].strip()}")
+        for extra in sel_lines[1:]:
+            if extra.strip():
+                lm_items.append(extra.strip())
     if result.mail_date:
         lm_items.append(f"Mail Date: {result.mail_date}")
     if result.key_code:
