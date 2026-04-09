@@ -242,115 +242,18 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
 
 
 def _build_adf_description(result) -> dict:
-    """Build a clean, readable Atlassian Document Format description from a ParseResult."""
+    """Build description containing only selection criteria."""
 
-    def heading(text: str, level: int = 3) -> dict:
-        return {"type": "heading", "attrs": {"level": level},
-                "content": [{"type": "text", "text": text}]}
+    def para(text: str) -> dict:
+        return {"type": "paragraph", "content": [{"type": "text", "text": text}]}
 
-    def para(*parts) -> dict:
-        """Build a paragraph from alternating (text, bold) tuples or plain strings."""
-        content = []
-        for part in parts:
-            if isinstance(part, tuple):
-                txt, bold = part
-                node = {"type": "text", "text": txt}
-                if bold:
-                    node["marks"] = [{"type": "strong"}]
-                content.append(node)
-            else:
-                content.append({"type": "text", "text": str(part)})
-        return {"type": "paragraph", "content": content}
-
-    def bullet_list(items: list[str]) -> dict:
-        return {
-            "type": "bulletList",
-            "content": [
-                {"type": "listItem",
-                 "content": [para(item)]}
-                for item in items
-            ],
-        }
-
-    nodes = []
-
-    # --- Order Details ---
-    nodes.append(heading("Order Details"))
-    order_items = []
-    if result.list_manager:
-        order_items.append(f"List Manager: {result.list_manager}")
-    if result.manager_order_number:
-        order_items.append(f"Manager Order #: {result.manager_order_number}")
-    if result.mailer_po:
-        order_items.append(f"Mailer PO: {result.mailer_po}")
-    nodes.append(bullet_list(order_items) if order_items else para("No order details."))
-
-    # --- List & Mailer ---
-    nodes.append(heading("List & Mailer"))
-    lm_items = []
-    if result.mailer_name:
-        lm_items.append(f"Mailer: {result.mailer_name}")
-    if result.list_name:
-        lm_items.append(f"List: {result.list_name}")
-    qty_fmt = f"{result.requested_quantity:,}" if result.requested_quantity else "unspecified"
-    avail = result.availability_rule or "standard"
-    lm_items.append(f"Quantity: {qty_fmt} ({avail})")
     if result.segment_criteria:
-        sel_lines = result.segment_criteria.splitlines()
-        lm_items.append(f"Selection: {sel_lines[0].strip()}")
-        for extra in sel_lines[1:]:
-            if extra.strip():
-                lm_items.append(extra.strip())
-    if result.mail_date:
-        lm_items.append(f"Mail Date: {result.mail_date}")
-    if result.key_code:
-        lm_items.append(f"Key Code: {result.key_code}")
-    nodes.append(bullet_list(lm_items))
+        lines = [ln.strip() for ln in result.segment_criteria.splitlines() if ln.strip()]
+        content = [para(ln) for ln in lines]
+    else:
+        content = [para("")]
 
-    # --- Shipping ---
-    nodes.append(heading("Shipping"))
-    ship_items = []
-    if result.shipping_method:
-        ship_items.append(f"Method: {result.shipping_method}")
-    if result.ship_to_email:
-        # Strip "FTP NOTIFY: " prefix for display — the custom field keeps it, description shows plain email
-        display_email = result.ship_to_email
-        if display_email.upper().startswith("FTP NOTIFY:"):
-            display_email = display_email[len("FTP NOTIFY:"):].strip()
-        ship_items.append(f"Ship To: {display_email}")
-    if result.ship_by_date:
-        ship_items.append(f"Ship By: {result.ship_by_date}")
-    if result.shipping_instructions:
-        ship_items.append(result.shipping_instructions)
-    nodes.append(bullet_list(ship_items) if ship_items else para("No shipping details provided."))
-
-    # --- Omissions ---
-    if result.omission_description:
-        nodes.append(heading("Omissions"))
-        lines = [ln.strip() for ln in result.omission_description.splitlines() if ln.strip()]
-        nodes.append(bullet_list(lines if lines else [result.omission_description]))
-
-    # --- Special Instructions ---
-    if result.special_seed_instructions:
-        nodes.append(heading("Special Seed Instructions"))
-        seed = result.special_seed_instructions
-        if not re.match(r"^Insert\s*:", seed, re.IGNORECASE):
-            seed = f"Insert: {seed}"
-        nodes.append(bullet_list([seed]))
-
-    # --- Other Fees ---
-    if result.other_fees:
-        nodes.append(heading("Other Fees"))
-        nodes.append(bullet_list([result.other_fees]))
-
-    # --- Requestor ---
-    nodes.append(heading("Requestor"))
-    contact = result.requestor_name or "Unknown"
-    if result.requestor_email:
-        contact += f" — {result.requestor_email}"
-    nodes.append(bullet_list([contact]))
-
-    return {"type": "doc", "version": 1, "content": nodes}
+    return {"type": "doc", "version": 1, "content": content}
 
 
 def _print_result(result) -> None:
