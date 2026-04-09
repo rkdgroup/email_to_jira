@@ -68,9 +68,11 @@ class AdstraParser(BaseBrokerParser):
         # --- Omission description ---
         omission_description = self._find(text, r"OMIT:\s*(.+?)(?:\n|SHIP\s+TO)", group=1).strip()
 
-        # --- Segment criteria (Selects: field) ---
-        # Use [ \t]* (not \s*) to avoid consuming the newline before the next field
-        segment_criteria = self._find(text, r"Selects:[ \t]*([^\n]+)", group=1).strip()
+        # --- Segment criteria ---
+        # Try Pull Description first (most reliable on Adstra orders), then Selects:
+        segment_criteria = self._find(text, r"Pull\s+Description:\s*([^\n]+)", group=1).strip()
+        if not segment_criteria:
+            segment_criteria = self._find(text, r"Selects:[ \t]*([^\n]+)", group=1).strip()
         # Discard bare label-only captures like "Price:" with no actual value
         if segment_criteria and re.match(r"^[\w\s]+:$", segment_criteria):
             segment_criteria = ""
