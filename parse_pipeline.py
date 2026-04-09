@@ -248,8 +248,8 @@ def _build_adf_description(result) -> dict:
         return {"type": "paragraph", "content": [{"type": "text", "text": text}]}
 
     if result.segment_criteria:
-        lines = [ln.strip() for ln in result.segment_criteria.splitlines() if ln.strip()]
-        content = [para(ln) for ln in lines]
+        first_line = result.segment_criteria.splitlines()[0].strip()
+        content = [para(first_line)]
     else:
         content = [para("")]
 
