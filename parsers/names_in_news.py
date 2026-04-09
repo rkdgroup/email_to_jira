@@ -161,6 +161,13 @@ class NamesInNewsParser(BaseBrokerParser):
                         requestor_name = candidate
                 break
 
+        # --- Shipping method ---
+        shipping_method = ""
+        if re.search(r"\bFTP\b", text):
+            shipping_method = "FTP"
+        elif re.search(r"\bE-?mail\b", text, re.IGNORECASE):
+            shipping_method = "Email"
+
         # --- Ship to email ---
         ship_to_email = ""
         all_emails = re.findall(r"[\w.+-]+@[\w.-]+\.\w+", text)
@@ -168,13 +175,9 @@ class NamesInNewsParser(BaseBrokerParser):
             if "info@" not in email and "nincal" not in email:
                 ship_to_email = email
                 break
-
-        # --- Shipping method ---
-        shipping_method = ""
-        if re.search(r"\bFTP\b", text):
-            shipping_method = "FTP"
-        elif re.search(r"\bE-?mail\b", text, re.IGNORECASE):
-            shipping_method = "Email"
+        # FTP orders use "FTP NOTIFY: email" convention
+        if ship_to_email and shipping_method == "FTP":
+            ship_to_email = f"FTP NOTIFY: {ship_to_email}"
 
         # --- Shipping instructions = CC: requestor_email ---
         shipping_instructions = f"CC: {requestor_email}" if requestor_email else ""
@@ -186,11 +189,18 @@ class NamesInNewsParser(BaseBrokerParser):
         omission_description = ""
         omit_match = re.search(r"OMIT[ \t:]+(.+?)(?:\n|$)", text, re.IGNORECASE)
         if omit_match:
-            omission_description = omit_match.group(1).strip()
+            candidate = omit_match.group(1).strip()
+            # Skip non-descriptive placeholder values from the order form
+            if candidate.lower() not in ("required.", "required", "yes", "no", "n/a"):
+                omission_description = candidate
         other_fees = self._detect_state_omits(omission_description)
 
         # --- Segment criteria ---
-        segment_criteria = self._find(text, r"(?:Selects?|Segment)[:\s]+([^\n]+)")
+        # NIN orders use "Offer:" for selection criteria; fall back to generic Selects/Segment
+        segment_criteria = (
+            self._find(text, r"Offer[:\s]+([^\n]+)")
+            or self._find(text, r"(?:Selects?|Segment)[:\s]+([^\n]+)")
+        )
 
         return ParseResult(
             source=f"rule:{self.broker_key}",

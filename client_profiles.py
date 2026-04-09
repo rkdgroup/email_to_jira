@@ -24,6 +24,11 @@ _MANAGER_TO_FOLDER = {
     "DATA-AXLE":        "DATA AXLE",
     "NEGEV":            "JWV - NEGEV DIRECT",
     "KAP":              "KEY ACQUISITION - LIST SERVICES",
+    "RMI":              "RMI",
+    "NAMES IN THE NEWS": "NITN",
+    "WE ARE MOORE":     "WAREMOORE",
+    "RKD":              "RKD GROUP",
+    "WASHINGTON LISTS": "WASHINGTON LISTS MATURE HEALTH",
 }
 
 _WORD_CLEAN = re.compile(r"[^a-z0-9 ]")

@@ -309,7 +309,11 @@ def _build_adf_description(result) -> dict:
     if result.shipping_method:
         ship_items.append(f"Method: {result.shipping_method}")
     if result.ship_to_email:
-        ship_items.append(f"Ship To: {result.ship_to_email}")
+        # Strip "FTP NOTIFY: " prefix for display — the custom field keeps it, description shows plain email
+        display_email = result.ship_to_email
+        if display_email.upper().startswith("FTP NOTIFY:"):
+            display_email = display_email[len("FTP NOTIFY:"):].strip()
+        ship_items.append(f"Ship To: {display_email}")
     if result.ship_by_date:
         ship_items.append(f"Ship By: {result.ship_by_date}")
     if result.shipping_instructions:
