@@ -263,22 +263,8 @@ def _print_result(result) -> None:
     print(f"Summary  : {result.summary}")
     print("-" * 60)
     fields = [
-        ("Mailer", result.mailer_name),
-        ("Mailer PO", result.mailer_po),
-        ("List Name", result.list_name),
-        ("List Manager", result.list_manager),
-        ("Quantity", result.requested_quantity),
-        ("Availability", result.availability_rule),
-        ("Segment", result.segment_criteria),
-        ("Mail Date", result.mail_date),
-        ("Ship By", result.ship_by_date),
-        ("Requestor", result.requestor_name),
-        ("Req. Email", result.requestor_email),
-        ("Ship To Email", result.ship_to_email),
-        ("Key Code", result.key_code),
-        ("Ship Method", result.shipping_method),
-        ("Ship Instruct", result.shipping_instructions),
-        ("Omissions", result.omission_description[:80] if result.omission_description else ""),
+        ("Segment", result.segment_criteria.splitlines()[0].strip() if result.segment_criteria else ""),
+        ("Omissions", result.omission_description),
     ]
     for label, val in fields:
         if val:
