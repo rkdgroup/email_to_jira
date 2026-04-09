@@ -69,7 +69,11 @@ class AdstraParser(BaseBrokerParser):
         omission_description = self._find(text, r"OMIT:\s*(.+?)(?:\n|SHIP\s+TO)", group=1).strip()
 
         # --- Segment criteria (Selects: field) ---
-        segment_criteria = self._find(text, r"Selects:\s*(.+?)(?:\n|Price)", group=1).strip()
+        # Use [ \t]* (not \s*) to avoid consuming the newline before the next field
+        segment_criteria = self._find(text, r"Selects:[ \t]*([^\n]+)", group=1).strip()
+        # Discard bare label-only captures like "Price:" with no actual value
+        if segment_criteria and re.match(r"^[\w\s]+:$", segment_criteria):
+            segment_criteria = ""
 
         # --- Other fees --- leave blank; State Omits is not auto-inferred from omit count
         other_fees = ""
