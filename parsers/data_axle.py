@@ -30,7 +30,7 @@ class DataAxleParser(BaseBrokerParser):
         list_abbreviation = ""
         if ship_label:
             ship_label = self._clean_nextmark_text(ship_label)
-            m = re.search(r"PO[:\s]*([^/\s]+)", ship_label, re.IGNORECASE)
+            m = re.search(r"PO[#:\s]*([0-9]+)", ship_label, re.IGNORECASE)
             if m:
                 mailer_po = m.group(1).strip()
                 parts = ship_label.split("/")
@@ -47,6 +47,11 @@ class DataAxleParser(BaseBrokerParser):
         # --- Explicit Key Code ---
         key_code_raw = self._find(text, r"Key\s*Code:[ \t\",]*([^\n]+)")
         key_code = self._clean_nextmark_text(key_code_raw)
+        # Try Ship Label Key: field before falling back to order suffix
+        if not key_code and ship_label:
+            km = re.search(r"Key[:/\s]+([^/\s]+)", ship_label, re.IGNORECASE)
+            if km:
+                key_code = km.group(1).strip()
         if not key_code:
             key_code = key_code_from_order
 
@@ -147,7 +152,7 @@ class DataAxleParser(BaseBrokerParser):
             segment_criteria = base_criteria or selects_criteria
 
         # --- Other fees ---
-        other_fees_raw = self._find(text, r"Other\s*Fees:[\s\",]*([^\n]+)")
+        other_fees_raw = self._find(text, r"Other\s*Fees:[ \t\"]*([^\n]+)")
         other_fees = self._clean_nextmark_text(other_fees_raw)
         if not other_fees:
             other_fees = self._detect_state_omits(omission_description)
@@ -179,5 +184,11 @@ class DataAxleParser(BaseBrokerParser):
 
 
 class SimioCloudParser(DataAxleParser):
-    """SimioCloud orders use the same format as Data Axle."""
+    """SimioCloud orders (WE ARE MOORE platform) — same format as Data Axle."""
     broker_key: str = "simiocloud"
+
+    def parse(self, text: str) -> ParseResult:
+        from dataclasses import replace
+        result = super().parse(text)
+        # SimioCloud is WE ARE MOORE's ordering platform, not Data Axle
+        return replace(result, list_manager="WE ARE MOORE")
