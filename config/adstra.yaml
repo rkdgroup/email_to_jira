@@ -30,6 +30,14 @@
   lm_contact: BOBBI
   lrr: JRH
   comments: null
+- db_code: E22D
+  billing_cust: E22
+  db_name: EDUCATED CANINES ASSISTING W/DISABILITIES
+  rental_name: 3-ECAD EDUC CANINES ASST W/DIS
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: null
+  comments: null
 - db_code: A18D
   billing_cust: A18
   db_name: Aggressive Cancer Research Sweepstakes Donors (ACR)

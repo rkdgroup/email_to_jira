@@ -13,7 +13,7 @@ from parsers.adstra import AdstraParser
 from parsers.data_axle import DataAxleParser, SimioCloudParser
 from parsers.rmi_direct import RmiDirectParser
 from parsers.celco import CelcoParser
-from parsers.rkd_group import RkdGroupParser, AmlcParser
+from parsers.amlc import RkdGroupParser, AmlcParser
 from parsers.kap import KapParser
 from parsers.washington_lists import WashingtonListsParser
 from parsers.conrad_direct import ConradDirectParser

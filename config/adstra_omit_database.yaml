@@ -1,0 +1,151 @@
+adstra_database:
+  - seed_database: A16S
+    adstra_list_name: 3-ACF A CHILD IS FOREVER
+    flags: [D, N, R, $, A, X, "!"]
+  - seed_database: A12S
+    adstra_list_name: HEAL OUR CHILDREN (AREIVIM)
+    flags: [A, D, N, R, "!$"]
+  - seed_database: A18S
+    adstra_list_name: 3-ACR AGGRESSIVE CANCER RES
+    flags: [A, D, R, T, 5, $, "!"]
+  - seed_database: A69S
+    adstra_list_name: American Children's Cancer Benevolence Fund
+    flags: [D, N, R, $, A, X, "!"]
+  - seed_database: A96S
+    adstra_list_name: 3-AAST AM ASSOC STATE TROOPERS
+    flags: [D, N, R, A, X, $, "!"]
+  - seed_database: A40S
+    adstra_list_name: 3-AACA AM AGAINST CHILD ABUSE
+    flags: [A, B, D, G, R, T, 5, "!", $]
+  - seed_database: A87S
+    adstra_list_name: 3-AADA AM AGAINST DRUG A BUSE
+    flags: [A, D, R, T, 5, "!", $]
+  - seed_database: X14S
+    adstra_list_name: Autism Spectrum Disorder Fdtn
+    flags: [A, D, N, R, "!$"]
+  - seed_database: B28S
+    adstra_list_name: 3-BCP BREAST CANCER PROJECT
+    flags: [D, R, T, X, $, "!", B, C]
+  - seed_database: C02S
+    adstra_list_name: 3-CWS CARE F/O WOUNDED SOLDIER
+    flags: ["$", "!", B, D, N, R, X]
+  - seed_database: C12S
+    adstra_list_name: 3-CFM COMM FOR MISSING CHILDREN
+    flags: [A, D, N, R, X, "!", $]
+  - seed_database: C16S
+    adstra_list_name: Children's Wish Fdtn Int'l
+    flags: [D, N, R, $, A, X, "!"]
+  - seed_database: C21S
+    adstra_list_name: 3-CPP CHILD PROTECTION PROGRAM
+    flags: [D, N, R, $, A, X, "!"]
+  - seed_database: C27S
+    adstra_list_name: 3-CCP CHILDRENS CANCER FDN S
+    flags: ["$", R, T, A, 5, "!"]
+  - seed_database: C65S
+    adstra_list_name: Children at Risk (prog of SAVE)
+    flags: [R, T, $, A, D, 5, "!"]
+  - seed_database: C69S
+    adstra_list_name: 3-CCC COMBATING CHILD CA NC FND
+    flags: [T, R, $, A, 5, "!"]
+  - seed_database: D22S
+    adstra_list_name: 3-DDF DEFEAT DIABETES FND
+    flags: [D, N, R, $, X, A, "!"]
+  - seed_database: E22S
+    adstra_list_name: Educated Canines Assisting w/Disabilities
+    flags: [A, B, D, R, T, 5, $, "!"]
+  - seed_database: F58S
+    adstra_list_name: 3-FCL FIGHT CHILDHOOD LEUKEMIA
+    flags: [A, D, R, T, $, "!"]
+  - seed_database: F45S
+    adstra_list_name: 3-FCF FIREFIGHTERS CHARIT FND
+    flags: [D, N, R, $, "!", A, X]
+  - seed_database: F63S
+    adstra_list_name: Firefighters Charitable Program 2
+    flags: [D, N, R, $, "!", A, X]
+  - seed_database: F65S
+    adstra_list_name: Freedom Education Proj FEB
+    flags: [R, T, $, A, D, 5, "!"]
+  - seed_database: I52S
+    adstra_list_name: INVEST USA
+    flags: [A, D, R, T, "!", $]
+  - seed_database: I67S
+    adstra_list_name: 3-IFCS INTL CHILDREN CANCER FD
+    flags: [R, T, $, A, 5, "!"]
+  - seed_database: I67S
+    adstra_list_name: 3-ICCF ISRAEL CHILDREN CAN FND
+    flags: [R, T, $, A, 5, "!"]
+  - seed_database: K40S
+    adstra_list_name: 3-K WN KIDS WISH NETWORK SWEEPS
+    flags: [D, N, R, $, A, X, "!"]
+  - seed_database: K45S
+    adstra_list_name: 3-K WN H HERO OF THE MONTH SWEEP
+    flags: [D, N, R, $, A, X, "!"]
+  - seed_database: N67S
+    adstra_list_name: 3-NCAF NATL CANCER ASST FND
+    flags: [A, B, D, R, T, 5, $, "!"]
+  - seed_database: X06S
+    adstra_list_name: 3-NCAK NATL CANCER ASST KIDS
+    flags: [A, B, D, R, T, 5, $, "!"]
+  - seed_database: N13S
+    adstra_list_name: Nat'l Police & Trooper Assoc
+    flags: []
+  - seed_database: N24S
+    adstra_list_name: Nat'l Blue Line Police Fund
+    flags: [A, D, N, R, "!", $]
+  - seed_database: N56S
+    adstra_list_name: 3-NCMF NATL CAN ASST MILITARY
+    flags: [A, D, R, T, 5, $, "!"]
+  - seed_database: N71S
+    adstra_list_name: 3-NCCI NATIONAL CANCER CENTER
+    flags: [A, D, R, T, 5, $, "!"]
+  - seed_database: N91S
+    adstra_list_name: 3-NFOF NAT FALLEN OFFICER FDN
+    flags: [A, B, D, R, T, 5, $, "!"]
+  - seed_database: N92S
+    adstra_list_name: 3-NCF NATL CAREGIVING FND
+    flags: [D, N, R, A, X, $, "!"]
+  - seed_database: O16S
+    adstra_list_name: 3-OR2 OPERATION ROVER RESCUE
+    flags: [A, B, D, R, T, 5, $, "!"]
+  - seed_database: O29S
+    adstra_list_name: ORR Peace for our Troops ORR PFT
+    flags: [A, B, D, R, T, $, "!"]
+  - seed_database: O56S
+    adstra_list_name: 3-ORR OPERATION RAPID RESPONSE
+    flags: [A, B, D, R, T, 5, $, "!"]
+  - seed_database: P47S
+    adstra_list_name: 3-PF PROJECT FOSTER
+    flags: [A, B, D, G, R, T, 5, $, "!"]
+  - seed_database: P32S
+    adstra_list_name: 3-PTD PROJECT TOY DROP
+    flags: [A, D, N, Q, R, X, $, "!"]
+  - seed_database: P34S
+    adstra_list_name: 3-PCP PROSTATE CANCER PROJECT
+    flags: [A, D, R, T, 5, "!", $]
+  - seed_database: P74S
+    adstra_list_name: Pilots to the Rescue
+    flags: [A, D, N, R, "!", $]
+  - seed_database: P79S
+    adstra_list_name: Pennies for Pets
+    flags: [A, D, N, R, "!", $]
+  - seed_database: P89S
+    adstra_list_name: PHV - PROJECT HELP VETERANS
+    flags: [A, B, D, R, T, 5, $, "!"]
+  - seed_database: S32S
+    adstra_list_name: 3-MR SAVE MISSION RECOVERY
+    flags: [D, N, R, X, $, "!"]
+  - seed_database: S30S
+    adstra_list_name: 3-SAVE SURVIVORS & VICTIMS EMP
+    flags: [R, T, $, A, D, 5, "!"]
+  - seed_database: N15S
+    adstra_list_name: 3-SDCA HLTH & MEDICAL CAU SE MF
+    flags: [R, $, "!"]
+  - seed_database: N15S
+    adstra_list_name: 3-SDCA CHILDRENS CAUSES MF
+    flags: [R, $, "!"]
+  - seed_database: N15S
+    adstra_list_name: 3-SDCA CHARITABLE APPEALS MF
+    flags: [R, $, "!"]
+  - seed_database: N15S
+    adstra_list_name: 3-SDCA VETS & SERVICE ORG M F
+    flags: [R, $, "!"]

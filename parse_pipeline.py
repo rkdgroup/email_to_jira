@@ -20,6 +20,7 @@ import os
 import sys
 import logging
 import argparse
+import yaml
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -39,6 +40,25 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 log = logging.getLogger(__name__)
+
+
+def _load_adstra_flag_omits() -> dict:
+    """Load seed_database → flags mapping from adstra_omit_database.yaml."""
+    yaml_path = _SCRIPT_DIR / "config" / "adstra_omit_database.yaml"
+    if not yaml_path.exists():
+        return {}
+    with open(yaml_path, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    result = {}
+    for entry in data.get("adstra_database", []):
+        seed_db = entry.get("seed_database", "")
+        flags = entry.get("flags", [])
+        if seed_db and flags and seed_db not in result:
+            result[seed_db] = [str(fl) for fl in flags]
+    return result
+
+
+_ADSTRA_FLAG_OMITS = _load_adstra_flag_omits()
 
 
 def _find_supplementary_files(pdf_path: str, order_number: str) -> list[Path]:
@@ -191,6 +211,16 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
         kwargs["list_manager"] = enriched["list_manager"]
     if db_code_resolved:
         kwargs["db_code"] = db_code_resolved
+
+    # Append ADSTRA flag omits based on seed database
+    if result.list_manager == "ADSTRA" and db_code_resolved:
+        seed_db_key = db_code_resolved[:-1] + "S"  # e.g. F45D → F45S
+        flags = _ADSTRA_FLAG_OMITS.get(seed_db_key, [])
+        if flags:
+            flag_line = "FLAG OMITS: " + ", ".join(flags)
+            existing = kwargs.get("omission_description", "")
+            kwargs["omission_description"] = f"{existing}\n\n{flag_line}" if existing else flag_line
+
     ticket = create_jira_ticket(**kwargs)
 
     if "error" in ticket:
@@ -217,12 +247,22 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
 
     # Step 9: Attach client profile document
     try:
-        profile_path = find_profile(
-            list_manager=result.list_manager,
-            list_name=result.list_name,
-            mailer_name=result.mailer_name,
-            db_code=db_code_resolved,
+        _ADSTRA_PROFILE = _SCRIPT_DIR / "Client Profiles" / "ADSTRA" / "Adstra Sweeps Client Profile.xlsx"
+        _ADSTRA_SWEEPS_EXCLUDED = {"A63D", "N11D"}  # BFF, NLEOMF — use individual profile instead
+        _use_sweeps = (
+            result.list_manager == "ADSTRA"
+            and _ADSTRA_PROFILE.exists()
+            and db_code_resolved.upper() not in _ADSTRA_SWEEPS_EXCLUDED
         )
+        if _use_sweeps:
+            profile_path = _ADSTRA_PROFILE
+        else:
+            profile_path = find_profile(
+                list_manager=result.list_manager,
+                list_name=result.list_name,
+                mailer_name=result.mailer_name,
+                db_code=db_code_resolved,
+            )
         if profile_path:
             attach_file_to_ticket(ticket["key"], str(profile_path))
             log.info("Profile attached to %s: %s", ticket["key"], profile_path.name)
@@ -248,8 +288,8 @@ def _build_adf_description(result) -> dict:
         return {"type": "paragraph", "content": [{"type": "text", "text": text}]}
 
     if result.segment_criteria:
-        first_line = result.segment_criteria.splitlines()[0].strip()
-        content = [para(first_line)]
+        lines = [ln.strip() for ln in result.segment_criteria.splitlines() if ln.strip()]
+        content = [para(ln) for ln in lines]
     else:
         content = [para("")]
 
