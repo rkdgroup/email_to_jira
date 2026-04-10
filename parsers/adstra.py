@@ -72,8 +72,7 @@ class AdstraParser(BaseBrokerParser):
         # Pull Description is multiline; capture until blank line or L/O Ref:
         pd_match = re.search(r"Pull\s+Description:\s*(.*?)(?:\n\s*\n|\nL/O\s+Ref:)", text, re.IGNORECASE | re.DOTALL)
         if pd_match:
-            # Clean each line: strip leading row-number digit artifact (e.g. "4M" → "M")
-            pd_lines = [re.sub(r"^\d+(?=[A-Z])", "", ln.strip()) for ln in pd_match.group(1).splitlines() if ln.strip()]
+            pd_lines = [ln.strip() for ln in pd_match.group(1).splitlines() if ln.strip()]
             segment_criteria = "\n".join(pd_lines)
         else:
             # Fall back to Selects: field (may be multiline too)
