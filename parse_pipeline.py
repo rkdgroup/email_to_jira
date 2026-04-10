@@ -91,7 +91,6 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
     """
     from tools_pdf import extract_pdf_text
     from parsers import detect_broker, PARSER_REGISTRY
-    from claude_fallback import claude_fallback_parse
     from parse_result import validate_result
     from tools_jira import create_jira_ticket, search_jira_tickets, flag_for_review, attach_file_to_ticket
     from client_lookup import enrich_fields
@@ -146,11 +145,13 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
         try:
             result = parser.parse(text)
         except Exception as e:
-            log.warning("Rule-based parser %s failed: %s — falling back to Claude", match.broker_key, e)
-            result = claude_fallback_parse(text)
+            log.warning("Rule-based parser %s failed: %s — flagging for review", match.broker_key, e)
+            flag_for_review(f"Parser error ({match.broker_key})", str(e))
+            return {"success": False, "errors": [str(e)]}
     else:
-        log.info("No broker match — using Claude fallback")
-        result = claude_fallback_parse(text)
+        log.warning("No broker match — cannot parse without Claude fallback, flagging for review")
+        flag_for_review("Unknown broker", "No rule-based parser matched this PDF")
+        return {"success": False, "errors": ["Unknown broker format"]}
 
     if verbose or dry_run:
         _print_result(result)
@@ -161,24 +162,16 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
         for w in validation.warnings:
             log.warning("  %s", w)
 
-    # If rule-based parsing failed validation, try Claude fallback before giving up
-    if not validation.valid and result.source.startswith("rule:"):
-        log.info("Rule-based parse failed validation — trying Claude fallback")
-        result = claude_fallback_parse(text)
-        if verbose or dry_run:
-            _print_result(result)
-        validation = validate_result(result)
-        if validation.warnings:
-            for w in validation.warnings:
-                log.warning("  %s", w)
-
     if not validation.valid:
         for e in validation.errors:
-            log.error("  Validation error: %s", e)
-        reason = "; ".join(validation.errors)
-        if not dry_run:
-            flag_for_review("Validation failed", reason)
-        return {"success": False, "source": result.source, "errors": validation.errors}
+            log.warning("  Validation issue (proceeding): %s", e)
+        # Rule-based results proceed even with missing fields — partial ticket
+        # is better than no ticket. Only block if nothing was parsed at all.
+        if result.confidence == 0.0:
+            reason = "; ".join(validation.errors)
+            if not dry_run:
+                flag_for_review("Validation failed", reason)
+            return {"success": False, "source": result.source, "errors": validation.errors}
 
     if dry_run:
         log.info("[DRY RUN] Would create ticket: %s", result.summary)
@@ -297,39 +290,56 @@ def _build_adf_description(result) -> dict:
 
 
 def _print_result(result) -> None:
-    """Pretty-print extracted fields."""
-    print("\n" + "=" * 60)
-    print(f"Source   : {result.source} (confidence {result.confidence:.0%})")
-    print(f"Summary  : {result.summary}")
-    print("-" * 60)
-    fields = [
-        ("Segment", result.segment_criteria.splitlines()[0].strip() if result.segment_criteria else ""),
-        ("Omissions", result.omission_description),
-    ]
-    for label, val in fields:
-        if val:
-            print(f"  {label:<14}: {val}")
-    if result.warnings:
-        print(f"\n  Warnings: {'; '.join(result.warnings)}")
+    """Pretty-print all extracted Jira fields."""
+    W = 22  # label column width
+    print("\n" + "=" * 65)
+    print(f"  Source   : {result.source} (confidence {result.confidence:.0%})")
+    print(f"  Summary  : {result.summary}")
+    print("=" * 65)
 
-    # --- Description preview ---
-    print("\n" + "-" * 60)
-    print("DESCRIPTION (plain text preview):")
-    print("-" * 60)
+    def row(label, val):
+        if val:
+            # Multi-line values: indent continuation lines
+            lines = str(val).splitlines()
+            print(f"  {label:<{W}}: {lines[0]}")
+            for ln in lines[1:]:
+                print(f"  {'':<{W}}  {ln}")
+
+    row("List Name",            result.list_name)
+    row("Mailer Name",          result.mailer_name)
+    row("List Manager",         result.list_manager)
+    row("Mailer PO",            result.mailer_po)
+    row("Manager Order #",      result.manager_order_number)
+    row("Requested Qty",        result.requested_quantity)
+    row("Availability Rule",    result.availability_rule)
+    row("Mail Date",            result.mail_date)
+    row("Ship By Date",         result.ship_by_date)
+    row("Requestor Name",       result.requestor_name)
+    row("Requestor Email",      result.requestor_email)
+    row("Ship To Email",        result.ship_to_email)
+    row("Shipping Method",      result.shipping_method)
+    row("Shipping Instructions",result.shipping_instructions)
+    row("File Format",          result.file_format)
+    row("Key Code",             result.key_code)
+    row("Other Fees",           result.other_fees)
+    row("Special Seed Instr",   result.special_seed_instructions)
+
+    print("-" * 65)
+    row("Omission Description", result.omission_description)
+
+    print("-" * 65)
+    print(f"  {'Description':<{W}}:")
     adf = _build_adf_description(result)
     for node in adf.get("content", []):
-        if node["type"] == "heading":
+        if node["type"] == "paragraph":
             text = "".join(c.get("text", "") for c in node.get("content", []))
-            print(f"\n[{text}]")
-        elif node["type"] == "paragraph":
-            text = "".join(c.get("text", "") for c in node.get("content", []))
-            print(text)
-        elif node["type"] == "bulletList":
-            for item in node.get("content", []):
-                for child in item.get("content", []):
-                    text = "".join(c.get("text", "") for c in child.get("content", []))
-                    print(f"  - {text}")
-    print("=" * 60 + "\n")
+            if text:
+                print(f"    {text}")
+
+    if result.warnings:
+        print("-" * 65)
+        print(f"  Warnings: {'; '.join(result.warnings)}")
+    print("=" * 65 + "\n")
 
 
 def main():
