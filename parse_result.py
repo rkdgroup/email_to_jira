@@ -129,7 +129,7 @@ def validate_result(result: ParseResult) -> ValidationResult:
     # --- Warnings (logged, do not block) ---
     for fld in ("requestor_email", "ship_to_email"):
         val = getattr(result, fld, "")
-        if val and not re.match(r"^[\w.+-]+@[\w.-]+\.\w+$", val):
+        if val and not re.match(r"^(FTP NOTIFY: )?[\w.+-]+@[\w.-]+\.\w+$", val):
             v.warnings.append(f"Suspicious email format in {fld}: {val!r}")
 
     if not result.mail_date:

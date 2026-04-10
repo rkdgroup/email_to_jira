@@ -12,8 +12,8 @@ class AdstraParser(BaseBrokerParser):
         # --- Manager Order # (J-prefix or I-prefix, e.g. J0832) ---
         manager_order_number = self._find(text, r"Adstra\s+order#:\s*([JI]\d+)", group=1)
 
-        # --- Mailer PO (6-digit Broker PO) ---
-        mailer_po = self._find(text, r"Broker\s+PO:\s*(\d{6})")
+        # --- Mailer PO (Broker PO — may be numeric or alphanumeric e.g. E14537) ---
+        mailer_po = self._find(text, r"Broker\s+PO:\s*([A-Z0-9-]+)")
         if not mailer_po:
             mailer_po = self._find(text, r"\b(BRK-\d+|\d{6})\b")
 
@@ -67,18 +67,25 @@ class AdstraParser(BaseBrokerParser):
 
         # --- Shipping ---
         via_raw = self._find(text, r"VIA:\s*(\S+(?:\s*\S+)?)")
-        shipping_method = self._map_shipping_method(via_raw)
+        # Normalize dotted abbreviations e.g. "F.T.P." → "FTP", "E-MAIL" → "EMAIL"
+        via_normalized = re.sub(r"\.", "", via_raw or "")
+        shipping_method = self._map_shipping_method(via_normalized)
         if not shipping_method:
             if re.search(r"\bE-?MAIL\b", text, re.IGNORECASE):
                 shipping_method = "Email"
-            elif re.search(r"\bFTP\b", text):
+            elif re.search(r"\bF\.?T\.?P\.?\b", text):
                 shipping_method = "FTP"
 
         # --- Ship-To email ---
-        ship_to_email = self._find(text, r"ATTN:\s*([\w.+-]+@[\w.-]+\.\w+)") 
+        ship_to_email = self._find(text, r"ATTN:\s*([\w.+-]+@[\w.-]+\.\w+)")
         if not ship_to_email:
-            m = re.search(r"SHIP\s+TO:\s*([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE) 
+            m = re.search(r"SHIP\s+TO:\s*([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
             ship_to_email = m.group(1) if m else ""
+        # FTP orders: pull notify email from Special Instructions block
+        if not ship_to_email and shipping_method == "FTP":
+            m = re.search(r"(?:EMAIL|CONFIRM|CONFIRMATION)[^\n]*?([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
+            if m:
+                ship_to_email = f"FTP NOTIFY: {m.group(1)}"
 
         # --- Requestor (Contact block) ---
         requestor_name = self._find(text, r"Contact:\s*([A-Z][A-Z\s]+?)(?:\n|$)")
