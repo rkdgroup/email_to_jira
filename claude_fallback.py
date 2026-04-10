@@ -18,9 +18,12 @@ EXTRACTION_PROMPT = """You are processing a list rental purchase order PDF. Extr
 
 ## Field Extraction Rules (CRITICAL)
 
-**List Manager** = the data/list company whose data is being rented (e.g. ADSTRA, Data Axle, Acxiom)
+**List Manager** = must be EXACTLY one of these values (pick the closest match):
+  ADSTRA, AALC, AMLC, CELCO, CONRAD, DATA-AXLE, KAP, MARY E GRANGER, NEGEV,
+  NAMES IN THE NEWS, RKD, RMI, WASHINGTON LISTS, WE ARE MOORE
 - NOT the broker — the broker is just a middleman
 - Look for "List:" in the PDF, the company next to it is the list manager
+- Return the exact string from the list above, nothing else
 
 **Requestor Name** = the contact person AT the data/list company
 - Must match the Requestor Email domain
@@ -70,6 +73,50 @@ Leave empty string for fields you cannot determine.
 """
 
 
+_VALID_LIST_MANAGERS = [
+    "ADSTRA", "AALC", "AMLC", "CELCO", "CONRAD", "DATA-AXLE", "KAP",
+    "MARY E GRANGER", "NEGEV", "NAMES IN THE NEWS", "RKD", "RMI",
+    "WASHINGTON LISTS", "WE ARE MOORE",
+]
+
+# Keyword fragments that map to a canonical value
+_LM_KEYWORDS = [
+    ("WE ARE MOORE",        ["wearemoore", "we are moore"]),
+    ("DATA-AXLE",           ["data axle", "data-axle", "dataaxle"]),
+    ("NAMES IN THE NEWS",   ["names in the news", "nitn"]),
+    ("WASHINGTON LISTS",    ["washington lists", "washington list"]),
+    ("MARY E GRANGER",      ["mary e granger", "mary granger"]),
+    ("ADSTRA",              ["adstra"]),
+    ("AMLC",                ["amlc", "american mailing lists"]),
+    ("AALC",                ["aalc"]),
+    ("CELCO",               ["celco"]),
+    ("CONRAD",              ["conrad"]),
+    ("DATA-AXLE",           ["data axle"]),
+    ("KAP",                 ["kap", "key acquisition"]),
+    ("NEGEV",               ["negev"]),
+    ("RKD",                 ["rkd"]),
+    ("RMI",                 ["rmi"]),
+]
+
+
+def _normalize_list_manager(raw: str) -> str:
+    """Map Claude's free-form list_manager output to one of the 14 exact allowed values."""
+    if not raw:
+        return ""
+    upper = raw.upper().strip()
+    # Exact match first
+    if upper in _VALID_LIST_MANAGERS:
+        return upper
+    # Keyword scan (case-insensitive substring)
+    lower = raw.lower()
+    for canonical, keywords in _LM_KEYWORDS:
+        if any(kw in lower for kw in keywords):
+            return canonical
+    # Last resort: return as-is but truncated to 255 chars
+    log.warning("list_manager %r not recognized — using raw value (truncated)", raw)
+    return raw[:255]
+
+
 def claude_fallback_parse(text: str):
     """
     Parse PDF text using Claude Opus 4.6.
@@ -111,6 +158,9 @@ def claude_fallback_parse(text: str):
         raw = re.sub(r"\s*```$", "", raw.strip())
 
         data = json.loads(raw)
+
+        # Normalize list_manager to one of the 14 exact allowed values
+        data["list_manager"] = _normalize_list_manager(data.get("list_manager", ""))
 
         # Ensure requested_quantity is int
         qty = data.get("requested_quantity", 0)
