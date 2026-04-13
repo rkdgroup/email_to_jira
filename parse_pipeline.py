@@ -42,6 +42,16 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
+def _load_select_by_map() -> dict:
+    """Load config/select_by.yaml → {db_code_upper: select_by_value}."""
+    yaml_path = _SCRIPT_DIR / "config" / "select_by.yaml"
+    if not yaml_path.exists():
+        return {}
+    with open(yaml_path, encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    return {str(k).upper(): str(v) for k, v in data.items()}
+
+
 def _load_adstra_flag_omits() -> dict:
     """Load seed_database → flags mapping from adstra_omit_database.yaml."""
     yaml_path = _SCRIPT_DIR / "config" / "adstra_omit_database.yaml"
@@ -59,6 +69,7 @@ def _load_adstra_flag_omits() -> dict:
 
 
 _ADSTRA_FLAG_OMITS = _load_adstra_flag_omits()
+_SELECT_BY_MAP     = _load_select_by_map()
 
 
 def _find_supplementary_files(pdf_path: str, order_number: str) -> list[Path]:
@@ -153,9 +164,6 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
         flag_for_review("Unknown broker", "No rule-based parser matched this PDF")
         return {"success": False, "errors": ["Unknown broker format"]}
 
-    if verbose or dry_run:
-        _print_result(result)
-
     # Step 3: Validate
     validation = validate_result(result)
     if validation.warnings:
@@ -173,19 +181,15 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
                 flag_for_review("Validation failed", reason)
             return {"success": False, "source": result.source, "errors": validation.errors}
 
-    if dry_run:
-        log.info("[DRY RUN] Would create ticket: %s", result.summary)
-        return {"success": True, "source": result.source, "dry_run": True,
-                "fields": result.to_jira_kwargs(), "warnings": list(result.warnings)}
-
     # Step 4: Duplicate check
-    jql = f'project = DSLF AND cf[12193] = "{result.mailer_po}"'
-    existing = search_jira_tickets(jql)
-    if existing.get("total", 0) > 0:
-        keys = [i["key"] for i in existing.get("issues", [])]
-        log.warning("Duplicate PO detected — existing tickets: %s", keys)
-        flag_for_review("Duplicate PO", f"PO {result.mailer_po} already exists: {keys}")
-        return {"success": False, "source": result.source, "errors": [f"Duplicate: {keys}"]}
+    if not dry_run:
+        jql = f'project = DSLF AND cf[12193] = "{result.mailer_po}"'
+        existing = search_jira_tickets(jql)
+        if existing.get("total", 0) > 0:
+            keys = [i["key"] for i in existing.get("issues", [])]
+            log.warning("Duplicate PO detected — existing tickets: %s", keys)
+            flag_for_review("Duplicate PO", f"PO {result.mailer_po} already exists: {keys}")
+            return {"success": False, "source": result.source, "errors": [f"Duplicate: {keys}"]}
 
     # Step 5: Enrich fields from YAML config files
     enriched = enrich_fields(
@@ -195,9 +199,41 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
     )
     db_code_resolved = enriched.get("db_code", "")
 
+    # Step 5b: Resolve client profile path and extract SELECT BY
+    _ADSTRA_PROFILE = _SCRIPT_DIR / "Client Profiles" / "ADSTRA" / "Adstra Sweeps Client Profile.xlsx"
+    _ADSTRA_SWEEPS_EXCLUDED = {"A63D", "N11D"}
+    _use_sweeps = (
+        result.list_manager == "ADSTRA"
+        and _ADSTRA_PROFILE.exists()
+        and db_code_resolved.upper() not in _ADSTRA_SWEEPS_EXCLUDED
+    )
+    if _use_sweeps:
+        profile_path = _ADSTRA_PROFILE
+    else:
+        profile_path = find_profile(
+            list_manager=result.list_manager,
+            list_name=result.list_name,
+            mailer_name=result.mailer_name,
+            db_code=db_code_resolved,
+        )
+    if db_code_resolved:
+        code_upper = db_code_resolved.upper()
+        select_by = (_SELECT_BY_MAP.get(code_upper)
+                     or _SELECT_BY_MAP.get(code_upper[:-1], ""))
+    else:
+        select_by = ""
+
+    if verbose or dry_run:
+        _print_result(result, select_by=select_by)
+
+    if dry_run:
+        log.info("[DRY RUN] Would create ticket: %s", result.summary)
+        return {"success": True, "source": result.source, "dry_run": True,
+                "fields": result.to_jira_kwargs(), "warnings": list(result.warnings)}
+
     # Step 6: Create ticket
     kwargs = result.to_jira_kwargs()
-    kwargs["description"] = _build_adf_description(result)
+    kwargs["description"] = _build_adf_description(result, select_by=select_by)
     if enriched.get("billable_account") and not kwargs.get("billable_account"):
         kwargs["billable_account"] = enriched["billable_account"]
     if enriched.get("list_manager") and not kwargs.get("list_manager"):
@@ -238,24 +274,8 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
             except Exception as _e:
                 log.warning("Could not attach supplementary file %s: %s", supp.name, _e)
 
-    # Step 9: Attach client profile document
+    # Step 9: Attach client profile document (profile_path resolved in Step 5b)
     try:
-        _ADSTRA_PROFILE = _SCRIPT_DIR / "Client Profiles" / "ADSTRA" / "Adstra Sweeps Client Profile.xlsx"
-        _ADSTRA_SWEEPS_EXCLUDED = {"A63D", "N11D"}  # BFF, NLEOMF — use individual profile instead
-        _use_sweeps = (
-            result.list_manager == "ADSTRA"
-            and _ADSTRA_PROFILE.exists()
-            and db_code_resolved.upper() not in _ADSTRA_SWEEPS_EXCLUDED
-        )
-        if _use_sweeps:
-            profile_path = _ADSTRA_PROFILE
-        else:
-            profile_path = find_profile(
-                list_manager=result.list_manager,
-                list_name=result.list_name,
-                mailer_name=result.mailer_name,
-                db_code=db_code_resolved,
-            )
         if profile_path:
             attach_file_to_ticket(ticket["key"], str(profile_path))
             log.info("Profile attached to %s: %s", ticket["key"], profile_path.name)
@@ -274,22 +294,30 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
     }
 
 
-def _build_adf_description(result) -> dict:
-    """Build description containing only selection criteria."""
+def _build_adf_description(result, select_by: str = "") -> dict:
+    """Build description containing selection criteria and profile SELECT BY line."""
 
     def para(text: str) -> dict:
         return {"type": "paragraph", "content": [{"type": "text", "text": text}]}
 
+    content = []
+
     if result.segment_criteria:
         lines = [ln.strip() for ln in result.segment_criteria.splitlines() if ln.strip()]
-        content = [para(ln) for ln in lines]
-    else:
+        content.extend(para(ln) for ln in lines)
+
+    if select_by:
+        if content:
+            content.append(para(""))  # blank separator
+        content.append(para(f"Select By: {select_by}"))
+
+    if not content:
         content = [para("")]
 
     return {"type": "doc", "version": 1, "content": content}
 
 
-def _print_result(result) -> None:
+def _print_result(result, select_by: str = "") -> None:
     """Pretty-print all extracted Jira fields."""
     W = 22  # label column width
     print("\n" + "=" * 65)
@@ -329,7 +357,7 @@ def _print_result(result) -> None:
 
     print("-" * 65)
     print(f"  {'Description':<{W}}:")
-    adf = _build_adf_description(result)
+    adf = _build_adf_description(result, select_by=select_by)
     for node in adf.get("content", []):
         if node["type"] == "paragraph":
             text = "".join(c.get("text", "") for c in node.get("content", []))

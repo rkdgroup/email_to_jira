@@ -12,6 +12,8 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
+_SELECT_BY_RE = re.compile(r"SELECT BY[:\s]+(.+?)(?:\s{3,}|\n|$)", re.IGNORECASE)
+
 _PROFILES_DIR = Path(__file__).parent / "Client Profiles"
 
 # Map normalised list_manager values → profile subfolder name
@@ -128,3 +130,53 @@ def find_profile(
 
     log.debug("No profile match for list=%r mailer=%r db=%r", list_name, mailer_name, db_code)
     return None
+
+
+def extract_select_by(profile_path: Path) -> str:
+    """
+    Extract the SELECT BY value from a client profile .doc or .docx file.
+
+    For .docx: uses python-docx to read paragraph text.
+    For .doc: reads raw bytes (OLE2) — the text is stored as Latin-1 ASCII runs,
+              which is sufficient to locate and extract the SELECT BY value without
+              launching Word.
+
+    Returns the value after 'SELECT BY:' (e.g. 'TRANSACTION $ AND DATE'),
+    or empty string if not found or the file cannot be read.
+    """
+    if not profile_path or not profile_path.exists():
+        return ""
+
+    suffix = profile_path.suffix.lower()
+
+    try:
+        if suffix == ".docx":
+            from docx import Document as _DocxDocument
+            doc = _DocxDocument(str(profile_path))
+            full_text = "\n".join(p.text for p in doc.paragraphs)
+        elif suffix == ".doc":
+            with open(profile_path, "rb") as fh:
+                raw = fh.read()
+            # Strip non-printable bytes, keep ASCII printable + space/tab
+            full_text = "".join(
+                ch if 32 <= ord(ch) < 128 else " "
+                for ch in raw.decode("latin-1", errors="replace")
+            )
+        else:
+            return ""
+    except Exception as exc:
+        log.warning("extract_select_by: could not read %s: %s", profile_path.name, exc)
+        return ""
+
+    m = _SELECT_BY_RE.search(full_text)
+    if not m:
+        return ""
+
+    value = m.group(1).strip()
+
+    # Strip Word mail-merge field placeholder (e.g. MERGEFIELD "SELECT_BY"  ACTUAL)
+    mf = re.match(r'MERGEFIELD\s+"?SELECT_BY"?\s+(.*)', value, re.IGNORECASE)
+    if mf:
+        value = mf.group(1).strip()
+
+    return value
