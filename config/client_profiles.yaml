@@ -13,7 +13,7 @@ A14D:
   - OMIT PR, TERR, MILITARY
   - OMIT COMPANY  BY TITLE CODE
 A15R:
-  select_by: MOST RECENT DATE &
+  select_by: MOST RECENT DATE & LARGEST DOLLAR
   flags: '!, $'
   dollar_cap: $99.99
   standard_suppressions:
@@ -195,7 +195,7 @@ A58D:
   - WE CAN NOT CHARGE FOR STATE AND/OR SCF SELECTS OR OMITS.
   - 'PULL SINGLE & MULTIS BY TOTAL # OF GIFTS'
 A63D:
-  select_by: MACULAR DEGENERATION RSCH
+  select_by: 'MDR: MRC DATE ,HPC AMOUNT || ADR: MRC DATE ,HPC AMOUNT || NGR: MRC DATE ,HPC AMOUNT'
   flags: ''
   dollar_cap: $99.99
   standard_suppressions:
@@ -876,7 +876,7 @@ F46D:
   - OMIT NCOA REASON CODES
   - COLUMBUS OH PO BOX 2168
 F51D:
-  select_by: ALL ORDERS ARE RAN USING
+  select_by: ALL ORDERS ARE RAN USING L24M
   flags: ''
   dollar_cap: NO $
   standard_suppressions:
@@ -1302,7 +1302,7 @@ J48D:
   - OMIT COMPANY  BY TITLE CODE
   - OMIT NCOA REASON CODES
 J75R:
-  select_by: RECENT DATE/LARGEST $  (NEW)
+  select_by: RECENT DATE/LARGEST $  (NEW) || RECENT DATE/RECENT $  (GOLD)
   flags: ''
   dollar_cap: $999.99, ORDER WILL SPECIFY
   standard_suppressions: []
@@ -2207,7 +2207,7 @@ P82D:
   - OMIT NCOA REASON CODES
   - D  M
 P88D:
-  select_by: MOST RECENT DATE &
+  select_by: MOST RECENT DATE & LARGEST DOLLAR
   flags: '!, $'
   dollar_cap: $99.99
   standard_suppressions:
