@@ -42,14 +42,14 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-def _load_select_by_map() -> dict:
-    """Load config/select_by.yaml → {db_code_upper: select_by_value}."""
-    yaml_path = _SCRIPT_DIR / "config" / "select_by.yaml"
+def _load_profile_map() -> dict:
+    """Load config/client_profiles.yaml → {DB_CODE: {select_by, flags, dollar_cap, ...}}."""
+    yaml_path = _SCRIPT_DIR / "config" / "client_profiles.yaml"
     if not yaml_path.exists():
         return {}
     with open(yaml_path, encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
-    return {str(k).upper(): str(v) for k, v in data.items()}
+    return {str(k).upper(): v for k, v in data.items() if isinstance(v, dict)}
 
 
 def _load_adstra_flag_omits() -> dict:
@@ -69,7 +69,7 @@ def _load_adstra_flag_omits() -> dict:
 
 
 _ADSTRA_FLAG_OMITS = _load_adstra_flag_omits()
-_SELECT_BY_MAP     = _load_select_by_map()
+_PROFILE_MAP       = _load_profile_map()
 
 
 def _find_supplementary_files(pdf_path: str, order_number: str) -> list[Path]:
@@ -218,13 +218,13 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
         )
     if db_code_resolved:
         code_upper = db_code_resolved.upper()
-        select_by = (_SELECT_BY_MAP.get(code_upper)
-                     or _SELECT_BY_MAP.get(code_upper[:-1], ""))
+        profile_data = (_PROFILE_MAP.get(code_upper)
+                        or _PROFILE_MAP.get(code_upper[:-1], {}))
     else:
-        select_by = ""
+        profile_data = {}
 
     if verbose or dry_run:
-        _print_result(result, select_by=select_by)
+        _print_result(result, select_by=profile_data.get("select_by", ""))
 
     if dry_run:
         log.info("[DRY RUN] Would create ticket: %s", result.summary)
@@ -233,7 +233,7 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
 
     # Step 6: Create ticket
     kwargs = result.to_jira_kwargs()
-    kwargs["description"] = _build_adf_description(result, select_by=select_by)
+    kwargs["description"] = _build_adf_description(result, profile_data=profile_data)
     if enriched.get("billable_account") and not kwargs.get("billable_account"):
         kwargs["billable_account"] = enriched["billable_account"]
     if enriched.get("list_manager") and not kwargs.get("list_manager"):
@@ -241,14 +241,21 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
     if db_code_resolved:
         kwargs["db_code"] = db_code_resolved
 
-    # Append ADSTRA flag omits based on seed database
-    if result.list_manager == "ADSTRA" and db_code_resolved:
-        seed_db_key = db_code_resolved[:-1] + "S"  # e.g. F45D → F45S
-        flags = _ADSTRA_FLAG_OMITS.get(seed_db_key, [])
-        if flags:
-            flag_line = "FLAG OMITS: " + ", ".join(flags)
-            existing = kwargs.get("omission_description", "")
-            kwargs["omission_description"] = f"{existing}\n\n{flag_line}" if existing else flag_line
+    # FLAGS → omission_description (profile-driven, all brokers)
+    profile_flags = profile_data.get("flags", "")
+    if profile_flags:
+        flag_line = f"FLAG OMITS: {profile_flags}"
+        existing = kwargs.get("omission_description", "")
+        kwargs["omission_description"] = f"{existing}\n\n{flag_line}" if existing else flag_line
+    else:
+        # Fallback: ADSTRA seed-database flag omits (kept for backwards compat)
+        if result.list_manager == "ADSTRA" and db_code_resolved:
+            seed_db_key = db_code_resolved[:-1] + "S"
+            adstra_flags = _ADSTRA_FLAG_OMITS.get(seed_db_key, [])
+            if adstra_flags:
+                flag_line = "FLAG OMITS: " + ", ".join(adstra_flags)
+                existing = kwargs.get("omission_description", "")
+                kwargs["omission_description"] = f"{existing}\n\n{flag_line}" if existing else flag_line
 
     ticket = create_jira_ticket(**kwargs)
 
@@ -294,11 +301,15 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
     }
 
 
-def _build_adf_description(result, select_by: str = "") -> dict:
-    """Build description containing selection criteria and profile SELECT BY line."""
+def _build_adf_description(result, profile_data: dict = None, select_by: str = "") -> dict:
+    """Build ADF description: segment criteria from PDF + profile fields."""
 
     def para(text: str) -> dict:
         return {"type": "paragraph", "content": [{"type": "text", "text": text}]}
+
+    p = profile_data or {}
+    # select_by kwarg kept for _print_result compat; profile_data takes priority
+    sb = p.get("select_by", "") or select_by
 
     content = []
 
@@ -306,10 +317,23 @@ def _build_adf_description(result, select_by: str = "") -> dict:
         lines = [ln.strip() for ln in result.segment_criteria.splitlines() if ln.strip()]
         content.extend(para(ln) for ln in lines)
 
-    if select_by:
+    # Profile fields — add blank separator before first profile line
+    profile_lines = []
+    if sb:
+        profile_lines.append(f"Select By: {sb}")
+    if p.get("dollar_cap"):
+        profile_lines.append(f"Dollar Cap: {p['dollar_cap']}")
+    supp = p.get("standard_suppressions") or []
+    if supp:
+        profile_lines.append("Standard Suppressions: " + " / ".join(supp))
+    instr = p.get("special_instructions") or []
+    if instr:
+        profile_lines.append("Special Instructions: " + " / ".join(instr))
+
+    if profile_lines:
         if content:
-            content.append(para(""))  # blank separator
-        content.append(para(f"Select By: {select_by}"))
+            content.append(para(""))
+        content.extend(para(ln) for ln in profile_lines)
 
     if not content:
         content = [para("")]
