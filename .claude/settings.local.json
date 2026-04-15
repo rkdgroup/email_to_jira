@@ -25,7 +25,31 @@
       "mcp__claude_ai_Atlassian__getJiraIssueTypeMetaWithFields",
       "mcp__claude_ai_Atlassian__getTransitionsForJiraIssue",
       "Bash(rm JIRA_AUTO_KNOWLEDGE.md)",
-      "Bash(rm -rf .planning/)"
+      "Bash(rm -rf .planning/)",
+      "Bash(cmd.exe /c 'schtasks /create /tn \"DSLF Ticket Scanner\" /tr \"C:\\\\Users\\\\suvam\\\\Desktop\\\\git_suvam\\\\Jira_automation\\\\ticket_scanner\\\\run_scanner.bat\" /sc daily /st 18:00 /f' 2>&1)",
+      "Bash(powershell.exe -Command \"schtasks /create /tn 'DSLF Ticket Scanner' /tr 'C:\\\\\\\\Users\\\\\\\\suvam\\\\\\\\Desktop\\\\\\\\git_suvam\\\\\\\\Jira_automation\\\\\\\\ticket_scanner\\\\\\\\run_scanner.bat' /sc daily /st 18:00 /f\" 2>&1)",
+      "Bash(powershell.exe -Command \"schtasks /query /tn 'DSLF Ticket Scanner' /fo LIST\" 2>&1)",
+      "Bash(git commit:*)",
+      "Skill(gsd:discuss-phase)",
+      "Bash(schtasks /query /fo LIST)",
+      "Bash(cmd.exe /c 'schtasks /create /tn \"DSLF Ticket Scanner\" /tr \"C:\\\\Users\\\\suvam\\\\Desktop\\\\git_suvam\\\\Jira_automation\\\\ticket_scanner\\\\run_scanner.bat\" /sc DAILY /st 18:00 /f')",
+      "Bash(powershell.exe -Command '$action = New-ScheduledTaskAction -Execute \"C:\\\\Users\\\\suvam\\\\Desktop\\\\git_suvam\\\\Jira_automation\\\\ticket_scanner\\\\run_scanner.bat\"; $trigger = New-ScheduledTaskTrigger -Daily -At \"6:00PM\"; Register-ScheduledTask -TaskName \"DSLF Ticket Scanner\" -Action $action -Trigger $trigger -RunLevel Highest -Force')",
+      "Read(//c/Users/suvam/Desktop/git_suvam/Jira_automation/$HOME/**)",
+      "Read(//c/Users/suvam/Desktop/git_suvam/Jira_automation/$HOME/.claude/**)",
+      "Bash(pdftotext:*)",
+      "Bash(find \"C:/Users/suvam/Desktop/git_suvam/Jira_automation\" -type d -name __pycache__ -exec rm -rf {} +)",
+      "Bash(\"C:/Users/suvam/Desktop/git_suvam/Jira_automation/email_scanner/processed_ids.json\")",
+      "Bash(find /c/Users/suvam/Desktop/git_suvam/Jira_automation -name *.pdf -ipath *celco*)",
+      "Bash(find /c/Users/suvam/Desktop/git_suvam/Jira_automation/broker_pdf /c/Users/suvam/Desktop/git_suvam/Jira_automation/Test_pdf -name *.pdf)",
+      "mcp__claude_ai_Atlassian__fetchAtlassian",
+      "mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql",
+      "Bash(for f:*)",
+      "Bash(do python -c \":*)",
+      "Bash(done)",
+      "Bash(find C:UserssuvamDesktopgit_suvamJira_automation -maxdepth 2 -type f \\\\\\(-name *.yml -o -name *.yaml -o -name *.json -o -name docker* -o -name .github* \\\\\\))",
+      "Bash(git:*)",
+      "Skill(gsd:plan-phase)",
+      "mcp__claude_ai_Atlassian__transitionJiraIssue"
     ]
   }
 }
