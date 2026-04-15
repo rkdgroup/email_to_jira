@@ -12,6 +12,21 @@ log = logging.getLogger(__name__)
 PAGE_SEPARATOR = "\n\n--- PAGE BREAK ---\n\n"
 MIN_TEXT_LENGTH = 50
 
+# PDF typographic ligatures that PyMuPDF sometimes doesn't decompose
+_LIGATURE_MAP = str.maketrans({
+    "\uFB00": "ff",   # ﬀ
+    "\uFB01": "fi",   # ﬁ
+    "\uFB02": "fl",   # ﬂ
+    "\uFB03": "ffi",  # ﬃ
+    "\uFB04": "ffl",  # ﬄ
+    "\uFB05": "st",   # ﬅ
+    "\uFB06": "st",   # ﬆ
+})
+
+
+def _normalize_ligatures(text: str) -> str:
+    return text.translate(_LIGATURE_MAP)
+
 
 def get_pdf_page_count(pdf_path: str) -> int:
     """Return the number of pages in a PDF."""
@@ -124,4 +139,4 @@ def extract_pdf_text(pdf_path: str, mode: str = "plain") -> str:
     if len(text.strip()) < MIN_TEXT_LENGTH:
         return f"[WARNING:LOW_TEXT] {text}"
 
-    return text
+    return _normalize_ligatures(text)
