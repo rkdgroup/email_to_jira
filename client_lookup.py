@@ -61,13 +61,18 @@ def _word_overlap(a: str, b: str) -> float:
 
 def _load_yaml(path: Path) -> list[dict]:
     import yaml
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or []
-        return [r for r in data if r.get("db_code")]
-    except Exception as e:
-        log.warning("Failed to load %s: %s", path, e)
-        return []
+    for enc in ("utf-8", "cp1252"):
+        try:
+            with open(path, "r", encoding=enc) as f:
+                data = yaml.safe_load(f) or []
+            return [r for r in data if r.get("db_code")]
+        except UnicodeDecodeError:
+            continue
+        except Exception as e:
+            log.warning("Failed to load %s: %s", path, e)
+            return []
+    log.warning("Failed to load %s: could not decode as utf-8 or cp1252", path)
+    return []
 
 
 def _load_broker_sheet(list_manager: str) -> list[dict]:
