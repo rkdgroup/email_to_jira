@@ -792,7 +792,6 @@ C81D:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
   - OMIT COMPANY  BY TITLE CODE
-  - /
 C86D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8,9,
@@ -897,7 +896,7 @@ E42:
 E55D:
   select_by: Recent date and $
   flags: $
-  dollar_cap: APPROVAL FOR QTY S?
+  dollar_cap: []
   standard_suppressions:
   - 4-6 LINE ADDRESS
   - OMIT PRISONS,FED.BLDGS
