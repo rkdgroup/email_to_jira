@@ -223,15 +223,7 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
     else:
         profile_data = {}
 
-    if verbose or dry_run:
-        _print_result(result, select_by=profile_data.get("select_by", ""))
-
-    if dry_run:
-        log.info("[DRY RUN] Would create ticket: %s", result.summary)
-        return {"success": True, "source": result.source, "dry_run": True,
-                "fields": result.to_jira_kwargs(), "warnings": list(result.warnings)}
-
-    # Step 6: Create ticket
+    # Step 6: Build ticket kwargs (shared by dry-run preview and live creation)
     kwargs = result.to_jira_kwargs()
     kwargs["description"] = _build_adf_description(result, profile_data=profile_data)
     if enriched.get("billable_account") and not kwargs.get("billable_account"):
@@ -256,6 +248,15 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
                 flag_line = "FLAG OMITS: " + ", ".join(adstra_flags)
                 existing = kwargs.get("omission_description", "")
                 kwargs["omission_description"] = f"{existing}\n\n{flag_line}" if existing else flag_line
+
+    if verbose or dry_run:
+        _print_result(result, select_by=profile_data.get("select_by", ""),
+                      omission_description=kwargs.get("omission_description", ""))
+
+    if dry_run:
+        log.info("[DRY RUN] Would create ticket: %s", result.summary)
+        return {"success": True, "source": result.source, "dry_run": True,
+                "fields": kwargs, "warnings": list(result.warnings)}
 
     ticket = create_jira_ticket(**kwargs)
 
@@ -341,7 +342,7 @@ def _build_adf_description(result, profile_data: dict = None, select_by: str = "
     return {"type": "doc", "version": 1, "content": content}
 
 
-def _print_result(result, select_by: str = "") -> None:
+def _print_result(result, select_by: str = "", omission_description: str = "") -> None:
     """Pretty-print all extracted Jira fields."""
     W = 22  # label column width
     print("\n" + "=" * 65)
@@ -377,7 +378,7 @@ def _print_result(result, select_by: str = "") -> None:
     row("Special Seed Instr",   result.special_seed_instructions)
 
     print("-" * 65)
-    row("Omission Description", result.omission_description)
+    row("Omission Description", omission_description or result.omission_description)
 
     print("-" * 65)
     print(f"  {'Description':<{W}}:")
