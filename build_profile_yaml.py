@@ -30,7 +30,9 @@ _MF_RE = re.compile(r'MERGEFIELD\s+"?[^""\s]+"?\s*', re.IGNORECASE)
 
 # Single-line field patterns (value ends at 3+ spaces, known label, or line end)
 _SELECT_BY_RE  = re.compile(r"SELECT BY[:\s]+(.+?)(?:\s{3,}|STANDARD\s+SUP|FILE\s+UPDATED|\*\*|$)", re.IGNORECASE)
-_FLAGS_RE      = re.compile(r"\bFLAGS?:\s*(.+?)(?:\s{3,}|ALL\s*-\s*GET|$)", re.IGNORECASE)
+# Matches: FLAGS:  /  FLAGS TO OMIT:  /  OMIT FLAGS:
+_FLAGS_LINE_RE = re.compile(r"^\s*(?:FLAGS?\s*(?:TO\s+OMIT)?|OMIT\s+FLAGS?)\s*:", re.IGNORECASE)
+_FLAGS_RE      = re.compile(r"(?:FLAGS?\s*(?:TO\s+OMIT)?|OMIT\s+FLAGS?)\s*:\s*(.+?)(?:\s{3,}|ALL\s*-\s*GET|$)", re.IGNORECASE)
 _DOLLAR_CAP_RE = re.compile(r"\$\s*CAP[:\s]+(.+?)(?:\s{3,}|APPROVAL|$)", re.IGNORECASE)
 
 
@@ -112,7 +114,7 @@ def _parse_lines(lines: list[str]) -> dict:
                     result["select_by"] = val
 
         # --- FLAGS ---
-        if re.match(r"\s*FLAGS?\s*:", line, re.IGNORECASE) and not result["flags"]:
+        if _FLAGS_LINE_RE.match(line) and not result["flags"]:
             m = _FLAGS_RE.search(line)
             if m:
                 val = _strip_mergefield(m.group(1)).strip()
@@ -131,8 +133,13 @@ def _parse_lines(lines: list[str]) -> dict:
                     result["dollar_cap"] = val
 
         # --- STANDARD SUPPRESSIONS block ---
-        if re.match(r"\s*STANDARD\s+SUPR?ESSIONS?\s*[:\s]", line, re.IGNORECASE) \
+        if re.match(r"\s*(?:STANDARD\s+)?SUPR?ESSIONS?\s*[:\s]", line, re.IGNORECASE) \
                 and not result["standard_suppressions"]:
+            # Capture any inline content on the header line itself (after the label)
+            inline = re.sub(r".*?(?:STANDARD\s+)?SUPR?ESSIONS?\s*[:\s]\s*", "", line, flags=re.IGNORECASE)
+            inline = _clean_item(inline)
+            if inline and not _is_garbage(inline) and not _is_section_header(inline):
+                result["standard_suppressions"].append(inline)
             i += 1
             while i < len(lines):
                 item = lines[i]
@@ -140,11 +147,10 @@ def _parse_lines(lines: list[str]) -> dict:
                 if re.match(r"\s*(SEED LIST|SPECIAL INSTRUCTIONS|HYPERLINKS|CONTACT|FILE NAME)\s*[:\s]",
                              item, re.IGNORECASE):
                     break
-                # Collect lines that are suppression items (start with - or *)
-                if re.match(r"\s*[-*]", item):
-                    cleaned = _clean_item(item)
-                    if cleaned and not _is_garbage(cleaned):
-                        result["standard_suppressions"].append(cleaned)
+                # Accept all non-header, non-garbage lines (not just -/* prefixed)
+                cleaned = _clean_item(item)
+                if cleaned and not _is_garbage(cleaned) and not _is_section_header(cleaned):
+                    result["standard_suppressions"].append(cleaned)
                 i += 1
             continue  # skip the i += 1 at bottom
 

@@ -7,13 +7,21 @@ A14D:
   select_by: Transaction $, and date
   flags: N,V,W,X,Y,Z,7,A,B,D,E,8, $
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - PRISONS, FED.BLDGS, ETC.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
+  - US MONITOR NAMES; CSA,HHV,TCC,CSA
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
   - OMIT COMPANY  BY TITLE CODE
 A15R:
-  select_by: MOST RECENT DATE & LARGEST DOLLAR
+  select_by: MOST RECENT DATE &
   flags: '!, $'
   dollar_cap: $99.99
   standard_suppressions:
@@ -85,7 +93,15 @@ A29D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, INST.,
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -94,7 +110,15 @@ A33O:
   select_by: Transaction $, and date
   flags: N,X,Y,Z,A,B,D,E,V,7,8,$
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - PRISONS, FED.BLDGS, ETC.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
+  - US MONITOR NAMES; CSA,HHV,TCC,CSA
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -116,15 +140,8 @@ A37:
   select_by: A37A=ACT., A37E=EXP.
   flags: X, U, $
   dollar_cap: No transaction $ available
-  standard_suppressions: 
-  - NO PERSONAL NAME
-
-  special_instructions: 
-  - COUNTS SENT TO CLIENT UPON UPDATE 
-  - OMIT APO, FPO
-  - OMIT PR, TERR, MILITARY
-  - OMIT NCOA CODES 
-
+  standard_suppressions: []
+  special_instructions: []
 A40:
   select_by: TRANSACTION $ AND DATE
   flags: A,B,D,G,R,T,5,!,$
@@ -148,14 +165,22 @@ A42D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8, !
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, INST.,
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
   - OMIT COMPANY  BY TITLE CODE
 A49D:
   select_by: SEE SPECIAL INSTRUCTIONS
-  flags: ''
+  flags: $
   dollar_cap: N/A
   standard_suppressions:
   - PRISIONS, ETC.
@@ -172,6 +197,7 @@ A52D:
   flags: A, N, O, X, Y, Z, 7, 2, 3, $, 4
   dollar_cap: $99.99
   standard_suppressions:
+  - NO PERSONAL NAME
   - OMIT INSTITUTIONS  (W/O 88)
   - 4-6 LINE ADDRESS (W/O 87)
   special_instructions:
@@ -202,8 +228,8 @@ A58D:
   - WE CAN NOT CHARGE FOR STATE AND/OR SCF SELECTS OR OMITS.
   - 'PULL SINGLE & MULTIS BY TOTAL # OF GIFTS'
 A63D:
-  select_by: 'MDR: MRC DATE ,HPC AMOUNT || ADR: MRC DATE ,HPC AMOUNT || NGR: MRC DATE ,HPC AMOUNT'
-  flags: ''
+  select_by: MACULAR DEGENERATION RSCH
+  flags: FLAGS LISTED BELOW IN SPECIAL INST.
   dollar_cap: $99.99
   standard_suppressions:
   - NO PERSON NAME
@@ -247,7 +273,15 @@ A70D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, INST.,
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -281,7 +315,7 @@ A77:
   - 'OMIT CLIENT FLAGS, FLAG CODES FIELD: D1, U1, U2 & Z1'
 A78D:
   select_by: RECENT DATE /LARGEST $
-  flags: ''
+  flags: $
   dollar_cap: $99.99
   standard_suppressions:
   - MN FOR SUPPRESSION
@@ -358,7 +392,7 @@ A96:
     THE FILE DOES NOT NEED TO BE THROUGH THE END OF THE MONTH.
 A98D:
   select_by: LARGEST $/RECENT DATE
-  flags: ''
+  flags: S
   dollar_cap: $999.99
   standard_suppressions:
   - NO PERSONAL NAME
@@ -406,9 +440,10 @@ B28:
     THE FILE DOES NOT NEED TO BE THROUGH THE END OF THE MONTH.
 B39D:
   select_by: Transaction Date
-  flags: ''
+  flags: $
   dollar_cap: CAP AT $99.99 (there are no donations over $99.99)
-  standard_suppressions: []
+  standard_suppressions:
+  - OMIT SCHOOLS, PRISONS
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -418,7 +453,7 @@ B39D:
   - urn:schemas-microsoft-com:office:smarttags  State  >
 B42D:
   select_by: MOST RECENT $ AND DATE
-  flags: ''
+  flags: A, R, S, U , $, 7
   dollar_cap: $99.99
   standard_suppressions:
   - FED BLDGS, PRSN, LIBR., SCHL, INST.
@@ -478,7 +513,7 @@ C13D:
   special_instructions: []
 C18D:
   select_by: RECENT $
-  flags: ''
+  flags: $
   dollar_cap: $99.99
   standard_suppressions:
   - OMIT INST, PRSN, SCHOOL
@@ -542,9 +577,10 @@ C34D:
   special_instructions: []
 C38D:
   select_by: Transaction Date
-  flags: ''
+  flags: $
   dollar_cap: None
-  standard_suppressions: []
+  standard_suppressions:
+  - SCHOOLS,PRISONS,
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -554,7 +590,15 @@ C44D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8,9
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, INST.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -564,14 +608,22 @@ C49D:
   select_by: Transaction $, and date
   flags: '$, #'
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED BLDGS,
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS, OH PO BOX
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
   - OMIT COMPANY  BY TITLE CODE
 C55D:
   select_by: REC DATE/LARGEST $
-  flags: ''
+  flags: $,A,B,C,D,G,J,N,P,Q,S,X,Z,
   dollar_cap: Varies per order
   standard_suppressions:
   - OMIT SCHOOLS, PRISONS,
@@ -584,7 +636,7 @@ C55D:
   - COUNCIL FOR CAGW DONORS = FLAG 5 (SEL. 174)
 C56A:
   select_by: LARGEST $ RECENT DATE
-  flags: ''
+  flags: '!,$,I,R,T,U,1,4,6,9'
   dollar_cap: $49.99
   standard_suppressions:
   - 4-6 LINE ADDRESSES
@@ -604,7 +656,7 @@ C56A:
   - THESE ORDERS MUST BE PROCESSED FROM C56A EFFECTIVE 12/13/16.
 C56D:
   select_by: LARGEST $ RECENT DATE
-  flags: ''
+  flags: I, R, T, U, 1, 4, 6, 9, $
   dollar_cap: $49.99
   standard_suppressions:
   - 4-6 LINE ADDRESSES
@@ -625,7 +677,15 @@ C58D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8,9,
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, INST
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - GENERAL DELIVERY
+  - BLANK PRIMARY ADDRESS
+  - COLUMBUS, OH PO BOX
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -637,7 +697,15 @@ C59D:
   select_by: Transaction $, and date
   flags: '$, #'
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED BLDGS,
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS, OH PO BOX
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -647,7 +715,15 @@ C66D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, INST.,
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -674,9 +750,10 @@ C69D:
     THE FILE DOES NOT NEED TO BE THROUGH THE END OF THE MONTH.
 C76:
   select_by: LARGEST $ RECENT DATE
-  flags: ''
+  flags: A, B, E, N, P, Q, 0, 3, 5, 9, $
   dollar_cap: N/A
   standard_suppressions:
+  - NO PERSONAL NAME
   - 4-6 LINE ADDRESSES
   - PRISONS, INST., LIBR., SCHOOLS
   special_instructions:
@@ -702,7 +779,15 @@ C81D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, INST.,
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -712,7 +797,16 @@ C86D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8,9,
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED.BLDGS, PRISONS, INST.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - GENERAL DELIVERY SUPP
+  - COLUMBUS, OH PO BOX
+  - EMAIL GIFTS TO SUPPRESS
+  - BLANK PRIMARY ADDRESS
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -721,7 +815,7 @@ C86D:
   - 'OMIT E-MAIL GIFTS:  CHANNEL CODE  E'
 C90D:
   select_by: MOST RECENT DATE/DOLLAR
-  flags: ''
+  flags: A, D, F, L, O, Q, T, X, Y, $
   dollar_cap: $99.99
   standard_suppressions:
   - FED.BLDGS, PRSN, LIBR.,SCHL,INST
@@ -770,7 +864,7 @@ D25:
     THE FILE DOES NOT NEED TO BE THROUGH THE END OF THE MONTH.
 D50:
   select_by: RECENT $/RECENT DATE
-  flags: ''
+  flags: D, E, X, Y, 1, $
   dollar_cap: $99.99
   standard_suppressions:
   - $100+ DNRS TO OMIT
@@ -815,7 +909,14 @@ F12D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8,
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, INST.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -826,7 +927,19 @@ F27X:
   flags: X,Z,8,!,$,0
   dollar_cap: VARIES PER ORDER
   standard_suppressions:
+  - GENERAL DELIVERY SUPPRESSION
+  - NO PERSONAL NAME
+  - FED.BLDGS, PRISONS, INST.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
   - '**FFC added the following suppressions***'
+  - FFC WILAND ACQUIRED SUPPRESS (Per FFC)
+  - 2019-2020 $100+  (IF CLIENT REQUESTS THIS ONE TO NOT BE OMITTED, WE CAN DO IT
+    FOR THE MAILER LEADERSHIP INSTITUTE, PER HEATHER LUSK 2/26/20)
+  - SUPPRESSION FOR L.R. ORDERS (Per FFC) (This is ran from F27D)
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -838,7 +951,21 @@ F41D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS,
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
+  - TOD STEWARD
+  - 10503 GODWIN DR
+  - MANASSAS VA 20112
+  - COLIN DUFFATA
+  - 1838 CONNECTICUT AVE NW APT 204
+  - WASHINGTON, DC 20009
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -847,7 +974,18 @@ F43D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS,
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
+  - TOD STEWARD
+  - 10503 GODWIN DR
+  - MANASSAS VA 20112
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -883,8 +1021,8 @@ F46D:
   - OMIT NCOA REASON CODES
   - COLUMBUS OH PO BOX 2168
 F51D:
-  select_by: ALL ORDERS ARE RAN USING L24M
-  flags: ''
+  select_by: ALL ORDERS ARE RAN USING
+  flags: $, !
   dollar_cap: NO $
   standard_suppressions:
   - INST., SCHOOL, PRISIONS
@@ -896,7 +1034,7 @@ F51D:
   - OMIT COMPANY
 F57D:
   select_by: REC DATE/LARGEST $
-  flags: ''
+  flags: '!,$,D,M,R,U,X'
   dollar_cap: $99.99
   standard_suppressions:
   - OMIT SCHOOLS, PRISONS,
@@ -927,7 +1065,15 @@ F61D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, INST.,
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -937,7 +1083,7 @@ F61D:
   - /
 F72D:
   select_by: RECENT $/RECENT DATE
-  flags: ''
+  flags: NONE AT THIS TIME
   dollar_cap: $149.99
   standard_suppressions:
   - NO PERSONAL NAME
@@ -956,7 +1102,7 @@ F72D:
   - ~ aUw}  0  +n
 G27A:
   select_by: RECENT $/RECENT DATE
-  flags: ''
+  flags: '! # $'
   dollar_cap: $99.99
   standard_suppressions:
   - NO PERSONAL NAME
@@ -1001,14 +1147,22 @@ H25L:
   select_by: Transaction $, and date
   flags: NONE AT THIS TIME
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, INST.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
   - OMIT COMPANY  BY TITLE CODE
 H44:
   select_by: MOST RECENT $ AND DATE
-  flags: ''
+  flags: D, N, R , X(cgr do not mails)
   dollar_cap: $99.99
   standard_suppressions:
   - FED BLDGS, PRSN, LIBR., SCHL, INST.
@@ -1030,7 +1184,7 @@ H44:
   - ': ( W'
 H47D:
   select_by: MOST RECENT $ AND DATE
-  flags: ''
+  flags: B, D, E, Q, R, U, X, 1, 2 , $
   dollar_cap: $99.99
   standard_suppressions:
   - HHV/CDR DECEASED FLAG
@@ -1061,7 +1215,7 @@ H47D:
   - OMIT COLUMBUS OH PO BOX 2168, ZIP 43216
 H56A:
   select_by: RECENT DATE/RECENT $ EFFECTIVE MARCH 2020
-  flags: ''
+  flags: B,D,I,O,Q,R,U,W,X,1,2,5,$, !
   dollar_cap: '$99.99 (Per Gaea: 9/25/13)'
   standard_suppressions:
   - ANONYMOUS, RESIDENT, OCC
@@ -1083,9 +1237,20 @@ H56A:
   - /
 H56D:
   select_by: Transaction $, and date
-  flags: ''
+  flags: B,D,I,O,Q,R,U,W,X,1,2,$
   dollar_cap: Varies per order
   standard_suppressions:
+  - PRISONS, FED.BLDGS, ETC.
+  - ANONYMOUS, RES., OCCUPANT HHV/ATA CONVENTION ONLY
+  - HHV/ATA 2X YEAR
+  - HHV/ATA YEARLY
+  - HHV/ATA NEVER MAILS
+  - HHV/ATA QUARTERLY FLAG
+  - HHV/ATA NO LABEL/PREMIUM
+  - HHV/ATA EFT MBT
+  - HHV/ATA NO $BILL
+  - HHV/ATA DECEASED FLAG
+  - LR NCOA SUPPRESSION US MONITOR NAMES; CSA,HHV,TCC,CSA
   - OMIT PO BOX 5025, HAGERSTOWN, MD
   - OMIT PO BOX 96661, PO BOX 96002 & PO BOX 98088 IN WASHINGTON, DC.
   special_instructions:
@@ -1101,7 +1266,25 @@ H56E:
   select_by: Transaction $, and date
   flags: D,I,R,U,X
   dollar_cap: Varies per order
-  standard_suppressions: []
+  standard_suppressions:
+  - PRISONS, FED.BLDGS, ETC.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP+4
+  - COLUMBUS OH PO BOX 2168 HHV;CDR DECEASED
+  - HHV/CDR NO$BILL
+  - HHV;CDR EFT MBR
+  - HHV;CDR NO LABEL/PREM.
+  - HHV;CDR QUARTERLY FLAG
+  - HHV;CDR NEVER MAILS HHV;CDR YEARLY FLAG
+  - HHV;CDR 2X YEAR
+  - HHV;ATA CONVENTION  HHV;ATA 2X YEAR
+  - HHV;ATA YEARLY
+  - HHV;ATA NEVER MAILS
+  - HHV;ATA QUARTERLY FLAG
+  - HHV;ATA NO LABEL/PREM.
+  - HHV;ATA EFT MBR
+  - HHV;ATA NO $BILL
+  - HHV;ATA DECEASED FLAG U.S.MONITOR NAMES;  CSA,HHV,CASH,TCC,TVC
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -1186,6 +1369,7 @@ I12:
   flags: A, N, O, X, Y, Z, $, !, 2, 3, 4, 7
   dollar_cap: NONE UNLESS SPECIFIED ON ORDER
   standard_suppressions:
+  - NO PERSONAL NAME
   - OMIT INSTITUTIONS
   special_instructions:
   - OMIT APO, FPO
@@ -1269,7 +1453,7 @@ I68:
   - /
 J30D:
   select_by: MOST RECENT $ AND DATE
-  flags: ''
+  flags: $, !, B, D, E, N, R, X, 8
   dollar_cap: $49.99
   standard_suppressions:
   - SUPPRESS SET OF $50+ DNRS
@@ -1302,17 +1486,28 @@ J48D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8,
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - GENERAL DELIVERY SUPPRESSION
+  - NO PERSONAL NAME
+  - FED. BLDGS,
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - BLANK PRIMARY ADDRESS
+  - COLUMBUS OH PO BOX 2168
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
   - OMIT COMPANY  BY TITLE CODE
   - OMIT NCOA REASON CODES
 J75R:
-  select_by: RECENT DATE/LARGEST $  (NEW) || RECENT DATE/RECENT $  (GOLD)
-  flags: ''
+  select_by: RECENT DATE/LARGEST $  (NEW)
+  flags: '!, $, D, F, K, P, R, S, X, Y, Z, 0'
   dollar_cap: $999.99, ORDER WILL SPECIFY
-  standard_suppressions: []
+  standard_suppressions:
+  - FED BLDGS, PRISONS, INST.,LIBR.
+  - LAST NAME
+  - NEW SUPPRESSION 0-3
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -1417,9 +1612,11 @@ K50R:
   flags: D,P,X,$
   dollar_cap: No transaction $ available
   standard_suppressions:
-  - 'UFO : NEW SO SUPPRESS UFO'
-  - 'CANCELS: NEW TO SUPPRESS  UFO  or  PF'
   - 'MF: NEW TO SUPPRESS PF, UFO & BIG (3)'
+  - UFO = K50L
+  - M.F. = K50V
+  - INCOME INVESTING = K50Y
+  - (ALANE KELLER IS A PERMANENT SEED)
   special_instructions:
   - SELECT BILLING UNIT FOR  PERSONAL FINANCE  OR  UTILITY FORECASTER  ORDERS
   - 'FOR CANADIAN EDGE: SELECT  OTHER  & FILL IN DESCRIPTION AS CANADIAN EDGE'
@@ -1435,7 +1632,15 @@ L08D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8,9
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - GENERAL DELIVERY SUPPRESSION
+  - NO PERSONAL NAME
+  - PRISONS, FED.BLDGS, ETC.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - BLANK PRIMARY ADDRESS
+  - COLUMBUS OH PO BOX 2168
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -1461,7 +1666,15 @@ L62D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8,9
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, INST.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -1481,7 +1694,7 @@ M08D:
   - 'OMIT WEB DONORS BY FLAG (J) AND PACKAGE: WEB___ (3 UNDERSCORES)'
 M13D:
   select_by: MOST RECENT $ AND DATE
-  flags: ''
+  flags: B,
   dollar_cap: $99.99
   standard_suppressions:
   - PRISIONS, FED.BLDGS, ETC.
@@ -1514,7 +1727,10 @@ M24R:
   select_by: TRANS. DATE,$,&CLIENT
   flags: U,1,7,9,$
   dollar_cap: $99.99
-  standard_suppressions: []
+  standard_suppressions:
+  - Different no personal name
+  - Anon.,res.,occ.,unknown
+  - Columbus OH Address Suppress
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -1583,7 +1799,7 @@ M47D:
   - OMIT NCOA REASON CODES
 M47R:
   select_by: MOST RECENT $ AND DATE
-  flags: ''
+  flags: '$, !, #'
   dollar_cap: CAP AT $99.99 (UNLESS HIGH DOLLAR)
   standard_suppressions:
   - INST., SCHOOL, PRISIONS
@@ -1612,7 +1828,15 @@ M63D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, INST.,
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -1648,7 +1872,7 @@ N08D:
   - OMIT NCOA REASON CODES
 N11D:
   select_by: LARGEST $ RECENT DATE
-  flags: ''
+  flags: H,J,P,V,0,1,3,4,6,$, !
   dollar_cap: $99.99
   standard_suppressions:
   - 4-6 LINE ADDRESSES
@@ -1693,7 +1917,7 @@ N15:
   - OMIT PR, TERR, MILITARY & APO/FPO
 N22D:
   select_by: TRANSACTION $ AND DATE
-  flags: ''
+  flags: A, B, C, D, F, L M, R , U, 5, $
   dollar_cap: $99.99
   standard_suppressions:
   - FED BLDGS, PRSN, LIBR., SCHL, INST.
@@ -1737,7 +1961,7 @@ N41:
   - OMIT NCOA REASON CODES
 N44D:
   select_by: Transaction $ = .01
-  flags: ''
+  flags: A, N, J, Q, X, 1, 4
   dollar_cap: ''
   standard_suppressions: []
   special_instructions: []
@@ -1745,11 +1969,12 @@ N45D:
   select_by: TRANSACTION & LIST CODE
   flags: D,P,X,
   dollar_cap: No transaction $ available
-  standard_suppressions: []
+  standard_suppressions:
+  - NONE
   special_instructions: []
 N48A:
   select_by: RECENT DATE/LARGEST $
-  flags: ''
+  flags: A, B, E, S, X, 0, 1, 4, 5, 6, $
   dollar_cap: $99.99
   standard_suppressions: []
   special_instructions:
@@ -1895,7 +2120,7 @@ N71:
     THE FILE DOES NOT NEED TO BE THROUGH THE END OF THE MONTH.
 N85A:
   select_by: MOST RECENT $ AND DATE
-  flags: ''
+  flags: $, A, D, K, O, T, X, 4, !
   dollar_cap: $49.99
   standard_suppressions:
   - PRISIONS, FED.BLDGS, ETC.
@@ -1951,6 +2176,7 @@ N98D:
   standard_suppressions:
   - PRISIONS, LIBRARIES TO SUPRESS
   - CANADIAN, ALL (do not use on Canadian orders)
+  - A DEDUPED COUNT.
   special_instructions:
   - SELECT BY PUBLICATION TYPE
   - 'EXECUTIVE LEADERSHIP = ES (Ref. #)'
@@ -2006,9 +2232,10 @@ O16D:
     THE FILE DOES NOT NEED TO BE THROUGH THE END OF THE MONTH.
 O20D:
   select_by: Recent Date/Recent $
-  flags: ''
+  flags: $
   dollar_cap: None
-  standard_suppressions: []
+  standard_suppressions:
+  - OMIT SCHOOLS, PRISONS
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -2070,7 +2297,7 @@ P14:
   - IF ORDER COMES FROM COLLEEN THEN SEE LUCY
 P18D:
   select_by: MOST RECENT $ AND DATE
-  flags: ''
+  flags: A, C, D, F, L, R, U , $
   dollar_cap: $99.99
   standard_suppressions:
   - FED BLDGS, PRSN, LIBR., SCHL, INST.
@@ -2084,7 +2311,7 @@ P18D:
   - INCLUDE SETS CAN BE USED.
 P21D:
   select_by: RECENT DATE /LARGEST $
-  flags: ''
+  flags: $
   dollar_cap: $99.99
   standard_suppressions:
   - MN FOR SUPPRESSION
@@ -2117,7 +2344,15 @@ P33D:
   select_by: Transaction $, and date
   flags: N,W,X,Y,Z,7,A,B,D,E,V,8,$
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - PRISONS, FED.BLDGS, ETC.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
+  - US MONITOR NAMES; CSA,HHV,TCC,CSA
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -2164,7 +2399,12 @@ P59D:
   select_by: Transaction $, and date
   flags: NO FLAGS AT THIS TIME
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - FED. BLDGS, PRISONS, INST.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -2176,7 +2416,15 @@ P64D:
   select_by: Transaction $, and date
   flags: A,B,C,D,E,N,V,W,X,Y,Z,7,8,$
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - GENERAL DELIVERY SUPPRESSION
+  - NO PERSONAL NAME
+  - PRISONS, FED.BLDGS, ETC.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -2206,7 +2454,15 @@ P82D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8,
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, INST.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -2214,7 +2470,7 @@ P82D:
   - OMIT NCOA REASON CODES
   - D  M
 P88D:
-  select_by: MOST RECENT DATE & LARGEST DOLLAR
+  select_by: MOST RECENT DATE &
   flags: '!, $'
   dollar_cap: $99.99
   standard_suppressions:
@@ -2253,7 +2509,7 @@ R42D:
   special_instructions: []
 R51D:
   select_by: RECENT $ AND DATE
-  flags: ''
+  flags: 'R, T, $, #, !'
   dollar_cap: $99.99
   standard_suppressions:
   - 4-6 LINE ADDRESS
@@ -2280,7 +2536,7 @@ R54D:
   special_instructions: []
 R61:
   select_by: RECENT $ AND DATE
-  flags: ''
+  flags: 'R, T, $, #, !'
   dollar_cap: $99.99
   standard_suppressions:
   - 4-6 LINE ADDRESS
@@ -2294,6 +2550,7 @@ S05D:
   flags: A, N, O, X, Y, Z,
   dollar_cap: $99.99
   standard_suppressions:
+  - NO PERSONAL NAME
   - OMIT INSTITUTIONS
   - 4-6 LINE ADDRESS
   special_instructions:
@@ -2322,7 +2579,15 @@ S28D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8,9
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, INST.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -2380,7 +2645,7 @@ S34D:
   - 'PULL SINGLE & MULTI DONORS BY TOTAL # OF GIFTS'
 S36D:
   select_by: MOST RECENT $ AND DATE
-  flags: ''
+  flags: C, I, J, X, Y 0, 2, 5 , 7, 8, $
   dollar_cap: $99.99
   standard_suppressions:
   - FED BLDGS, PRSN, LIBR., SCHL, INST.
@@ -2411,7 +2676,15 @@ S43D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8,
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, INST.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -2458,7 +2731,7 @@ S52:
     THE FILE DOES NOT NEED TO BE THROUGH THE END OF THE MONTH.
 S56D:
   select_by: LARGEST $/RECENT DATE
-  flags: ''
+  flags: NONE AT THIS TIME
   dollar_cap: $999.99
   standard_suppressions:
   - NO PERSONAL NAME
@@ -2499,7 +2772,15 @@ S71D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8,9
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, INST.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -2508,7 +2789,9 @@ T11D:
   select_by: ONEILL LIST RENTAL saveset,
   flags: X,Y,Z,7,8,9
   dollar_cap: Varies per order
-  standard_suppressions: []
+  standard_suppressions:
+  - PRISONS, FED.BLDGS, ETC.
+  - ANONYMOUS, RES., OCCUPANT
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -2518,13 +2801,25 @@ T11R:
   flags: X,Y,Z,7,8,9,$,!
   dollar_cap: Varies per order
   standard_suppressions:
+  - GENERAL DELIVERY SUPP
+  - NO PERSONAL NAME
+  - FED. BLDGS, PRISONS, ETC.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP+4
+  - ANONYMOUS, RESIDENT, OCC
+  - L.R. NCOA CODES TO SUPPRESS
+  - COLUMBUS, OH PO BOXES;SUPPRESS
+  - WASHINGTON DC PO BOXES;SUPPRESS
+  - BLANK PRIMARY ADDRESS
+  - Eff 1/20/21
   - OMIT APO/FPO
   - OMIT PR, TERR, MILITARY
   - OMIT COMPANY BY TITLE CODE
+  - SEE ADDITIONAL SUPPRESSION SETS ON PAGE 3 OF THE PROFILE.
   special_instructions: []
 T14D:
   select_by: MOST RECENT $ AND DATE
-  flags: ''
+  flags: $,
   dollar_cap: $99.99
   standard_suppressions:
   - NCOA REASON CODES
@@ -2553,7 +2848,7 @@ T34:
   - OMIT NCOA REASON CODES
 T39D:
   select_by: RECENT $/RECENT DATE
-  flags: ''
+  flags: NONE AT THIS TIME
   dollar_cap: $100. 00
   standard_suppressions:
   - NO PERSONAL NAME
@@ -2582,13 +2877,23 @@ U02:
   select_by: RECENT DATE/DOLLAR
   flags: B, D, U, R, X
   dollar_cap: $249.99
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAMES
+  - FED BLDGS,PRSN,LIBRARIES
   special_instructions: []
 U19D:
   select_by: Transaction $, and date
   flags: $, A,B,D,E,N,X,Y,Z,7,8,9
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - GENERAL DELIVERY SUPPRESSION
+  - NO PERSONAL NAME
+  - PRISONS, FED.BLDGS, ETC.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - 9625 SURVEYOR CT STE 400
+  - COLUMBUS OH PO BOX 2168
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -2695,7 +3000,15 @@ V19D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8,9
   dollar_cap: VARIES PER ORDER
-  standard_suppressions: []
+  standard_suppressions:
+  - NO PERSONAL NAME
+  - FED.BLDGS, PRISONS, INST.
+  - 4-6 LINE ADDRESSES
+  - NOT ZIP +4
+  - ANONYMOUS, RES., OCCUPANT
+  - COLUMBUS OH PO BOX 2168
+  - BLANK PRIMARY ADDRESS
+  - GENERAL DELIVERY SUPPRESSION
   special_instructions:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
@@ -2703,7 +3016,7 @@ V19D:
   - OMIT NCOA REASON CODES
 V50D:
   select_by: MOST RECENT $ AND DATE
-  flags: ''
+  flags: A,B,D,G,H,M,R,Q,V,W,X,Z,$,1,9,!
   dollar_cap: $99.99
   standard_suppressions:
   - FED BLDGS, PRSN, LIBR., SCHL, INST.
@@ -2762,7 +3075,7 @@ W08D:
   - OMIT RECORD TYPE X, R TYPE (X- DELETED)
 W12D:
   select_by: MOST RECENT $ AND DATE
-  flags: $, !, D, N , S, V, W, X, 1, 2, 3
+  flags: '!, $, D, N, S, V, W, X, 1, 3, 7'
   dollar_cap: $99.99
   standard_suppressions:
   - FED BLDGS, PRSN, LIBR., SCHL, INST.
@@ -2780,6 +3093,8 @@ W12D:
   - OMIT RD TEAMS (MG, OF, RD, SG, SP, WG)
   - OMIT SUSTAINER RECORDS (STATUS FIELD) (5 SEPARATE OMITS, CANNOT BE TOGETHER)
   - OMIT 0-17 YEAR OLDS
+  - \
+  - e}s B  MF F
 W27:
   select_by: counts
   flags: D, N, R, $ A X
@@ -2799,10 +3114,9 @@ W27:
     THE FILE DOES NOT NEED TO BE THROUGH THE END OF THE MONTH.
 W29D:
   select_by: MOST RECENT $ AND DATE
-  flags: A,B,C,D,E,F,G,H,R,S,U,V,X,$,5,6
+  flags: A,
   dollar_cap: $ 99.99
   standard_suppressions:
-  - NO PERSONAL NAME
   - PRISIONS, FED.BLDGS, ETC.
   - NCOA REASON CODES
   special_instructions:
@@ -2849,7 +3163,7 @@ X06:
     THE FILE DOES NOT NEED TO BE THROUGH THE END OF THE MONTH.
 Y15D:
   select_by: Transaction $ = .01
-  flags: ''
+  flags: C, J, P, U, 1, 4
   dollar_cap: ''
   standard_suppressions: []
   special_instructions: []
