@@ -116,8 +116,15 @@ A37:
   select_by: A37A=ACT., A37E=EXP.
   flags: X, U, $
   dollar_cap: No transaction $ available
-  standard_suppressions: []
-  special_instructions: []
+  standard_suppressions: 
+  - NO PERSONAL NAME
+
+  special_instructions: 
+  - COUNTS SENT TO CLIENT UPON UPDATE 
+  - OMIT APO, FPO
+  - OMIT PR, TERR, MILITARY
+  - OMIT NCOA CODES 
+
 A40:
   select_by: TRANSACTION $ AND DATE
   flags: A,B,D,G,R,T,5,!,$
@@ -2755,7 +2762,7 @@ W08D:
   - OMIT RECORD TYPE X, R TYPE (X- DELETED)
 W12D:
   select_by: MOST RECENT $ AND DATE
-  flags: ''
+  flags: $, !, D, N , S, V, W, X, 1, 2, 3
   dollar_cap: $99.99
   standard_suppressions:
   - FED BLDGS, PRSN, LIBR., SCHL, INST.
@@ -2773,8 +2780,6 @@ W12D:
   - OMIT RD TEAMS (MG, OF, RD, SG, SP, WG)
   - OMIT SUSTAINER RECORDS (STATUS FIELD) (5 SEPARATE OMITS, CANNOT BE TOGETHER)
   - OMIT 0-17 YEAR OLDS
-  - \
-  - e}s B  MF F
 W27:
   select_by: counts
   flags: D, N, R, $ A X
@@ -2794,9 +2799,10 @@ W27:
     THE FILE DOES NOT NEED TO BE THROUGH THE END OF THE MONTH.
 W29D:
   select_by: MOST RECENT $ AND DATE
-  flags: ''
+  flags: A,B,C,D,E,F,G,H,R,S,U,V,X,$,5,6
   dollar_cap: $ 99.99
   standard_suppressions:
+  - NO PERSONAL NAME
   - PRISIONS, FED.BLDGS, ETC.
   - NCOA REASON CODES
   special_instructions:
