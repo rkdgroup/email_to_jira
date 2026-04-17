@@ -1,5 +1,29 @@
 - db_code: T11R
   billing_cust: T11
+  db_name: US DEPUTY SHERIFFS ASSOCIATION
+  rental_name: US DEPUTY SHERIFFS ASSOCIATION
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: RUN ORDERS FROM T11R
+- db_code: T11R
+  billing_cust: T11
+  db_name: COLLEGE REPUBLICANS OF AMERICA
+  rental_name: COLLEGE REPUBLICANS OF AMERICA
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: RUN ORDERS FROM T11R
+- db_code: T11R
+  billing_cust: T11
+  db_name: HOWARD JARVIS TAXPAYERS ASSOCIATION
+  rental_name: HOWARD JARVIS TAXPAYERS ASSOCIATION
+  list_manager: AMLC
+  lm_contact: MARTY
+  lrr: AWD
+  comments: RUN ORDERS FROM T11R
+- db_code: T11R
+  billing_cust: T11
   db_name: AMERICANS UNITED FOR LIFE
   rental_name: AMERICANS UNITED FOR LIFE
   list_manager: AMLC
@@ -201,7 +225,7 @@
 - db_code: S48D
   billing_cust: S48
   db_name: COALITION FOR SAH (CSAH)
-  rental_name: COALITION FOR SAH (CSAH) EXCHANGE or RENTAL
+  rental_name: COALITION FOR SAH (CSAH)
   list_manager: AMLC EXCHANGE
   lm_contact: MARTY
   lrr: AWD

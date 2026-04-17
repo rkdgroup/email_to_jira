@@ -88,19 +88,31 @@ class RkdGroupParser(BaseBrokerParser):
                     result["mailer_po"] = candidate
                     break
 
-        # --- List name: the text line immediately before "Way Bill #:" ---
-        # e.g., line 36=NATIONAL FOUNDATION FOR CANCER RESEAR, line 37=Way Bill #:
-        # Or for AMLC: line 35=Tafoya for Senate (MN), line 36=Way Bill #:
-        # Wait - in AMLC 667772: Tafoya for Senate (MN) IS the mailer, not the list.
-        # And the list is Viguerie's Statewide Campaign Donor Superfile (line 21, right after labels).
-        # So the line before Way Bill #: is actually the LIST name (the list being rented/exchanged).
+        # --- List name: the line immediately before "List:" label ---
+        # In the columnar layout the value appears BEFORE its label.
+        # e.g., line 21=US Deputy Sheriffs Association, line 22=List:
+        # Fallback: line before "Way Bill #:" (older RKD format).
         result["list_name"] = ""
         way_bill_idx = -1
         for i, ln in enumerate(lines):
             if ln == "Way Bill #:":
                 way_bill_idx = i
                 break
-        if way_bill_idx > 0:
+
+        # Primary: value before "List:" label
+        for i, ln in enumerate(lines):
+            if ln == "List:":
+                for j in range(i - 1, max(0, i - 4), -1):
+                    candidate = lines[j]
+                    if (len(candidate) > 5 and not re.match(r"^\d+$", candidate) and
+                            not candidate.endswith(":") and
+                            not re.match(r"^[A-Z]\d{3,6}$", candidate)):
+                        result["list_name"] = candidate
+                        break
+                break
+
+        # Fallback: line before "Way Bill #:" (RKD format without explicit "List:" label)
+        if not result["list_name"] and way_bill_idx > 0:
             for j in range(way_bill_idx - 1, max(way_bill_idx - 5, ext_idx if ext_idx >= 0 else 0), -1):
                 candidate = lines[j]
                 if (len(candidate) > 5 and not re.match(r"^\d+$", candidate) and
