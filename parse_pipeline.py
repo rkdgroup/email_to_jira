@@ -418,15 +418,31 @@ def main():
         print(f"\n{'File':<45} {'Status':<10} {'Source':<20} {'Ticket/Error'}")
         print("-" * 100)
         for name, r in results:
-            status = "OK" if r["success"] else "FAIL"
-            source = r.get("source", "")
-            detail = r.get("ticket_key") or "; ".join(r.get("errors", []))[:40]
-            if args.dry_run and r["success"]:
-                detail = "(dry run)"
-            print(f"{name:<45} {status:<10} {source:<20} {detail}")
+            # Multi-page PDFs return a list — flatten into one row per page
+            rows = r if isinstance(r, list) else [r]
+            for idx, row in enumerate(rows):
+                label = f"{name} (p{idx+1})" if len(rows) > 1 else name
+                status = "OK" if row.get("success") else "FAIL"
+                source = row.get("source", "")
+                detail = row.get("ticket_key") or "; ".join(row.get("errors", []))[:40]
+                if args.dry_run and row.get("success"):
+                    detail = "(dry run)"
+                print(f"{label:<45} {status:<10} {source:<20} {detail}")
     elif target.is_file():
         r = process_pdf(str(target), dry_run=args.dry_run, verbose=args.verbose)
-        if r["success"]:
+        # Multi-page PDFs return a list of per-page results
+        if isinstance(r, list):
+            failures = [x for x in r if not x.get("success")]
+            if args.dry_run:
+                print(f"\nDry run complete. {len(r)} page(s) processed.")
+            else:
+                keys = [x.get("ticket_key") for x in r if x.get("ticket_key")]
+                print(f"\nTickets created: {', '.join(keys)}")
+            if failures:
+                for f in failures:
+                    print(f"Failed: {'; '.join(f.get('errors', ['unknown error']))}")
+                sys.exit(1)
+        elif r["success"]:
             if args.dry_run:
                 print("\nDry run complete. Fields shown above.")
             else:
