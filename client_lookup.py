@@ -178,10 +178,12 @@ def _row_to_result(row: dict) -> dict:
 
 
 def enrich_fields(
-    list_name:    str = "",
-    mailer_name:  str = "",
-    list_manager: str = "",
-    db_code:      str = "",
+    list_name:          str = "",
+    mailer_name:        str = "",
+    list_manager:       str = "",
+    db_code:            str = "",
+    broker_only:        bool = False,
+    row_manager_filter: str = "",
 ) -> dict:
     """
     Look up db_code, billable_account, and list_manager from YAML config.
@@ -189,8 +191,12 @@ def enrich_fields(
     Priority:
       1. Exact db_code match in broker YAML or full YAML
       2. Broker-specific YAML: fuzzy match on list_name, then mailer_name (threshold 0.4)
-      3. Cross-broker YAMLs: fuzzy match (threshold 0.5)
-      4. Full client YAML: fuzzy match on list_name (threshold 0.5)
+      3. Cross-broker YAMLs: fuzzy match (threshold 0.5)  [skipped if broker_only=True]
+      4. Full client YAML: fuzzy match on list_name (threshold 0.5)  [skipped if broker_only=True]
+
+    broker_only=True: stop after step 2 — never fall through to other brokers or full list.
+    row_manager_filter: if set, only match rows whose list_manager contains this string
+      (e.g. "EXCHANGE" restricts AMLC lookup to AMLC EXCHANGE rows only).
 
     Returns dict with billable_account, list_manager, db_code, lm_contact.
     Empty dict if no match found.
@@ -203,12 +209,18 @@ def enrich_fields(
 
     # 2. Broker-specific YAML
     broker_rows = _load_broker_sheet(list_manager)
+    if row_manager_filter and broker_rows:
+        broker_rows = [r for r in broker_rows
+                       if row_manager_filter.upper() in (r.get("list_manager") or "").upper()]
     if broker_rows:
         best, score = _best_match(broker_rows, list_name, mailer_name)
         if best and score >= 0.4:
             log.info("Broker YAML match (score=%.2f): %s -> %s",
                      score, list_name or mailer_name, best["db_code"])
             return _row_to_result(best)
+
+    if broker_only:
+        return {}
 
     # 3. Cross-broker fallback
     for mgr_key, file_key in _MANAGER_TO_FILE.items():

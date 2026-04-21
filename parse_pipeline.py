@@ -17,6 +17,7 @@ Usage (run from project root):
 """
 
 import os
+import re
 import sys
 import logging
 import argparse
@@ -192,11 +193,27 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
             return {"success": False, "source": result.source, "errors": [f"Duplicate: {keys}"]}
 
     # Step 5: Enrich fields from YAML config files
-    enriched = enrich_fields(
-        list_name=result.list_name or "",
-        mailer_name=result.mailer_name or "",
-        list_manager=result.list_manager or "",
-    )
+    # AMLC rental: parser sets billable_account=T11 when Status="Active Rental" or TVC hint found.
+    # Exchange orders leave billable_account="" and fall through to fuzzy lookup.
+    if result.list_manager == "AMLC" and result.billable_account == "T11":
+        log.info("AMLC rental order — forcing db_code=T11R")
+        enriched = {"db_code": "T11R", "billable_account": "T11", "list_manager": "AMLC", "lm_contact": ""}
+    elif result.list_manager == "AMLC":
+        log.info("AMLC exchange order — searching AMLC EXCHANGE rows only")
+        enriched = enrich_fields(
+            list_name=result.list_name or "",
+            mailer_name=result.mailer_name or "",
+            list_manager="AMLC",
+            broker_only=True,
+            row_manager_filter="EXCHANGE",
+        )
+    else:
+        enriched = enrich_fields(
+            list_name=result.list_name or "",
+            mailer_name=result.mailer_name or "",
+            list_manager=result.list_manager or "",
+            broker_only=(result.list_manager == "ADSTRA"),
+        )
     db_code_resolved = enriched.get("db_code", "")
 
     # Step 5b: Resolve client profile path and extract SELECT BY
@@ -303,38 +320,16 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
 
 
 def _build_adf_description(result, profile_data: dict = None, select_by: str = "") -> dict:
-    """Build ADF description: segment criteria from PDF + profile fields."""
+    """Build ADF description: segment criteria from the PDF only."""
 
     def para(text: str) -> dict:
         return {"type": "paragraph", "content": [{"type": "text", "text": text}]}
-
-    p = profile_data or {}
-    # select_by kwarg kept for _print_result compat; profile_data takes priority
-    sb = p.get("select_by", "") or select_by
 
     content = []
 
     if result.segment_criteria:
         lines = [ln.strip() for ln in result.segment_criteria.splitlines() if ln.strip()]
         content.extend(para(ln) for ln in lines)
-
-    # Profile fields — add blank separator before first profile line
-    profile_lines = []
-    if sb:
-        profile_lines.append(f"Select By: {sb}")
-    if p.get("dollar_cap"):
-        profile_lines.append(f"Dollar Cap: {p['dollar_cap']}")
-    supp = p.get("standard_suppressions") or []
-    if supp:
-        profile_lines.append("Standard Suppressions: " + " / ".join(supp))
-    instr = p.get("special_instructions") or []
-    if instr:
-        profile_lines.append("Special Instructions: " + " / ".join(instr))
-
-    if profile_lines:
-        if content:
-            content.append(para(""))
-        content.extend(para(ln) for ln in profile_lines)
 
     if not content:
         content = [para("")]

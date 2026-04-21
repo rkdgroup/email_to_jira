@@ -210,6 +210,21 @@ class RkdGroupParser(BaseBrokerParser):
                     result["segment_criteria"] = candidate
                     break
 
+        # --- Order status: "Active Rental", "Active Exchange", etc. ---
+        # In the columnar layout the value appears BEFORE the "Status:" label.
+        result["order_status"] = ""
+        for i, ln in enumerate(lines):
+            if ln == "Status:":
+                for j in range(i - 1, max(0, i - 4), -1):
+                    candidate = lines[j]
+                    if candidate and not candidate.endswith(":") and len(candidate) > 2:
+                        result["order_status"] = candidate
+                        break
+                break
+            if ln.startswith("Status:") and len(ln) > 7:
+                result["order_status"] = ln.split(":", 1)[1].strip()
+                break
+
         # --- Other fees: auto-detect State Omits ---
         result["other_fees"] = self._detect_state_omits(result["omission_description"])
 
@@ -249,6 +264,19 @@ class AmlcParser(RkdGroupParser):
 
     def parse(self, text: str) -> ParseResult:
         r = self._parse_columnar(text)
+
+        # Determine rental vs exchange from Status field or known rental list names.
+        # Rental → billable_account=T11 (pipeline forces db_code=T11R).
+        # Exchange → billable_account="" (pipeline fuzzy-matches the correct db_code).
+        order_status = r.get("order_status", "")
+        list_name = r.get("list_name", "")
+        # All Viguerie lists are T11R rentals regardless of status field.
+        _RENTAL_LIST_PATTERNS = (r"\bVIGUERIE\b",)
+        is_rental = bool(re.search(r"\brental\b", order_status, re.IGNORECASE))
+        if not is_rental:
+            is_rental = any(re.search(p, list_name, re.IGNORECASE) for p in _RENTAL_LIST_PATTERNS)
+        billable_account = "T11" if is_rental else ""
+
         return ParseResult(
             source=f"rule:{self.broker_key}",
             confidence=CONFIDENCE_RULE_BASED,
@@ -272,4 +300,5 @@ class AmlcParser(RkdGroupParser):
             other_fees=r["other_fees"],
             special_seed_instructions=r["special_seed_instructions"],
             segment_criteria=r["segment_criteria"],
+            billable_account=billable_account,
         )
