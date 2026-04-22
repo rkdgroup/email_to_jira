@@ -263,6 +263,27 @@ class AmlcParser(RkdGroupParser):
     """AMLC orders use the same Service Bureau format as RKD Group."""
     broker_key: str = "amlc"
 
+    def _extract_amlc_mailer_name(self, text: str) -> str:
+        """
+        In the AMLC columnar layout the actual mailer name appears just before
+        'Way Bill #:', not before 'Mailer:' (which captures the AMLC service
+        bureau company header instead).
+        """
+        lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
+        _SKIP = {"American Mailing Lists Corporation Management", "DATA MANAGEMENT, INC."}
+        for i, ln in enumerate(lines):
+            if ln == "Way Bill #:":
+                for j in range(i - 1, max(0, i - 5), -1):
+                    candidate = lines[j]
+                    if (len(candidate) > 5
+                            and not candidate.endswith(":")
+                            and not re.match(r"^\d", candidate)
+                            and not re.match(r"^[A-Z]-?\d+", candidate)
+                            and candidate not in _SKIP):
+                        return candidate
+                break
+        return ""
+
     def parse(self, text: str) -> ParseResult:
         r = self._parse_columnar(text)
 
@@ -278,10 +299,12 @@ class AmlcParser(RkdGroupParser):
             is_rental = any(re.search(p, list_name, re.IGNORECASE) for p in _RENTAL_LIST_PATTERNS)
         billable_account = "T11" if is_rental else ""
 
+        mailer_name = self._extract_amlc_mailer_name(text) or r["mailer_name"]
+
         return ParseResult(
             source=f"rule:{self.broker_key}",
             confidence=CONFIDENCE_RULE_BASED,
-            mailer_name=r["mailer_name"],
+            mailer_name=mailer_name,
             mailer_po="",  # Ext: field is phone extension, not a PO; AMLC has no Mailer PO
             list_name=r["list_name"],
             list_manager="AMLC",
