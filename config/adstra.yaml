@@ -334,3 +334,115 @@
   lm_contact: null
   lrr: null
   comments: null
+- db_code: A12D
+  billing_cust: A12
+  db_name: HEAL OUR CHILDREN (AREIVIM)
+  rental_name: HEAL OUR CHILDREN (AREIVIM)
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: C12D
+  billing_cust: C12
+  db_name: COMM FOR MISSING CHILDREN
+  rental_name: 3-CFM COMM FOR MISSING CHILDREN
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: C65D
+  billing_cust: C65
+  db_name: Children at Risk (prog of SAVE)
+  rental_name: Children at Risk (prog of SAVE)
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: F63D
+  billing_cust: F63
+  db_name: Firefighters Charitable Program 2
+  rental_name: Firefighters Charitable Program 2
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: F65D
+  billing_cust: F65
+  db_name: Freedom Education Proj FEB
+  rental_name: Freedom Education Proj FEB
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: I52D
+  billing_cust: I52
+  db_name: INVEST USA
+  rental_name: INVEST USA
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N13D
+  billing_cust: N13
+  db_name: Nat'l Police & Trooper Assoc
+  rental_name: Nat'l Police & Trooper Assoc
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N24D
+  billing_cust: N24
+  db_name: Nat'l Blue Line Police Fund
+  rental_name: 3-NBLPF NATL BLUE LINE POL. FD
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: N91D
+  billing_cust: N91
+  db_name: NAT FALLEN OFFICER FDN
+  rental_name: 3-NFOF NAT FALLEN OFFICER FDN
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: P34D
+  billing_cust: P34
+  db_name: Prostate Cancer Project
+  rental_name: 3-PCP PROSTATE CANCER PROJECT
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: P74D
+  billing_cust: P74
+  db_name: Pilots to the Rescue
+  rental_name: Pilots to the Rescue
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: P79D
+  billing_cust: P79
+  db_name: Pennies for Pets
+  rental_name: Pennies for Pets
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: P89D
+  billing_cust: P89
+  db_name: PHV - PROJECT HELP VETERANS
+  rental_name: PHV - PROJECT HELP VETERANS
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
+- db_code: X14D
+  billing_cust: X14
+  db_name: Autism Spectrum Disorder Fdtn
+  rental_name: Autism Spectrum Disorder Fdtn
+  list_manager: ADSTRA DATA
+  lm_contact: BOBBI
+  lrr: JRH
+  comments: null
