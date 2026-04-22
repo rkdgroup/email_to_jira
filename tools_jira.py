@@ -80,11 +80,11 @@ def _get_field_option_id(field_id: str, label: str) -> str | None:
 
 def create_jira_ticket(
     summary: str,
-    mailer_name: str,
-    mailer_po: str,
-    list_name: str,
-    list_manager: str,
-    requested_quantity: int,
+    mailer_name: str = "",
+    mailer_po: str = "",
+    list_name: str = "",
+    list_manager: str = "",
+    requested_quantity: int = 0,
     description: str = "",
     manager_order_number: str = "",
     mail_date: str = "",

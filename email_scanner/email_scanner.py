@@ -319,31 +319,38 @@ def process_message(token: str, message: dict, failed_folder_id: str, processed_
             continue
         try:
             result = process_pdf(tmp_path, broker_hint=broker_hint)
-            if result.get("success"):
-                key = result.get("ticket_key")
-                log.info("Ticket created: %s from %r", key, att_name)
-                ticket_keys.append(key)
+            # Multi-page PDFs return a list of per-page results; normalize to list
+            page_results = result if isinstance(result, list) else [result]
 
-                # Attach other files (Excel, zip, etc.) to the ticket
+            new_keys = []
+            for page_result in page_results:
+                if page_result.get("success"):
+                    key = page_result.get("ticket_key")
+                    log.info("Ticket created: %s from %r", key, att_name)
+                    new_keys.append(key)
+                else:
+                    log.error("Pipeline failed for %r: %s", att_name,
+                              "; ".join(page_result.get("errors", ["unknown"])))
+                    any_failed = True
+
+            # Attach other files (Excel, zip, etc.) to the first successful ticket
+            if new_keys:
+                ticket_keys.extend(new_keys)
                 for other in other_atts:
                     other_name = other.get("name", "file")
                     ext = Path(other_name).suffix or ".bin"
                     other_path = _download_attachment(token, msg_id, other, ext)
                     if other_path:
                         try:
-                            attach_file_to_ticket(key, other_path)
-                            log.info("Extra file attached to %s: %r", key, other_name)
+                            attach_file_to_ticket(new_keys[0], other_path)
+                            log.info("Extra file attached to %s: %r", new_keys[0], other_name)
                         except Exception as e:
-                            log.warning("Could not attach %r to %s: %s", other_name, key, e)
+                            log.warning("Could not attach %r to %s: %s", other_name, new_keys[0], e)
                         finally:
                             try:
                                 Path(other_path).unlink()
                             except Exception:
                                 pass
-            else:
-                log.error("Pipeline failed for %r: %s", att_name,
-                          "; ".join(result.get("errors", ["unknown"])))
-                any_failed = True
         except Exception as e:
             log.error("Exception on %r: %s", att_name, e)
             any_failed = True
