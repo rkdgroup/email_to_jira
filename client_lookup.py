@@ -214,7 +214,7 @@ def enrich_fields(
                        if row_manager_filter.upper() in (r.get("list_manager") or "").upper()]
     if broker_rows:
         best, score = _best_match(broker_rows, list_name, mailer_name)
-        if best and score >= 0.4:
+        if best and score >= 0.6:
             log.info("Broker YAML match (score=%.2f): %s -> %s",
                      score, list_name or mailer_name, best["db_code"])
             return _row_to_result(best)
@@ -230,14 +230,14 @@ def enrich_fields(
         if not rows:
             continue
         best, score = _best_match(rows, list_name, mailer_name)
-        if best and score >= 0.5:
+        if best and score >= 0.6:
             log.info("Cross-broker YAML %r match (score=%.2f): %s -> %s",
                      file_key, score, list_name or mailer_name, best["db_code"])
             return _row_to_result(best)
 
     # 4. Full client YAML fallback
     best, score = _best_match(_load_all_clients(), list_name)
-    if best and score >= 0.5:
+    if best and score >= 0.6:
         log.info("Full YAML match (score=%.2f): %s -> %s", score, list_name, best["db_code"])
         return _row_to_result(best)
 
