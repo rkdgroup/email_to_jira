@@ -183,14 +183,24 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
             return {"success": False, "source": result.source, "errors": validation.errors}
 
     # Step 4: Duplicate check
+    # AMLC has no meaningful Mailer PO; use Manager Order Number instead.
     if not dry_run:
-        jql = f'project = DSLF AND cf[12193] = "{result.mailer_po}"'
-        existing = search_jira_tickets(jql)
-        if existing.get("total", 0) > 0:
-            keys = [i["key"] for i in existing.get("issues", [])]
-            log.warning("Duplicate PO detected — existing tickets: %s", keys)
-            flag_for_review("Duplicate PO", f"PO {result.mailer_po} already exists: {keys}")
-            return {"success": False, "source": result.source, "errors": [f"Duplicate: {keys}"]}
+        if result.list_manager == "AMLC" and result.manager_order_number:
+            dup_jql = f'project = DSLF AND cf[12192] = "{result.manager_order_number}"'
+            dup_label = f"Manager Order # {result.manager_order_number}"
+        elif result.mailer_po:
+            dup_jql = f'project = DSLF AND cf[12193] = "{result.mailer_po}"'
+            dup_label = f"PO {result.mailer_po}"
+        else:
+            dup_jql = None
+            dup_label = None
+        if dup_jql:
+            existing = search_jira_tickets(dup_jql)
+            if existing.get("total", 0) > 0:
+                keys = [i["key"] for i in existing.get("issues", [])]
+                log.warning("Duplicate detected — existing tickets: %s", keys)
+                flag_for_review("Duplicate", f"{dup_label} already exists: {keys}")
+                return {"success": False, "source": result.source, "errors": [f"Duplicate: {keys}"]}
 
     # Step 5: Enrich fields from YAML config files
     # AMLC rental: parser sets billable_account=T11 when Status="Active Rental" or TVC hint found.

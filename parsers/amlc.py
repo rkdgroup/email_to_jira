@@ -41,6 +41,7 @@ class RkdGroupParser(BaseBrokerParser):
                 mailer_label_idx = i
                 break
 
+        _STATUS_WORDS = {"rental", "exchange", "active", "inactive", "managed"}
         if mailer_label_idx > 0:
             for j in range(mailer_label_idx - 1, max(0, mailer_label_idx - 6), -1):
                 candidate = lines[j]
@@ -51,8 +52,8 @@ class RkdGroupParser(BaseBrokerParser):
                     continue
                 if (len(candidate) > 3 and not candidate.endswith(":") and
                         not re.match(r"^\d", candidate) and
-                        not re.match(r"^[A-Z][a-z]+\s+[A-Z][a-z]+$", candidate)):
-                    # Skip if it looks like a person name (contact), not an org
+                        not re.match(r"^[A-Z][a-z]+\s+[A-Z][a-z]+$", candidate) and
+                        candidate.lower() not in _STATUS_WORDS):
                     result["mailer_name"] = candidate
                     break
 
@@ -281,7 +282,7 @@ class AmlcParser(RkdGroupParser):
             source=f"rule:{self.broker_key}",
             confidence=CONFIDENCE_RULE_BASED,
             mailer_name=r["mailer_name"],
-            mailer_po=r["mailer_po"],
+            mailer_po="",  # Ext: field is phone extension, not a PO; AMLC has no Mailer PO
             list_name=r["list_name"],
             list_manager="AMLC",
             requested_quantity=r["requested_quantity"],
