@@ -330,16 +330,44 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
 
 
 def _build_adf_description(result, profile_data: dict = None, select_by: str = "") -> dict:
-    """Build ADF description: segment criteria from the PDF only."""
+    """Build ADF description: segment criteria from PDF, plus profile suppressions/instructions as bullet lists."""
 
     def para(text: str) -> dict:
         return {"type": "paragraph", "content": [{"type": "text", "text": text}]}
 
-    content = []
+    def bullet_list(items: list) -> dict:
+        return {
+            "type": "bulletList",
+            "content": [
+                {"type": "listItem", "content": [para(str(item))]}
+                for item in items if item
+            ],
+        }
 
+    content = []
+    profile_data = profile_data or {}
+
+    # Segment criteria from the PDF
     if result.segment_criteria:
         lines = [ln.strip() for ln in result.segment_criteria.splitlines() if ln.strip()]
         content.extend(para(ln) for ln in lines)
+
+    # Select By from profile
+    resolved_select_by = select_by or profile_data.get("select_by", "")
+    if resolved_select_by:
+        content.append(para(f"Select By: {resolved_select_by}"))
+
+    # Standard Suppressions as bullet list
+    std_sup = profile_data.get("standard_suppressions") or []
+    if std_sup:
+        content.append(para("Standard Suppressions:"))
+        content.append(bullet_list(std_sup))
+
+    # Special Instructions as bullet list
+    spec_inst = profile_data.get("special_instructions") or []
+    if spec_inst:
+        content.append(para("Special Instructions:"))
+        content.append(bullet_list(spec_inst))
 
     if not content:
         content = [para("")]
