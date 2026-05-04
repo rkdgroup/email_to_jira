@@ -17,7 +17,11 @@ log = logging.getLogger(__name__)
 _HOST     = os.environ.get("IBMI_HOST",     "SYSTEM5.DATA-MANAGEMENT.COM")
 _USER     = os.environ.get("IBMI_USER",     "DMISUVAM")
 _PASSWORD = os.environ.get("IBMI_PASSWORD", "")
-_JT400    = os.environ.get("IBMI_JT400_JAR", "")
+_JT400    = os.environ.get(
+    "IBMI_JT400_JAR",
+    r"D:\Users\Public\Downloads\RDi_9.8_core_MP_ML\windows\IBM Rational Developer for i"
+    r"\plugins\com.ibm.etools.iseries.toolbox_9.8.0.202304121327\runtime\jt400.jar",
+)
 _DRIVER   = "com.ibm.as400.access.AS400JDBCDriver"
 _JDBC_URL = f"jdbc:as400://{_HOST}"
 
