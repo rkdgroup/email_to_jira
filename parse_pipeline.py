@@ -282,6 +282,9 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
 
     if dry_run:
         log.info("[DRY RUN] Would create ticket: %s", result.summary)
+        if kwargs.get("billable_account"):
+            log.info("[DRY RUN] Would create IBM i work order (billable=%s, mailer=%s)",
+                     kwargs.get("billable_account"), kwargs.get("mailer_name", "")[:19])
         return {"success": True, "source": result.source, "dry_run": True,
                 "fields": kwargs, "warnings": list(result.warnings)}
 
@@ -292,6 +295,15 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
         return {"success": False, "source": result.source, "errors": [ticket["error"]]}
 
     log.info("Created ticket: %s — %s", ticket["key"], ticket.get("url", ""))
+
+    # Create IBM i work order and write WO# back to the Jira ticket
+    wo_number = _create_and_link_work_order(
+        ticket_key=ticket["key"],
+        billable_account=kwargs.get("billable_account", ""),
+        mailer_name=kwargs.get("mailer_name", ""),
+        manager_order_number=kwargs.get("manager_order_number", ""),
+        mailer_po=kwargs.get("mailer_po", ""),
+    )
 
     # Step 7: Attach source PDF to ticket
     try:
@@ -325,8 +337,53 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
         "ticket_url": ticket.get("url"),
         "source": result.source,
         "db_code": db_code_resolved,
+        "wo_number": wo_number,
         "warnings": list(result.warnings),
     }
+
+
+def _create_and_link_work_order(
+    ticket_key: str,
+    billable_account: str,
+    mailer_name: str,
+    manager_order_number: str,
+    mailer_po: str,
+) -> int | None:
+    """
+    Create a work order in IBM i (DMIJOBS.ARWRKSCH) and write the WO# back to
+    the Jira ticket's Work Order field (customfield_12089).
+    Returns the WO number on success, or None if skipped/failed.
+    """
+    if not billable_account:
+        log.warning("No billable_account — skipping work order creation for %s", ticket_key)
+        return None
+
+    wo_dir = str(Path(__file__).parent / "WO#")
+    if wo_dir not in sys.path:
+        sys.path.insert(0, wo_dir)
+
+    try:
+        from work_order import create_work_order
+        from tools_jira import update_ticket_fields
+
+        wo = create_work_order(
+            billable=billable_account,
+            mailer_name=mailer_name,
+            manager_po=manager_order_number,
+            mailer_po=mailer_po,
+        )
+        log.info("Work order created: WO# %d for %s", wo.wo_number, ticket_key)
+
+        update_result = update_ticket_fields(ticket_key, {"customfield_12089": str(wo.wo_number)})
+        if "error" in update_result:
+            log.warning("Could not write WO# to %s: %s", ticket_key, update_result["error"])
+        else:
+            log.info("WO# %d written to Work Order field on %s", wo.wo_number, ticket_key)
+
+        return wo.wo_number
+    except Exception as e:
+        log.warning("Work order creation failed for %s: %s", ticket_key, e)
+        return None
 
 
 def _build_adf_description(result, profile_data: dict = None, select_by: str = "") -> dict:
@@ -479,7 +536,8 @@ def main():
             if args.dry_run:
                 print("\nDry run complete. Fields shown above.")
             else:
-                print(f"\nTicket created: {r.get('ticket_key')} — {r.get('ticket_url')}")
+                wo_info = f"  WO# {r['wo_number']}" if r.get("wo_number") else ""
+                print(f"\nTicket created: {r.get('ticket_key')} — {r.get('ticket_url')}{wo_info}")
         else:
             print(f"\nFailed: {'; '.join(r.get('errors', ['unknown error']))}")
             sys.exit(1)
