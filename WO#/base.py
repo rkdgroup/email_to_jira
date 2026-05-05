@@ -21,14 +21,19 @@ _JT400_WINDOWS = (
     r"D:\Users\Public\Downloads\RDi_9.8_core_MP_ML\windows\IBM Rational Developer for i"
     r"\plugins\com.ibm.etools.iseries.toolbox_9.8.0.202304121327\runtime\jt400.jar"
 )
-_JT400_LINUX = "/opt/jt400/jt400.jar"
+_JT400_CANDIDATES = [
+    "/opt/jt400/jt400.jar",
+    "/var/lib/jenkins/workspace/DSLF-Email-Scanner/jt400.jar",
+    str(Path(__file__).parent.parent / "jt400.jar"),  # project root (Jenkins workspace)
+]
 
 def _resolve_jt400() -> str:
     configured = os.environ.get("IBMI_JT400_JAR", "")
     if configured and Path(configured).exists():
         return configured
-    if Path(_JT400_LINUX).exists():
-        return _JT400_LINUX
+    for candidate in _JT400_CANDIDATES:
+        if Path(candidate).exists():
+            return candidate
     if Path(_JT400_WINDOWS).exists():
         return _JT400_WINDOWS
     return configured or _JT400_WINDOWS
