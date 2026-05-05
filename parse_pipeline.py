@@ -282,11 +282,16 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
 
     if dry_run:
         log.info("[DRY RUN] Would create ticket: %s", result.summary)
-        if kwargs.get("billable_account"):
-            log.info("[DRY RUN] Would create IBM i work order (billable=%s, mailer=%s)",
-                     kwargs.get("billable_account"), kwargs.get("mailer_name", "")[:19])
+        wo_number = _create_and_link_work_order(
+            ticket_key="(dry-run)",
+            billable_account=kwargs.get("billable_account", ""),
+            mailer_name=kwargs.get("mailer_name", ""),
+            manager_order_number=kwargs.get("manager_order_number", ""),
+            mailer_po=kwargs.get("mailer_po", ""),
+            dry_run=True,
+        )
         return {"success": True, "source": result.source, "dry_run": True,
-                "fields": kwargs, "warnings": list(result.warnings)}
+                "fields": kwargs, "wo_number": wo_number, "warnings": list(result.warnings)}
 
     ticket = create_jira_ticket(**kwargs)
 
@@ -348,10 +353,12 @@ def _create_and_link_work_order(
     mailer_name: str,
     manager_order_number: str,
     mailer_po: str,
+    dry_run: bool = False,
 ) -> int | None:
     """
     Create a work order in IBM i (DMIJOBS.ARWRKSCH) and write the WO# back to
     the Jira ticket's Work Order field (customfield_12089).
+    When dry_run=True, reads the next WO# without writing anything.
     Returns the WO number on success, or None if skipped/failed.
     """
     if not billable_account:
@@ -371,7 +378,13 @@ def _create_and_link_work_order(
             mailer_name=mailer_name,
             manager_po=manager_order_number,
             mailer_po=mailer_po,
+            dry_run=dry_run,
         )
+
+        if dry_run:
+            log.info("[DRY RUN] Work Order field would be: %d", wo.wo_number)
+            return wo.wo_number
+
         log.info("Work order created: WO# %d for %s", wo.wo_number, ticket_key)
 
         update_result = update_ticket_fields(ticket_key, {"customfield_12089": str(wo.wo_number)})
