@@ -6,3 +6,5 @@ pymupdf4llm
 python-dotenv
 msal
 pyyaml
+jaydebeapi
+JPype1

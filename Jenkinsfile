@@ -19,6 +19,10 @@ pipeline {
         MS_CLIENT_ID      = credentials('DSLF_MS_CLIENT_ID')
         MS_TENANT_ID      = credentials('DSLF_MS_TENANT_ID')
         IMAP_EMAIL        = credentials('DSLF_IMAP_EMAIL')
+        IBMI_HOST         = credentials('DSLF_IBMI_HOST')
+        IBMI_USER         = credentials('DSLF_IBMI_USER')
+        IBMI_PASSWORD     = credentials('DSLF_IBMI_PASSWORD')
+        IBMI_JT400_JAR    = "${WORKSPACE}/jt400.jar"
     }
 
     stages {
