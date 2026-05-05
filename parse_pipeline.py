@@ -217,6 +217,14 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
             broker_only=True,
             row_manager_filter="EXCHANGE",
         )
+        if not enriched.get("db_code"):
+            log.info("AMLC EXCHANGE lookup empty — retrying without row filter")
+            enriched = enrich_fields(
+                list_name=result.list_name or "",
+                mailer_name=result.mailer_name or "",
+                list_manager="AMLC",
+                broker_only=True,
+            )
     else:
         enriched = enrich_fields(
             list_name=result.list_name or "",
