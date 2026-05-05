@@ -57,23 +57,19 @@ def _get_field_option_id(field_id: str, label: str) -> str | None:
 
     url = (
         f"{_get_jira_base_url()}/rest/api/3/issue/createmeta"
-        f"?projectKeys={DSLF_PROJECT_KEY}&issuetypeIds={DSLF_ISSUE_TYPE_ID}&expand=projects.issuetypes.fields"
+        f"/{DSLF_PROJECT_KEY}/issuetypes/{DSLF_ISSUE_TYPE_ID}"
     )
     resp = requests.get(url, auth=_auth(), headers={"Accept": "application/json"}, timeout=15)
     if resp.status_code != 200:
         log.warning("Could not fetch field options for %s: %s", field_id, resp.status_code)
         return None
 
-    data = resp.json()
-    try:
-        fields = data["projects"][0]["issuetypes"][0]["fields"]
-        allowed = fields.get(field_id, {}).get("allowedValues", [])
-        for opt in allowed:
-            if opt.get("value", "").upper() == label.upper():
-                _option_cache[cache_key] = opt["id"]
-                return opt["id"]
-    except (KeyError, IndexError) as e:
-        log.warning("Failed to parse field options: %s", e)
+    for f in resp.json().get("fields", []):
+        if f.get("fieldId") != field_id:
+            continue
+        for opt in f.get("allowedValues", []):
+            _option_cache[f"{field_id}:{opt['value'].upper()}"] = opt["id"]
+        return _option_cache.get(f"{field_id}:{label.upper()}")
 
     return None
 
