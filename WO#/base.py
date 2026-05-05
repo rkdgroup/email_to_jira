@@ -27,6 +27,11 @@ _JDBC_URL = f"jdbc:as400://{_HOST}"
 
 
 def get_connection():
+    if not Path(_JT400).exists():
+        raise FileNotFoundError(
+            f"jt400.jar not found at: {_JT400}\n"
+            "Set IBMI_JT400_JAR in .env to the correct path on this machine."
+        )
     return jaydebeapi.connect(_DRIVER, _JDBC_URL, [_USER, _PASSWORD], _JT400)
 
 
