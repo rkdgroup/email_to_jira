@@ -131,11 +131,11 @@ From Excel lookup via db_code (e.g., F41D):
 - **Availability Rule**: "Full Run" = "All Available". Confirmed.
 - **List Name abbreviations**: FAIR = Federation for American Immigration Reform.
 
-## Supported Brokers (10)
+## Supported Brokers (11)
 
-data_axle, simiocloud, rmi_direct, celco, rkd_group, amlc, kap, washington_lists, conrad_direct, names_in_news
+data_axle, simiocloud, rmi_direct, celco, rkd_group, amlc, kap, washington_lists, conrad_direct, names_in_news, we_are_moore
 
-Note: ADSTRA and WE ARE MOORE have no dedicated parsers — they fall through to `claude_fallback.py`.
+Note: ADSTRA has no dedicated parser — it falls through to `claude_fallback.py`.
 
 ## Adding a New Broker Parser
 

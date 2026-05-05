@@ -18,6 +18,7 @@ from parsers.kap import KapParser
 from parsers.washington_lists import WashingtonListsParser
 from parsers.conrad_direct import ConradDirectParser
 from parsers.names_in_news import NamesInNewsParser
+from parsers.we_are_moore import WeAreMooreParser
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +69,9 @@ _RULES = [
     ]),
     ("washington_lists", [
         re.compile(r"Washington\s+Lists,?\s+Inc", re.IGNORECASE),
+    ]),
+    ("we_are_moore", [
+        re.compile(r"We\s+Are\s+Moore|wearemoore\.com", re.IGNORECASE),
     ]),
     ("conrad_direct", [
         re.compile(r"PURCHASE\s+ORDER\s+NO:", re.IGNORECASE),
@@ -121,4 +125,5 @@ PARSER_REGISTRY = {
     "washington_lists":  WashingtonListsParser(),
     "conrad_direct":    ConradDirectParser(),
     "names_in_news":    NamesInNewsParser(),
+    "we_are_moore":     WeAreMooreParser(),
 }
