@@ -40,13 +40,16 @@ _RULES = [
         re.compile(r"adstradata\.com", re.IGNORECASE),
         re.compile(r"Adstra\s+order#", re.IGNORECASE),
     ]),
-    ("rkd_group", [
-        re.compile(r"RKD\s+GROUP", re.IGNORECASE),
-        re.compile(r"Service\s+Bureau\s+No", re.IGNORECASE),
-    ]),
+    # AMLC must come before rkd_group — AMLC orders serviced by RKD contain
+    # "RKD GROUP" in the SerBu field, which would falsely match rkd_group first.
+    # "American Mailing Lists Corporation Management" is unambiguous for AMLC.
     ("amlc", [
         re.compile(r"American\s+Mailing\s+Lists\s+Corporation\s+Management", re.IGNORECASE),
         re.compile(r"(?:Service\s+Bureau|Purchase\s+Order)\s+No", re.IGNORECASE),
+    ]),
+    ("rkd_group", [
+        re.compile(r"RKD\s+GROUP", re.IGNORECASE),
+        re.compile(r"Service\s+Bureau\s+No", re.IGNORECASE),
     ]),
     ("celco", [
         re.compile(r"LIST\s+(?:EXCHANGE|RENTAL)\s+ORDER", re.IGNORECASE),

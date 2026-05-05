@@ -42,6 +42,7 @@ class RkdGroupParser(BaseBrokerParser):
                 break
 
         _STATUS_WORDS = {"rental", "exchange", "active", "inactive", "managed"}
+        _MAILER_SKIP = {"american mailing lists corporation management", "data management, inc."}
         if mailer_label_idx > 0:
             for j in range(mailer_label_idx - 1, max(0, mailer_label_idx - 6), -1):
                 candidate = lines[j]
@@ -53,7 +54,8 @@ class RkdGroupParser(BaseBrokerParser):
                 if (len(candidate) > 3 and not candidate.endswith(":") and
                         not re.match(r"^\d", candidate) and
                         not re.match(r"^[A-Z][a-z]+\s+[A-Z][a-z]+$", candidate) and
-                        candidate.lower() not in _STATUS_WORDS):
+                        candidate.lower() not in _STATUS_WORDS and
+                        candidate.lower() not in _MAILER_SKIP):
                     result["mailer_name"] = candidate
                     break
 
