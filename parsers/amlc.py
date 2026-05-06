@@ -122,6 +122,7 @@ class RkdGroupParser(BaseBrokerParser):
                         if (len(candidate) > 5 and not candidate.endswith(":") and
                                 not re.match(r"^\d", candidate) and
                                 not re.match(r"^[A-Z]-?\d+", candidate) and
+                                not re.search(r"\$\d", candidate) and
                                 candidate.lower() not in _MAILER_SKIP):
                             result["mailer_name"] = candidate
                         break
@@ -144,15 +145,29 @@ class RkdGroupParser(BaseBrokerParser):
             result["availability_rule"] = "All Available"
 
         # --- Client P.O. ---
+        # AMLC columnar layout dumps all labels first, then all values, so the
+        # Client P.O. value may appear 10-20 lines after its label.
         result["mailer_po"] = ""
         for i, ln in enumerate(lines):
             if "Client P.O.:" in ln:
-                for j in range(i, i + 3):
-                    if j < len(lines):
-                        candidate = lines[j].replace("Client P.O.:", "").strip(", ")
-                        if re.match(r"^[A-Z0-9-]{4,10}$", candidate):
-                            result["mailer_po"] = candidate
-                            break
+                inline = ln.replace("Client P.O.:", "").strip(", ")
+                if inline and not inline.endswith(":"):
+                    result["mailer_po"] = inline
+                    break
+                for j in range(i + 1, min(len(lines), i + 25)):
+                    candidate = lines[j].strip(", ")
+                    if candidate.endswith(":") or not candidate:
+                        continue
+                    # Skip lines that are clearly other field values (dates, long org names, quantities)
+                    if re.match(r"^\d{1,2}/\d{1,2}/\d{2,4}$", candidate):
+                        continue
+                    if re.match(r"^[\d,]+$", candidate) and len(candidate) > 6:
+                        continue
+                    if len(candidate) > 20:
+                        continue
+                    if re.match(r"^[A-Za-z0-9][A-Za-z0-9\-]{3,14}$", candidate):
+                        result["mailer_po"] = candidate
+                        break
                 break
 
         # --- List Name ---
