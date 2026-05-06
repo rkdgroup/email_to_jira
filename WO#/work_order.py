@@ -6,7 +6,7 @@ Usage:
 
     wo = create_work_order(
         billable   = 'T11',       # Billable account code
-        mailer_name= 'My Mailer', # Up to 19 chars
+        mailer_name= 'My Mailer', # Stored as acronym in WDESC (e.g. "American Conservative Union" -> "ACU")
         manager_po = 'PO12345',   # Manager PO, up to 9 chars
         mailer_po  = 'MPO678',    # Mailer PO, up to 15 chars
     )
@@ -27,6 +27,14 @@ def _billable_to_wccust(code: str) -> int:
     letter_pos = ord(code[0].upper()) - ord("A") + 1
     trailing   = int(code[1:].strip())
     return ((letter_pos - 1) % 9 + 1) * 1000 + trailing
+
+
+def _make_acronym(name: str, max_len: int = 19) -> str:
+    """'American Conservative Union' -> 'ACU'  (falls back to truncation if single word)."""
+    words = name.split()
+    if len(words) > 1:
+        return "".join(w[0].upper() for w in words if w)[:max_len]
+    return name[:max_len]
 
 
 def _today_mmddyy() -> int:
@@ -86,7 +94,7 @@ class WorkOrderManager(IBMiBase):
             cur.execute(
                 sql,
                 ("M1", wo_number, wccust, worde3, worde3,
-                 mailer_name[:19], manager_po[:9], mailer_po[:15]),
+                 _make_acronym(mailer_name), manager_po[:9], mailer_po[:15]),
             )
         finally:
             conn.close()
