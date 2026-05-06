@@ -23,30 +23,36 @@ class RkdGroupParser(BaseBrokerParser):
                 break
 
         # --- Order Status (Rental vs Exchange) ---
+        # Primary: look for bare "Status:" label (value on adjacent lines)
         result["order_status"] = ""
         for i, ln in enumerate(lines):
             clean_ln = ln.replace(',', '').strip()
             if clean_ln == "Status:":
-                # Look forward for values (table/CSV layout)
                 forward_vals = []
                 for j in range(i + 1, min(len(lines), i + 4)):
                     candidate = lines[j].replace(',', '').strip()
                     if candidate.endswith(":") or not candidate:
                         break
                     forward_vals.append(candidate)
-
                 status_str = " ".join(forward_vals)
                 if re.search(r"\b(rental|exchange)\b", status_str, re.IGNORECASE):
                     result["order_status"] = status_str
                     break
-
-                # Fallback: Look backward (traditional columnar layout)
                 for j in range(i - 1, max(0, i - 4), -1):
                     candidate = lines[j].replace(',', '').strip()
                     if candidate and not candidate.endswith(":") and len(candidate) > 2:
                         result["order_status"] = candidate
                         break
                 break
+
+        # Fallback: scan first 50 lines for a standalone "Rental" or "Exchange" line.
+        # Handles table-format PDFs where the status value lands far from its label
+        # (e.g. "Status: Active" inline at line 4, "Rental" as a standalone at line 14).
+        if not re.search(r"\b(rental|exchange)\b", result["order_status"], re.IGNORECASE):
+            for ln in lines[:50]:
+                if re.fullmatch(r"(Active\s+)?(Rental|Exchange)", ln.strip(), re.IGNORECASE):
+                    result["order_status"] = ln.strip()
+                    break
 
         # --- Mail Date ---
         result["mail_date"] = ""
