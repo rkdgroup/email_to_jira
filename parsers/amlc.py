@@ -1,5 +1,3 @@
-"""Parser for RKD Group and AMLC broker PDF orders (columnar Service Bureau format)."""
-
 import re
 from parsers.base import BaseBrokerParser, CONFIDENCE_RULE_BASED
 from parse_result import ParseResult
@@ -11,126 +9,172 @@ class RkdGroupParser(BaseBrokerParser):
     def _parse_columnar(self, text: str):
         """
         Parse the two-column Service Bureau layout used by both RKD and AMLC.
-        Returns a dict of extracted values.
+        Includes fixes for table-based text extraction (quotes/commas).
         """
-        lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
+        lines = [ln.strip().replace('"', '') for ln in text.split("\n") if ln.strip()]
         result = {}
 
-        # --- Service Bureau No. / Purchase Order No. (line 1) ---
+        # --- Service Bureau No. / Purchase Order No. ---
         result["manager_order_number"] = ""
-        for ln in lines[:8]:
-            if re.match(r"^\d{5,6}$", ln):
-                result["manager_order_number"] = ln
+        for ln in lines[:10]:
+            m = re.search(r"(\d{5,6})", ln)
+            if m:
+                result["manager_order_number"] = m.group(1)
                 break
 
-        # --- Find the Mail Date: label (end of first label block) ---
-        mail_date_label_idx = -1
+        # --- Order Status (Rental vs Exchange) ---
+        result["order_status"] = ""
         for i, ln in enumerate(lines):
-            if ln == "Mail Date:":
-                mail_date_label_idx = i
+            clean_ln = ln.replace(',', '').strip()
+            if clean_ln == "Status:":
+                # Look forward for values (table/CSV layout)
+                forward_vals = []
+                for j in range(i + 1, min(len(lines), i + 4)):
+                    candidate = lines[j].replace(',', '').strip()
+                    if candidate.endswith(":") or not candidate:
+                        break
+                    forward_vals.append(candidate)
+
+                status_str = " ".join(forward_vals)
+                if re.search(r"\b(rental|exchange)\b", status_str, re.IGNORECASE):
+                    result["order_status"] = status_str
+                    break
+
+                # Fallback: Look backward (traditional columnar layout)
+                for j in range(i - 1, max(0, i - 4), -1):
+                    candidate = lines[j].replace(',', '').strip()
+                    if candidate and not candidate.endswith(":") and len(candidate) > 2:
+                        result["order_status"] = candidate
+                        break
                 break
 
-        # --- Mailer name: the non-date text line immediately before "Mailer:" label ---
-        # In the columnar layout, right-column values appear BEFORE their left-column labels.
-        # So the value for "Mailer:" is the last meaningful line before that label.
-        result["mailer_name"] = ""
+        # --- Mail Date ---
         result["mail_date"] = ""
+        for i, ln in enumerate(lines):
+            if "Mail Date" in ln:
+                for j in range(i - 2, i + 5):
+                    if 0 <= j < len(lines):
+                        dm = re.search(r"(\d{1,2}/\d{1,2}/\d{2,4})", lines[j])
+                        if dm:
+                            result["mail_date"] = self._normalize_date(dm.group(1))
+                            break
+                if result["mail_date"]:
+                    break
+
+        # --- Ship By date (Want By / Offer date) ---
+        result["ship_by_date"] = ""
+        for i, ln in enumerate(lines):
+            if ln == "Offer:" or ln.startswith("Offer:"):
+                for j in range(max(0, i - 5), i):
+                    dm = re.match(r"^(\d{1,2}/\d{1,2}/\d{2,4})$", lines[j])
+                    if dm:
+                        result["ship_by_date"] = self._normalize_date(dm.group(1))
+                break
+
+        # --- Mailer name ---
+        result["mailer_name"] = ""
         mailer_label_idx = -1
         for i, ln in enumerate(lines):
-            if ln == "Mailer:" or ln.startswith("Mailer:"):
+            if ln.startswith("Mailer:"):
                 mailer_label_idx = i
                 break
 
         _STATUS_WORDS = {"rental", "exchange", "active", "inactive", "managed"}
         _MAILER_SKIP = {"american mailing lists corporation management", "data management, inc."}
-        if mailer_label_idx > 0:
-            for j in range(mailer_label_idx - 1, max(0, mailer_label_idx - 6), -1):
-                candidate = lines[j]
-                dm = re.match(r"^(\d{1,2}/\d{1,2}/\d{2,4})$", candidate)
-                if dm:
-                    if not result["mail_date"]:
-                        result["mail_date"] = self._normalize_date(dm.group(1))
-                    continue
-                if (len(candidate) > 3 and not candidate.endswith(":") and
-                        not re.match(r"^\d", candidate) and
-                        not re.match(r"^[A-Z][a-z]+\s+[A-Z][a-z]+$", candidate) and
-                        candidate.lower() not in _STATUS_WORDS and
-                        candidate.lower() not in _MAILER_SKIP):
-                    result["mailer_name"] = candidate
+
+        if mailer_label_idx >= 0:
+            # First check forward (table layout)
+            for j in range(mailer_label_idx + 1, mailer_label_idx + 4):
+                if j < len(lines):
+                    candidate = lines[j].strip(",")
+                    if (len(candidate) > 3 and not candidate.endswith(":") and
+                            not re.match(r"^\d{1,2}/\d{1,2}/\d{2,4}$", candidate) and
+                            not re.match(r"^\d", candidate) and
+                            candidate.lower() not in _STATUS_WORDS and
+                            candidate.lower() not in _MAILER_SKIP):
+                        result["mailer_name"] = candidate
+                        break
+            # Fallback backward
+            if not result["mailer_name"]:
+                for j in range(mailer_label_idx - 1, max(0, mailer_label_idx - 5), -1):
+                    candidate = lines[j].strip(",")
+                    if (len(candidate) > 3 and not candidate.endswith(":") and
+                            not re.match(r"^\d{1,2}/\d{1,2}/\d{2,4}$", candidate) and
+                            not re.match(r"^\d", candidate) and
+                            candidate.lower() not in _STATUS_WORDS and
+                            candidate.lower() not in _MAILER_SKIP):
+                        result["mailer_name"] = candidate
+                        break
+
+        # Last-resort fallback: value immediately before "Way Bill #:" label
+        # In AMLC table format the actual client/mailer name appears there.
+        if not result["mailer_name"]:
+            for i, ln in enumerate(lines):
+                if ln == "Way Bill #:":
+                    for j in range(i - 1, max(0, i - 5), -1):
+                        candidate = lines[j]
+                        if (len(candidate) > 5 and not candidate.endswith(":") and
+                                not re.match(r"^\d", candidate) and
+                                not re.match(r"^[A-Z]-?\d+", candidate) and
+                                candidate.lower() not in _MAILER_SKIP):
+                            result["mailer_name"] = candidate
+                        break
                     break
 
-        # --- Quantity: before "Quantity:" label ---
+        # --- Quantity ---
         result["requested_quantity"] = 0
         result["availability_rule"] = "Nth"
         for i, ln in enumerate(lines):
-            if ln == "Quantity:":
-                for j in range(max(0, i - 5), i):
-                    m = re.match(r"^([\d,]+)$", lines[j])
-                    if m and int(m.group(1).replace(",", "")) >= 50:
-                        result["requested_quantity"] = int(m.group(1).replace(",", ""))
-                        break
+            if "Quantity:" in ln:
+                for j in range(max(0, i - 2), min(len(lines), i + 5)):
+                    m = re.search(r"([\d,]+)", lines[j])
+                    if m:
+                        val = int(m.group(1).replace(",", ""))
+                        if val >= 50:
+                            result["requested_quantity"] = val
+                            break
                 break
         if re.search(r"ALL\s+AVAILABLE", text, re.IGNORECASE):
             result["availability_rule"] = "All Available"
 
-        # --- Client P.O.: AFTER "Ext:" label ---
-        # In the columnar layout, the Client P.O. value appears right AFTER "Ext:"
-        # e.g., Ext: (line 33) -> M8744 (line 34)
+        # --- Client P.O. ---
         result["mailer_po"] = ""
-        ext_idx = -1
         for i, ln in enumerate(lines):
-            if ln == "Ext:" or ln.startswith("Ext:"):
-                ext_idx = i
+            if "Client P.O.:" in ln:
+                for j in range(i, i + 3):
+                    if j < len(lines):
+                        candidate = lines[j].replace("Client P.O.:", "").strip(", ")
+                        if re.match(r"^[A-Z0-9-]{4,10}$", candidate):
+                            result["mailer_po"] = candidate
+                            break
                 break
-        if ext_idx >= 0:
-            # Look AFTER Ext: for the PO value
-            for j in range(ext_idx + 1, min(ext_idx + 5, len(lines))):
-                candidate = lines[j]
-                if (re.match(r"^[A-Z]\d{3,6}$", candidate) or
-                        re.match(r"^\d{4,6}$", candidate)):
-                    result["mailer_po"] = candidate
-                    break
 
-        # --- List name: the line immediately before "List:" label ---
-        # In the columnar layout the value appears BEFORE its label.
-        # e.g., line 21=US Deputy Sheriffs Association, line 22=List:
-        # Fallback: line before "Way Bill #:" (older RKD format).
+        # --- List Name ---
         result["list_name"] = ""
-        way_bill_idx = -1
         for i, ln in enumerate(lines):
-            if ln == "Way Bill #:":
-                way_bill_idx = i
+            if ln.startswith("List:"):
+                # Check forward (table layout)
+                for j in range(i + 1, i + 4):
+                    if j < len(lines):
+                        candidate = lines[j].strip(", ")
+                        if len(candidate) > 5 and not candidate.endswith(":"):
+                            result["list_name"] = candidate
+                            break
+                # Fallback backward
+                if not result["list_name"]:
+                    for j in range(i - 1, max(0, i - 4), -1):
+                        candidate = lines[j].strip(", ")
+                        if len(candidate) > 5 and not candidate.endswith(":"):
+                            result["list_name"] = candidate
+                            break
                 break
 
-        # Primary: value before "List:" label
-        for i, ln in enumerate(lines):
-            if ln == "List:":
-                for j in range(i - 1, max(0, i - 4), -1):
-                    candidate = lines[j]
-                    if (len(candidate) > 5 and not re.match(r"^\d+$", candidate) and
-                            not candidate.endswith(":") and
-                            not re.match(r"^[A-Z]\d{3,6}$", candidate)):
-                        result["list_name"] = candidate
-                        break
-                break
-
-        # Fallback: line before "Way Bill #:" (RKD format without explicit "List:" label)
-        if not result["list_name"] and way_bill_idx > 0:
-            for j in range(way_bill_idx - 1, max(way_bill_idx - 5, ext_idx if ext_idx >= 0 else 0), -1):
-                candidate = lines[j]
-                if (len(candidate) > 5 and not re.match(r"^\d+$", candidate) and
-                        not candidate.endswith(":") and
-                        not re.match(r"^[A-Z]\d{3,6}$", candidate)):
-                    result["list_name"] = candidate
-                    break
-
-        # --- Key code: before "Key(s):" label ---
-        # Search in reverse from closest line to Key(s): label
-        result["key_code"] = ""
+        # --- Key Code ---
         _KEY_EXCLUDE = {
             "Managed", "Active", "Fax", "E-Mail", "FTP Transfer",
             "Call With Count before Shipping", "Nth Cross Section", "M", "/",
         }
+        result["key_code"] = ""
         for i, ln in enumerate(lines):
             if re.match(r"Key\(?s?\)?:", ln, re.IGNORECASE):
                 for j in range(i - 1, max(0, i - 4), -1):
@@ -145,66 +189,13 @@ class RkdGroupParser(BaseBrokerParser):
                         break
                 break
 
-        # --- Ship By date (Want By): date near "Offer:" ---
-        result["ship_by_date"] = ""
-        for i, ln in enumerate(lines):
-            if ln == "Offer:" or ln.startswith("Offer:"):
-                for j in range(max(0, i - 5), i):
-                    dm = re.match(r"^(\d{1,2}/\d{1,2}/\d{2,4})$", lines[j])
-                    if dm:
-                        result["ship_by_date"] = self._normalize_date(dm.group(1))
-                break
-
-        # --- Contact info ---
-        result["requestor_name"] = ""
-        result["requestor_email"] = ""
-        # Name appears before the first "Email:" label after the contact section
-        # In RKD: line 53=Brittany Crabtree, line 54=Bcrabtree@rkdgroup.com, line 55=Email:
-        # In AMLC 667772: line 53=Marty Anderson, line 54=marty@amlclists.com, line 55=Email:
-        for i, ln in enumerate(lines):
-            if ln == "Email:" and i > 20:
-                for j in range(max(0, i - 3), i):
-                    m_email = re.search(r"([\w.+-]+@[\w.-]+\.\w+)", lines[j])
-                    if m_email:
-                        result["requestor_email"] = m_email.group(1)
-                        # Name is the line before the email
-                        if j > 0 and re.match(r"^[A-Z][a-z]", lines[j - 1]):
-                            result["requestor_name"] = lines[j - 1]
-                        break
-                break
-
-        # --- Ship To email ---
-        result["ship_to_email"] = ""
-        m = re.search(r"Email\s+file\s+to:\s*([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
-        if m:
-            result["ship_to_email"] = m.group(1)
-        if not result["ship_to_email"]:
-            m = re.search(r"Email\s+to:\s*([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
-            if m:
-                result["ship_to_email"] = m.group(1)
-
-        # --- Shipping ---
-        result["shipping_method"] = "Email" if re.search(r"E-?Mail", text) else ""
-        if not result["shipping_method"] and re.search(r"\bFTP\b", text):
-            result["shipping_method"] = "FTP"
-
-        result["shipping_instructions"] = (
-            f"CC: {result['requestor_email']}" if result["requestor_email"] else ""
-        )
-
-        # --- Omission ---
-        result["omission_description"] = ""
-        m = re.search(r"(?:[Oo]mit|OMIT)[ \t:]+(.+?)(?:\n|$)", text)
-        if m:
-            result["omission_description"] = m.group(0).strip()
-
-        # --- Special seed instructions ---
-        result["special_seed_instructions"] = self._extract_special_seed_instructions(text)
-
-        # --- Segment criteria ---
-        # In the columnar layout, Segment: label has no inline value.
-        # The actual criteria appears as the first content line after Way Bill #: / Attn To: labels.
+        # --- Segment Criteria ---
         result["segment_criteria"] = ""
+        way_bill_idx = -1
+        for i, ln in enumerate(lines):
+            if ln == "Way Bill #:":
+                way_bill_idx = i
+                break
         if way_bill_idx >= 0:
             for j in range(way_bill_idx + 1, min(way_bill_idx + 8, len(lines))):
                 candidate = lines[j]
@@ -213,28 +204,46 @@ class RkdGroupParser(BaseBrokerParser):
                     result["segment_criteria"] = candidate
                     break
 
-        # --- Order status: "Active Rental", "Active Exchange", etc. ---
-        # In the columnar layout the value appears BEFORE the "Status:" label.
-        result["order_status"] = ""
+        # --- Requestor Contact ---
+        # Generic: find email near an "Email:" label (works for both RKD and AMLC formats).
+        result["requestor_name"] = ""
+        result["requestor_email"] = ""
         for i, ln in enumerate(lines):
-            if ln == "Status:":
-                for j in range(i - 1, max(0, i - 4), -1):
-                    candidate = lines[j]
-                    if candidate and not candidate.endswith(":") and len(candidate) > 2:
-                        result["order_status"] = candidate
+            if ln == "Email:" and i > 20:
+                for j in range(max(0, i - 3), i):
+                    m_email = re.search(r"([\w.+-]+@[\w.-]+\.\w+)", lines[j])
+                    if m_email:
+                        result["requestor_email"] = m_email.group(1)
+                        if j > 0 and re.match(r"^[A-Z][a-z]", lines[j - 1]):
+                            result["requestor_name"] = lines[j - 1]
                         break
                 break
-            if ln.startswith("Status:") and len(ln) > 7:
-                result["order_status"] = ln.split(":", 1)[1].strip()
-                break
 
-        # --- Other fees: auto-detect State Omits ---
-        result["other_fees"] = self._detect_state_omits(result["omission_description"])
+        # --- Ship To email ---
+        result["ship_to_email"] = ""
+        m_ship = re.search(r"Email\s+(?:file\s+)?to:\s*([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
+        if m_ship:
+            result["ship_to_email"] = m_ship.group(1)
+
+        # --- Shipping method ---
+        if re.search(r"\bFTP\b", text, re.IGNORECASE):
+            result["shipping_method"] = "FTP"
+        elif re.search(r"E-?Mail", text, re.IGNORECASE):
+            result["shipping_method"] = "Email"
+        else:
+            result["shipping_method"] = ""
+
+        # --- Omission ---
+        result["omission_description"] = ""
+        m_omit = re.search(r"(?:[Oo]mit|OMIT)[ \t:]+(.+?)(?:\n\n|\r\n\r\n|$)", text, re.DOTALL)
+        if m_omit:
+            result["omission_description"] = m_omit.group(0).strip()
 
         return result
 
     def parse(self, text: str) -> ParseResult:
         r = self._parse_columnar(text)
+        requestor_email = r["requestor_email"]
         return ParseResult(
             source=f"rule:{self.broker_key}",
             confidence=CONFIDENCE_RULE_BASED,
@@ -247,67 +256,41 @@ class RkdGroupParser(BaseBrokerParser):
             mail_date=r["mail_date"],
             ship_by_date=r["ship_by_date"],
             requestor_name=r["requestor_name"],
-            requestor_email=r["requestor_email"],
+            requestor_email=requestor_email,
             ship_to_email=r["ship_to_email"],
             key_code=r["key_code"],
             availability_rule=r["availability_rule"],
             file_format=self._detect_file_format(text),
             shipping_method=r["shipping_method"],
-            shipping_instructions=r["shipping_instructions"],
+            shipping_instructions=f"CC: {requestor_email}" if requestor_email else "",
             omission_description=r["omission_description"],
-            other_fees=r["other_fees"],
-            special_seed_instructions=r["special_seed_instructions"],
+            other_fees=self._detect_state_omits(r["omission_description"]),
+            special_seed_instructions=self._extract_special_seed_instructions(text),
             segment_criteria=r["segment_criteria"],
         )
 
 
 class AmlcParser(RkdGroupParser):
-    """AMLC orders use the same Service Bureau format as RKD Group."""
     broker_key: str = "amlc"
-
-    def _extract_amlc_mailer_name(self, text: str) -> str:
-        """
-        In the AMLC columnar layout the actual mailer name appears just before
-        'Way Bill #:', not before 'Mailer:' (which captures the AMLC service
-        bureau company header instead).
-        """
-        lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
-        _SKIP = {"American Mailing Lists Corporation Management", "DATA MANAGEMENT, INC."}
-        for i, ln in enumerate(lines):
-            if ln == "Way Bill #:":
-                for j in range(i - 1, max(0, i - 5), -1):
-                    candidate = lines[j]
-                    if (len(candidate) > 5
-                            and not candidate.endswith(":")
-                            and not re.match(r"^\d", candidate)
-                            and not re.match(r"^[A-Z]-?\d+", candidate)
-                            and candidate not in _SKIP):
-                        return candidate
-                break
-        return ""
 
     def parse(self, text: str) -> ParseResult:
         r = self._parse_columnar(text)
 
-        # Determine rental vs exchange from Status field or known rental list names.
-        # Rental → billable_account=T11 (pipeline forces db_code=T11R).
-        # Exchange → billable_account="" (pipeline fuzzy-matches the correct db_code).
         order_status = r.get("order_status", "")
         list_name = r.get("list_name", "")
-        # All Viguerie lists are T11R rentals regardless of status field.
-        _RENTAL_LIST_PATTERNS = (r"\bVIGUERIE\b",)
+
         is_rental = bool(re.search(r"\brental\b", order_status, re.IGNORECASE))
         if not is_rental:
-            is_rental = any(re.search(p, list_name, re.IGNORECASE) for p in _RENTAL_LIST_PATTERNS)
-        billable_account = "T11" if is_rental else ""
+            is_rental = bool(re.search(r"\bVIGUERIE\b", list_name, re.IGNORECASE))
 
-        mailer_name = self._extract_amlc_mailer_name(text) or r["mailer_name"]
+        billable_account = "T11" if is_rental else ""
+        requestor_email = r["requestor_email"]
 
         return ParseResult(
             source=f"rule:{self.broker_key}",
             confidence=CONFIDENCE_RULE_BASED,
-            mailer_name=mailer_name,
-            mailer_po="",  # Ext: field is phone extension, not a PO; AMLC has no Mailer PO
+            mailer_name=r["mailer_name"],
+            mailer_po=r["mailer_po"],
             list_name=r["list_name"],
             list_manager="AMLC",
             requested_quantity=r["requested_quantity"],
@@ -315,16 +298,16 @@ class AmlcParser(RkdGroupParser):
             mail_date=r["mail_date"],
             ship_by_date=r["ship_by_date"],
             requestor_name=r["requestor_name"],
-            requestor_email=r["requestor_email"],
+            requestor_email=requestor_email,
             ship_to_email=r["ship_to_email"],
             key_code=r["key_code"],
             availability_rule=r["availability_rule"],
             file_format=self._detect_file_format(text),
             shipping_method=r["shipping_method"],
-            shipping_instructions=r["shipping_instructions"],
+            shipping_instructions=f"CC: {requestor_email}" if requestor_email else "",
             omission_description=r["omission_description"],
-            other_fees=r["other_fees"],
-            special_seed_instructions=r["special_seed_instructions"],
+            other_fees=self._detect_state_omits(r["omission_description"]),
+            special_seed_instructions=self._extract_special_seed_instructions(text),
             segment_criteria=r["segment_criteria"],
             billable_account=billable_account,
         )
