@@ -26,7 +26,7 @@ def _billable_to_wccust(code: str) -> int:
     """'T11' -> 2011  ('A69' -> 1069).  Matches PEPBOOKRPG SUB01 logic."""
     letter_pos = ord(code[0].upper()) - ord("A") + 1
     trailing   = int(code[1:].strip())
-    return letter_pos * 1000 + trailing
+    return ((letter_pos - 1) % 9 + 1) * 1000 + trailing
 
 
 def _today_mmddyy() -> int:

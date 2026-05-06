@@ -229,7 +229,7 @@ A58D:
   - 'PULL SINGLE & MULTIS BY TOTAL # OF GIFTS'
 A63D:
   select_by: MACULAR DEGENERATION RSCH
-  flags: FLAGS LISTED BELOW IN SPECIAL INST.
+  flags: FLAGS LISTED ABOVE IN SPECIAL INST.
   dollar_cap: $99.99
   standard_suppressions:
   - NO PERSON NAME
@@ -267,8 +267,6 @@ A63D:
   - 'THE BELOW SUPPRESSIONS ARE WHAT MAY BE REQUESTED TO BE OMITTED: REFER TO THE
     ORDERS FOR EXACT ONES REQUESTED.'
   - CO-OP s do not apply to us
-  - '{'
-  - _  9
 A70D:
   select_by: Transaction $, and date
   flags: $,A,B,D,E,N,V,W,X,Y,Z,7,8
@@ -286,7 +284,6 @@ A70D:
   - OMIT APO, FPO
   - OMIT PR, TERR, MILITARY
   - OMIT COMPANY  BY TITLE CODE
-  - /
 A72T:
   select_by: Recent date and $
   flags: A,H,N,P,R,X,Y,Z,5,6,9,$
@@ -449,8 +446,7 @@ B39D:
   - OMIT PR, TERR, MILITARY
   - OMIT COLUMBUS OH PO BOX 2168, ZIP 43216
   - WHEN THE ORDERS REQUEST PHONES, THE PHONE NUMBERS NEED TO BE ON THE OUTPUT FILE.
-  - urn:schemas-microsoft-com:office:smarttags  country-region  9
-  - urn:schemas-microsoft-com:office:smarttags  State  >
+
 B42D:
   select_by: MOST RECENT $ AND DATE
   flags: A, R, S, U , $, 7
@@ -487,7 +483,11 @@ C04D:
   flags: ALL - 10% +/- is allowed
   dollar_cap: No transaction $ available
   standard_suppressions: []
-  special_instructions: []
+  special_instructions: 
+  - COUNTS SENT TO CLIENT WHEN REQUESTED 
+  - OMIT APO, FPO
+  - OMIT PR, TERR, MILITARY
+
 C12:
   select_by: TRANSACTION $ AND DATE
   flags: D, N, R , $, A, X
@@ -574,7 +574,13 @@ C34D:
   flags: Z,9
   dollar_cap: no $ available
   standard_suppressions: []
-  special_instructions: []
+  special_instructions: 
+  - COUNTS SENT TO CLIENT WHEN REQUESTED 
+  - OMIT APO, FPO
+  - OMIT PR, TERR, MILITARY
+  - ETHNIC CODE= (ACTCD1 and ACTCD5), AGE= (ACTCD2), INCOME, and PHONE NUMBERS are available selects.
+  - MAIL ORDER BUYERS APPEND CODES ARE IN ADDITIONAL CODES.
+
 C38D:
   select_by: Transaction Date
   flags: $
