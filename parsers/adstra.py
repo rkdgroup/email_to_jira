@@ -109,9 +109,19 @@ class AdstraParser(BaseBrokerParser):
             "COMPANY\n"
             "NCOA REASON CODES"
         )
-        order_omits = self._find(text, r"OMIT:\s*(.+?)(?:\n|SHIP\s+TO)", group=1).strip()
-        if order_omits:
-            omission_description = f"{_STANDARD_OMITS}\n\n{order_omits}"
+        # Extract SPECIAL INSTRUCTIONS block (stop before FTP credentials / payment line)
+        si_m = re.search(
+            r"SPECIAL\s+INSTRUCTIONS[^\n]*\n(.*?)(?=UPLOAD\s+FILES|PAYMENT\s+DUE|\Z)",
+            text, re.IGNORECASE | re.DOTALL,
+        )
+        order_omit_lines = []
+        if si_m:
+            for ln in si_m.group(1).splitlines():
+                ln = ln.strip()
+                if ln and re.search(r"\bOMIT\b", ln, re.IGNORECASE) and not re.search(r"DO\s+NOT\s+OMIT", ln, re.IGNORECASE):
+                    order_omit_lines.append(ln)
+        if order_omit_lines:
+            omission_description = _STANDARD_OMITS + "\n\n" + "\n".join(order_omit_lines)
         else:
             omission_description = _STANDARD_OMITS
 
@@ -139,7 +149,7 @@ class AdstraParser(BaseBrokerParser):
             segment_criteria = selects_block
 
         # --- Other fees & Special Seeds ---
-        other_fees = ""
+        other_fees = self._detect_state_omits(omission_description)
         special_seed_instructions = self._extract_special_seed_instructions(text)
 
         # --- File format ---
