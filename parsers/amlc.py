@@ -255,10 +255,8 @@ class RkdGroupParser(BaseBrokerParser):
             result["shipping_method"] = ""
 
         # --- Omission ---
-        result["omission_description"] = ""
-        m_omit = re.search(r"(?:[Oo]mit|OMIT)[ \t:]+(.+?)(?:\n\n|\r\n\r\n|$)", text, re.DOTALL)
-        if m_omit:
-            result["omission_description"] = m_omit.group(0).strip()
+        omit_lines = re.findall(r"^OMIT[ \t]+[^\n]+", text, re.MULTILINE | re.IGNORECASE)
+        result["omission_description"] = "\n".join(omit_lines)
 
         return result
 
