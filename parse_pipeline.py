@@ -231,6 +231,7 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
             mailer_name=result.mailer_name or "",
             list_manager=result.list_manager or "",
             broker_only=(result.list_manager == "ADSTRA"),
+            adstra_list_code=getattr(result, "adstra_list_code", "") or "",
         )
     db_code_resolved = enriched.get("db_code", "")
 

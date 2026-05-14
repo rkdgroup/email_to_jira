@@ -45,6 +45,9 @@ class AdstraParser(BaseBrokerParser):
                 
             list_name_raw = clean_lines[0] if clean_lines else ""
 
+        # Extract 5-digit list code before stripping (used for adstra.yaml lookup)
+        _code_m = re.search(r"\((\d{5})\)", list_name_raw)
+        adstra_list_code = _code_m.group(1) if _code_m else ""
         # Strip list code in parens (e.g. (00552)) and clean up whitespace
         list_name = re.sub(r"\s*\(\d+\)\s*", " ", list_name_raw).strip()
 
@@ -178,4 +181,5 @@ class AdstraParser(BaseBrokerParser):
             other_fees=other_fees,
             special_seed_instructions=special_seed_instructions,
             segment_criteria=segment_criteria,
+            adstra_list_code=adstra_list_code,
         )

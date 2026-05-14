@@ -184,6 +184,7 @@ def enrich_fields(
     db_code:            str = "",
     broker_only:        bool = False,
     row_manager_filter: str = "",
+    adstra_list_code:   str = "",
 ) -> dict:
     """
     Look up db_code, billable_account, and list_manager from YAML config.
@@ -201,6 +202,14 @@ def enrich_fields(
     Returns dict with billable_account, list_manager, db_code, lm_contact.
     Empty dict if no match found.
     """
+    # 0. ADSTRA 5-digit list code exact match (most reliable for ADSTRA abbreviated names)
+    if adstra_list_code and (list_manager or "").upper().strip() == "ADSTRA":
+        for row in _load_broker_sheet("ADSTRA"):
+            rental = row.get("rental_name", "") or ""
+            if adstra_list_code in rental:
+                log.info("ADSTRA list code exact match: %s -> %s", adstra_list_code, row.get("db_code"))
+                return _row_to_result(row)
+
     # 1. Exact db_code match
     if db_code:
         for row in _load_broker_sheet(list_manager) + _load_all_clients():

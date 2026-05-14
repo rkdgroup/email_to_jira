@@ -50,6 +50,7 @@ class ParseResult:
     other_fees: str = ""
     special_seed_instructions: str = ""
     segment_criteria: str = ""          # e.g. "12MOS $10+ DONORS" (ADSTRA Selects: field)
+    adstra_list_code: str = ""          # 5-digit ADSTRA list code from PDF (e.g. "00540"), used for YAML lookup
 
     # Non-fatal issues
     warnings: tuple = field(default_factory=tuple)
