@@ -364,9 +364,12 @@ def process_message(token: str, message: dict, failed_folder_id: str, processed_
                     if order_num:
                         order_ticket_map[order_num] = key
                 else:
-                    log.error("Pipeline failed for %r: %s", att_name,
-                              "; ".join(page_result.get("errors", ["unknown"])))
-                    any_failed = True
+                    errors = page_result.get("errors", ["unknown"])
+                    if errors == ["Unknown broker format"]:
+                        log.info("Skipping %r — not a recognised broker PDF", att_name)
+                    else:
+                        log.error("Pipeline failed for %r: %s", att_name, "; ".join(errors))
+                        any_failed = True
 
             if new_keys:
                 ticket_keys.extend(new_keys)
