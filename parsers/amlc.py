@@ -114,17 +114,19 @@ class RkdGroupParser(BaseBrokerParser):
 
         # Last-resort fallback: value immediately before "Way Bill #:" label
         # In AMLC table format the actual client/mailer name appears there.
+        # Strip trailing "-$amount..." or "-offer" suffixes (e.g. "Paws for Purple Hearts-$50+").
         if not result["mailer_name"]:
             for i, ln in enumerate(lines):
                 if ln == "Way Bill #:":
                     for j in range(i - 1, max(0, i - 5), -1):
                         candidate = lines[j]
-                        if (len(candidate) > 5 and not candidate.endswith(":") and
-                                not re.match(r"^\d", candidate) and
-                                not re.match(r"^[A-Z]-?\d+", candidate) and
-                                not re.search(r"\$\d", candidate) and
-                                candidate.lower() not in _MAILER_SKIP):
-                            result["mailer_name"] = candidate
+                        # Strip "-$..." suffix (offer descriptor appended to mailer name)
+                        cleaned = re.sub(r"\s*-\s*\$.*$", "", candidate).strip()
+                        if (len(cleaned) > 5 and not cleaned.endswith(":") and
+                                not re.match(r"^\d", cleaned) and
+                                not re.match(r"^[A-Z]-?\d+", cleaned) and
+                                cleaned.lower() not in _MAILER_SKIP):
+                            result["mailer_name"] = cleaned
                         break
                     break
 
