@@ -352,6 +352,7 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
         "source": result.source,
         "db_code": db_code_resolved,
         "wo_number": wo_number,
+        "manager_order_number": result.manager_order_number or "",
         "warnings": list(result.warnings),
     }
 

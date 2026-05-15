@@ -11,6 +11,7 @@ Usage:
 """
 
 import os
+import re
 import sys
 import json
 import logging
@@ -249,10 +250,40 @@ def _download_attachment(token: str, msg_id: str, att: dict, suffix: str) -> str
         return None
 
 
+_BUREAU_RANGE_RE = re.compile(r"#\s*(\d+)\s*[-–]\s*(\d+)", re.IGNORECASE)
+
+
+def _resolve_attachment_targets(
+    filename: str,
+    order_ticket_map: dict,
+    all_ticket_keys: list,
+) -> list:
+    """Return the list of ticket keys this attachment should be attached to.
+
+    If the filename contains a service-bureau range like '#668769-668774',
+    return only the tickets whose manager_order_number falls within that range.
+    Otherwise return all ticket keys created in this email (fallback).
+    """
+    m = _BUREAU_RANGE_RE.search(filename)
+    if not m:
+        return list(all_ticket_keys)
+    start, end = int(m.group(1)), int(m.group(2))
+    targets = [
+        ticket_key
+        for order_num, ticket_key in order_ticket_map.items()
+        if order_num.isdigit() and start <= int(order_num) <= end
+    ]
+    if not targets:
+        log.warning(
+            "Filename %r specifies range %d–%d but no created tickets match — skipping",
+            filename, start, end,
+        )
+    return targets
+
+
 def process_message(token: str, message: dict, failed_folder_id: str, processed_folder_id: str) -> None:
     from parse_pipeline import process_pdf
     from tools_jira import attach_file_to_ticket
-    import re
 
     msg_id          = message["id"]
     subject         = message.get("subject", "(no subject)")
@@ -305,8 +336,9 @@ def process_message(token: str, message: dict, failed_folder_id: str, processed_
             return
         pdf_atts = [{"_generated": True, "body_text": body_text, "subject": subject}]
 
-    any_failed  = False
-    ticket_keys = []
+    any_failed       = False
+    ticket_keys      = []
+    order_ticket_map = {}   # manager_order_number (str) → ticket_key
     for att in pdf_atts:
         if att.get("_generated"):
             att_name = att.get("subject") or "email_body"
@@ -326,37 +358,50 @@ def process_message(token: str, message: dict, failed_folder_id: str, processed_
             for page_result in page_results:
                 if page_result.get("success"):
                     key = page_result.get("ticket_key")
-                    log.info("Ticket created: %s from %r", key, att_name)
+                    order_num = page_result.get("manager_order_number", "")
+                    log.info("Ticket created: %s (order %s) from %r", key, order_num, att_name)
                     new_keys.append(key)
+                    if order_num:
+                        order_ticket_map[order_num] = key
                 else:
                     log.error("Pipeline failed for %r: %s", att_name,
                               "; ".join(page_result.get("errors", ["unknown"])))
                     any_failed = True
 
-            # Attach other files (Excel, zip, etc.) to the first successful ticket
             if new_keys:
                 ticket_keys.extend(new_keys)
-                for other in other_atts:
-                    other_name = other.get("name", "file")
-                    ext = Path(other_name).suffix or ".bin"
-                    other_path = _download_attachment(token, msg_id, other, ext)
-                    if other_path:
-                        try:
-                            attach_file_to_ticket(new_keys[0], other_path)
-                            log.info("Extra file attached to %s: %r", new_keys[0], other_name)
-                        except Exception as e:
-                            log.warning("Could not attach %r to %s: %s", other_name, new_keys[0], e)
-                        finally:
-                            try:
-                                Path(other_path).unlink()
-                            except Exception:
-                                pass
         except Exception as e:
             log.error("Exception on %r: %s", att_name, e)
             any_failed = True
         finally:
             try:
                 Path(tmp_path).unlink()
+            except Exception:
+                pass
+
+    # Attach non-PDF files to tickets matched by filename service-bureau range.
+    # e.g. "AMLC #668769-668774 ZipOmits.xls" → attach to tickets whose
+    # manager_order_number is 668769..668774.
+    for other in other_atts:
+        other_name = other.get("name", "file")
+        ext        = Path(other_name).suffix or ".bin"
+        targets    = _resolve_attachment_targets(other_name, order_ticket_map, ticket_keys)
+        if not targets:
+            log.info("No matching tickets for extra file %r — skipping", other_name)
+            continue
+        other_path = _download_attachment(token, msg_id, other, ext)
+        if not other_path:
+            continue
+        try:
+            for tkey in targets:
+                try:
+                    attach_file_to_ticket(tkey, other_path)
+                    log.info("Extra file %r attached to %s", other_name, tkey)
+                except Exception as e:
+                    log.warning("Could not attach %r to %s: %s", other_name, tkey, e)
+        finally:
+            try:
+                Path(other_path).unlink()
             except Exception:
                 pass
 
