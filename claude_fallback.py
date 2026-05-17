@@ -138,6 +138,16 @@ def claude_fallback_parse(text: str):
         import anthropic
         client = anthropic.Anthropic()
 
+        # Join continuation lines: any line ending with a comma means the next
+        # line continues the same list (common in ADSTRA OMIT: state blocks).
+        joined_lines = []
+        for line in text.splitlines():
+            if joined_lines and joined_lines[-1].rstrip().endswith(","):
+                joined_lines[-1] = joined_lines[-1].rstrip() + " " + line.strip()
+            else:
+                joined_lines.append(line)
+        text = "\n".join(joined_lines)
+
         truncated = text[:MAX_TEXT_LENGTH]
 
         response = client.messages.create(
