@@ -119,9 +119,15 @@ class AdstraParser(BaseBrokerParser):
         )
         order_omit_lines = []
         if si_m:
-            for ln in si_m.group(1).splitlines():
+            lines = si_m.group(1).splitlines()
+            for i, ln in enumerate(lines):
                 ln = ln.strip()
                 if ln and re.search(r"\bOMIT\b", ln, re.IGNORECASE) and not re.search(r"DO\s+NOT\s+OMIT", ln, re.IGNORECASE):
+                    # Join continuation lines: if this line ends with a comma,
+                    # the next line continues the same list (e.g. wrapped state codes).
+                    while ln.endswith(",") and i + 1 < len(lines):
+                        i += 1
+                        ln = ln + " " + lines[i].strip()
                     order_omit_lines.append(ln)
         if order_omit_lines:
             omission_description = _STANDARD_OMITS + "\n\n" + "\n".join(order_omit_lines)
