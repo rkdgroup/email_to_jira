@@ -114,23 +114,37 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
     log.info("Processing: %s", pdf_path)
 
     # Step 0: Split multi-page PDFs — one ticket per page
+    # Exception: ADSTRA PDFs always represent a single order regardless of page count.
     page_count = get_pdf_page_count(pdf_path)
+    text = None
     if page_count > 1:
-        log.info("Multi-page PDF (%d pages) — creating one ticket per page", page_count)
-        tmp_dir, page_paths = split_pdf_into_pages(pdf_path)
-        results = []
-        try:
-            for i, page_path in enumerate(page_paths):
-                log.info("--- Page %d/%d ---", i + 1, page_count)
-                r = process_pdf(page_path, dry_run=dry_run, verbose=verbose, broker_hint=broker_hint)
-                results.append(r)
-        finally:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-        return results
+        # Peek at full text to decide: ADSTRA = merge all pages into one order,
+        # all other brokers = one ticket per page.
+        from parsers import detect_broker as _quick_detect
+        peek = extract_pdf_text(pdf_path)
+        _quick = _quick_detect(peek) if not broker_hint else None
+        effective_broker = broker_hint or (_quick.broker_key if _quick else "")
+
+        if effective_broker == "adstra":
+            log.info("ADSTRA multi-page PDF (%d pages) — treating all pages as one order", page_count)
+            text = peek
+        else:
+            log.info("Multi-page PDF (%d pages) — creating one ticket per page", page_count)
+            tmp_dir, page_paths = split_pdf_into_pages(pdf_path)
+            results = []
+            try:
+                for i, page_path in enumerate(page_paths):
+                    log.info("--- Page %d/%d ---", i + 1, page_count)
+                    r = process_pdf(page_path, dry_run=dry_run, verbose=verbose, broker_hint=broker_hint)
+                    results.append(r)
+            finally:
+                import shutil
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+            return results
 
     # Step 1: Extract text
-    text = extract_pdf_text(pdf_path)
+    if text is None:
+        text = extract_pdf_text(pdf_path)
     if text.startswith("[ERROR"):
         log.error("PDF extraction failed: %s", text)
         flag_for_review("PDF extraction failed", text)
