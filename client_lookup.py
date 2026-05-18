@@ -222,7 +222,12 @@ def enrich_fields(
         broker_rows = [r for r in broker_rows
                        if row_manager_filter.upper() in (r.get("list_manager") or "").upper()]
     if broker_rows:
-        best, score = _best_match(broker_rows, list_name, mailer_name)
+        # Try list_name alone first — avoids mailer_name false positives where a
+        # generic org name (e.g. "National Police Association") scores 1.00 against
+        # an unrelated YAML entry and beats the correct list_name match.
+        best, score = _best_match(broker_rows, list_name)
+        if not (best and score >= 0.6):
+            best, score = _best_match(broker_rows, list_name, mailer_name)
         if best and score >= 0.6:
             log.info("Broker YAML match (score=%.2f): %s -> %s",
                      score, list_name or mailer_name, best["db_code"])
