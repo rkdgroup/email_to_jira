@@ -395,7 +395,18 @@ def _create_and_link_work_order(
 
     try:
         from work_order import create_work_order
-        from tools_jira import update_ticket_fields
+        from tools_jira import update_ticket_fields, get_ticket_billable_account
+
+        # Re-read the billable account from the Jira ticket so the WO always
+        # uses exactly what is set in Jira, not the value parsed from the PDF.
+        if not dry_run and ticket_key != "(dry-run)":
+            jira_billable = get_ticket_billable_account(ticket_key)
+            if jira_billable:
+                log.info("Using billable account from Jira ticket %s: %s", ticket_key, jira_billable)
+                billable_account = jira_billable
+            else:
+                log.warning("Could not read billable account from %s — falling back to parsed value: %s",
+                            ticket_key, billable_account)
 
         wo = create_work_order(
             billable=billable_account,

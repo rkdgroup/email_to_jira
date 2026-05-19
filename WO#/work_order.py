@@ -29,8 +29,16 @@ def _billable_to_wccust(code: str) -> int:
     return ((letter_pos - 1) % 9 + 1) * 1000 + trailing
 
 
+_WDESC_OVERRIDES: dict[str, str] = {
+    "60 PLUS ASSOCIATION": "60+ ASSN",
+}
+
+
 def _make_acronym(name: str, max_len: int = 19) -> str:
     """'American Conservative Union' -> 'ACU'  (falls back to truncation if single word)."""
+    override = _WDESC_OVERRIDES.get(name.upper().strip())
+    if override:
+        return override[:max_len]
     words = name.split()
     if len(words) > 1:
         return "".join(w[0].upper() for w in words if w)[:max_len]

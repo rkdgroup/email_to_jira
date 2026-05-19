@@ -338,6 +338,27 @@ def attach_file_to_ticket(ticket_key: str, file_path: str) -> dict:
         return {"error": str(e)}
 
 
+def get_ticket_billable_account(ticket_key: str) -> str:
+    """
+    Fetch a ticket and return the Billable Account value (e.g. 'K40') from
+    customfield_12191.  Returns empty string if the field is missing or the
+    request fails.
+    """
+    url = f"{_get_jira_base_url()}/rest/api/3/issue/{ticket_key}"
+    params = {"fields": "customfield_12191"}
+    try:
+        resp = requests.get(url, auth=_auth(), headers={"Accept": "application/json"},
+                            params=params, timeout=15)
+        if resp.status_code == 200:
+            field = resp.json().get("fields", {}).get("customfield_12191") or {}
+            return field.get("value", "")
+        log.warning("Could not fetch billable account for %s: HTTP %s", ticket_key, resp.status_code)
+        return ""
+    except Exception as e:
+        log.warning("get_ticket_billable_account failed for %s: %s", ticket_key, e)
+        return ""
+
+
 def update_ticket_fields(ticket_key: str, fields: dict) -> dict:
     """
     Update one or more fields on an existing Jira ticket.
