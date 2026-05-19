@@ -25,6 +25,14 @@ FIXES = [
     (461981,  14071),  # N71 — NCCI SWEEPS (DSLF-537)
     (462008,  14091),  # N91 — NFOF
     (462009,  14091),  # N91 — NFOF
+    # Second round — valid-but-wrong WCCUST (S and O billing codes)
+    (461788,  15056),  # O56 — OPERATION RAPID RESPONSE (DSLF-496)
+    (461789,  19030),  # S30 — SAVE (DSLF-497)
+    (461792,  19030),  # S30 — SAVE (DSLF-500)
+    (461793,  15056),  # O56 — OPERATION RAPID RESPONSE (DSLF-501)
+    (461877,  19032),  # S32 — SAVE-MR (DSLF-518)
+    (461975,  15016),  # O16 — OR2-OPERATION ROVER RESCUE (DSLF-531)
+    (461979,  19030),  # S30 — SAVE (DSLF-535)
 ]
 
 conn = get_connection()
