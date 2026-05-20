@@ -49,7 +49,12 @@
       "Bash(find C:UserssuvamDesktopgit_suvamJira_automation -maxdepth 2 -type f \\\\\\(-name *.yml -o -name *.yaml -o -name *.json -o -name docker* -o -name .github* \\\\\\))",
       "Bash(git:*)",
       "Skill(gsd:plan-phase)",
-      "mcp__claude_ai_Atlassian__transitionJiraIssue"
+      "mcp__claude_ai_Atlassian__transitionJiraIssue",
+      "PowerShell(Get-ChildItem \"D:\\\\Users\\\\smondal\\\\Documents\\\\email_to_jira\" -Recurse | Where-Object { $_.Extension -match \"\\\\.\\(pdf|PDF\\)$\" } | Select-Object -First 5 FullName)",
+      "PowerShell(pip install *)",
+      "mcp__ibm-as400__loginRte",
+      "Bash(Select-String *)",
+      "Bash(Get-ChildItem -Name \"*.xlsx\")"
     ]
   }
 }
