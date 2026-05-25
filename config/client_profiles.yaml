@@ -57,7 +57,7 @@ A16:
     THE FILE DOES NOT NEED TO BE THROUGH THE END OF THE MONTH.
 A18:
   select_by: TRANSACTION $ AND DATE
-  flags: A D R T 5 $
+  flags: A, D, R, T, 5, $, !
   dollar_cap: $49.99
   standard_suppressions:
   - FED BLDGS, PRSN, LIBR., SCHL, INST.
@@ -490,7 +490,7 @@ C04D:
 
 C12:
   select_by: TRANSACTION $ AND DATE
-  flags: D, N, R , $, A, X
+  flags: D, N, R, $, A, X, !
   dollar_cap: $49.99
   standard_suppressions:
   - FED BLDGS, PRSN, LIBR., SCHL, INST.
@@ -524,7 +524,7 @@ C18D:
   - PROCESS ORDERS USING THE  FULL FILE DONORS  SAVESET
 C21:
   select_by: TRANSACTION $ AND DATE
-  flags: D, N, R, $, A, X
+  flags: D, N, R, $, A, X, !
   dollar_cap: $49.99
   standard_suppressions:
   - FED BLDGS, PRSN, LIBR., SCHL, INST.
@@ -833,7 +833,7 @@ C90D:
   - WE CAN NOT CHARGE FOR STATE AND/OR SCF SELECTS OR OMITS.
 D22:
   select_by: TRANSACTION $ AND DATE
-  flags: D, N, R , $, X, A
+  flags: D, N, R, $, X, A, !
   dollar_cap: $49.99
   standard_suppressions:
   - FED BLDGS, PRSN, LIBR., SCHL, INST.
@@ -1577,7 +1577,7 @@ K26D:
   - OMIT NCOA REASON CODES
 K40:
   select_by: TRANSACTION $ AND DATE
-  flags: D, N, R , $, A, X
+  flags: D, N, R, $, A, X, !
   dollar_cap: $49.99
   standard_suppressions:
   - FED BLDGS, PRSN, LIBR., SCHL, INST.
