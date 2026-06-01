@@ -416,7 +416,7 @@ def get_ticket_attachments(ticket_key: str) -> list:
 def download_attachment(content_url: str, dest_path: str) -> str:
     """Download a Jira attachment to dest_path using streaming. Returns dest_path."""
     resp = requests.get(content_url, auth=_auth(),
-                        headers={"Accept": "application/octet-stream"},
+                        headers={"Accept": "*/*"},
                         stream=True, timeout=60)
     resp.raise_for_status()
     with open(dest_path, "wb") as f:
