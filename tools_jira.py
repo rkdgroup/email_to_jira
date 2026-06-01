@@ -378,3 +378,134 @@ def update_ticket_fields(ticket_key: str, fields: dict) -> dict:
     except Exception as e:
         log.error("Update request failed: %s", e)
         return {"error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# QC helper functions
+# ---------------------------------------------------------------------------
+
+QC_FIELDS = [
+    "summary", "status", "attachment",
+    "customfield_12155",  # Client Database
+    "customfield_12156",  # Seed Database
+    "customfield_12192",  # Manager Order Number
+    "customfield_12194",  # Mailer Name
+    "customfield_12196",  # Mail Date
+    "customfield_12270",  # Omission Description (ADF)
+    "customfield_12271",  # Requested Quantity
+    "customfield_12231",  # List Manager
+]
+
+
+def get_ticket_attachments(ticket_key: str) -> list:
+    """Return attachment list for a ticket. Each dict has id, filename, content, mimeType."""
+    url = f"{_get_jira_base_url()}/rest/api/3/issue/{ticket_key}"
+    try:
+        resp = requests.get(url, auth=_auth(),
+                            headers={"Accept": "application/json"},
+                            params={"fields": "attachment"}, timeout=15)
+        if resp.status_code == 200:
+            return resp.json().get("fields", {}).get("attachment") or []
+        log.warning("get_ticket_attachments %s: HTTP %s", ticket_key, resp.status_code)
+        return []
+    except Exception as e:
+        log.warning("get_ticket_attachments failed for %s: %s", ticket_key, e)
+        return []
+
+
+def download_attachment(content_url: str, dest_path: str) -> str:
+    """Download a Jira attachment to dest_path using streaming. Returns dest_path."""
+    resp = requests.get(content_url, auth=_auth(),
+                        headers={"Accept": "application/octet-stream"},
+                        stream=True, timeout=60)
+    resp.raise_for_status()
+    with open(dest_path, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=8192):
+            f.write(chunk)
+    log.info("Downloaded attachment to %s (%d bytes)", dest_path, os.path.getsize(dest_path))
+    return dest_path
+
+
+def get_ticket_qc_fields(ticket_key: str) -> dict:
+    """Fetch all QC-relevant fields in one API call. Returns normalized dict or {"error": ...}."""
+    url = f"{_get_jira_base_url()}/rest/api/3/issue/{ticket_key}"
+    try:
+        resp = requests.get(url, auth=_auth(),
+                            headers={"Accept": "application/json"},
+                            params={"fields": ",".join(QC_FIELDS)}, timeout=15)
+        if resp.status_code != 200:
+            return {"error": f"HTTP {resp.status_code}: {resp.text[:200]}"}
+        raw = resp.json().get("fields", {})
+
+        def _select(fid):
+            v = raw.get(fid)
+            return v.get("value", "") if isinstance(v, dict) else ""
+
+        return {
+            "summary":       raw.get("summary", ""),
+            "status":        (raw.get("status") or {}).get("name", ""),
+            "attachments":   raw.get("attachment") or [],
+            "client_db":     _select("customfield_12155"),
+            "seed_db":       _select("customfield_12156"),
+            "manager_order": raw.get("customfield_12192") or "",
+            "mailer_name":   raw.get("customfield_12194") or "",
+            "mail_date":     raw.get("customfield_12196") or "",
+            "omission_adf":  raw.get("customfield_12270"),
+            "requested_qty": raw.get("customfield_12271") or 0,
+            "list_manager":  raw.get("customfield_12231") or "",
+        }
+    except Exception as e:
+        log.warning("get_ticket_qc_fields failed for %s: %s", ticket_key, e)
+        return {"error": str(e)}
+
+
+def get_ticket_transitions(ticket_key: str) -> list:
+    """Return available transitions for a ticket as list of {id, name} dicts."""
+    url = f"{_get_jira_base_url()}/rest/api/3/issue/{ticket_key}/transitions"
+    try:
+        resp = requests.get(url, auth=_auth(),
+                            headers={"Accept": "application/json"}, timeout=15)
+        if resp.status_code == 200:
+            return resp.json().get("transitions", [])
+        log.warning("get_ticket_transitions %s: HTTP %s", ticket_key, resp.status_code)
+        return []
+    except Exception as e:
+        log.warning("get_ticket_transitions failed for %s: %s", ticket_key, e)
+        return []
+
+
+def transition_ticket(ticket_key: str, transition_name: str) -> dict:
+    """Transition a ticket by name. Tries exact match then case-insensitive substring."""
+    transitions = get_ticket_transitions(ticket_key)
+    if not transitions:
+        return {"error": f"No transitions available for {ticket_key}"}
+
+    target = transition_name.lower().strip()
+    tid = None
+    for t in transitions:
+        if t["name"].lower().strip() == target:
+            tid = t["id"]
+            break
+    if not tid:
+        for t in transitions:
+            if target in t["name"].lower() or t["name"].lower() in target:
+                tid = t["id"]
+                log.info("Fuzzy transition match: %r -> %r", transition_name, t["name"])
+                break
+
+    if not tid:
+        available = [t["name"] for t in transitions]
+        return {"error": f"Transition {transition_name!r} not found. Available: {available}"}
+
+    url = f"{_get_jira_base_url()}/rest/api/3/issue/{ticket_key}/transitions"
+    try:
+        resp = requests.post(url, auth=_auth(), headers=_headers(),
+                             json={"transition": {"id": tid}}, timeout=30)
+        if resp.status_code == 204:
+            log.info("Transitioned %s -> %r (id=%s)", ticket_key, transition_name, tid)
+            return {"ok": True, "transition_id": tid, "ticket_key": ticket_key}
+        log.error("Transition failed %s: %s %s", ticket_key, resp.status_code, resp.text)
+        return {"error": f"HTTP {resp.status_code}: {resp.text}"}
+    except Exception as e:
+        log.error("Transition request failed: %s", e)
+        return {"error": str(e)}
