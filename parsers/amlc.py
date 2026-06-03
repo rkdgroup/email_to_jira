@@ -163,7 +163,7 @@ class RkdGroupParser(BaseBrokerParser):
                     # Skip lines that are clearly other field values (dates, long org names, quantities)
                     if re.match(r"^\d{1,2}/\d{1,2}/\d{2,4}$", candidate):
                         continue
-                    if re.match(r"^[\d,]+$", candidate) and len(candidate) > 6:
+                    if re.match(r"^[\d,]+$", candidate) and ',' in candidate:
                         continue
                     if len(candidate) > 20:
                         continue
@@ -222,9 +222,18 @@ class RkdGroupParser(BaseBrokerParser):
         if way_bill_idx >= 0:
             for j in range(way_bill_idx + 1, min(way_bill_idx + 8, len(lines))):
                 candidate = lines[j]
-                if (not candidate.endswith(":") and len(candidate) > 4 and
-                        re.search(r"\$|\bmonth|\bdonor|\bomit|\bselect|\+", candidate, re.IGNORECASE)):
-                    result["segment_criteria"] = candidate
+                # Match dollar/month/donor/select/+ patterns AND flag-format lines (X = Y)
+                if (not candidate.endswith(":") and len(candidate) > 2 and
+                        re.search(r"\$|\bmonth|\bdonor|\bomit|\bselect|\+|=", candidate, re.IGNORECASE)):
+                    # Collect this anchor line plus any "OR = ..." continuation lines
+                    seg_lines = [candidate]
+                    for k in range(j + 1, min(j + 30, len(lines))):
+                        cont = lines[k].strip()
+                        if re.match(r"OR\s*=", cont, re.IGNORECASE):
+                            seg_lines.append(cont)
+                        else:
+                            break
+                    result["segment_criteria"] = "\n".join(seg_lines)
                     break
 
         # --- Requestor Contact ---
