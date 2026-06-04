@@ -253,10 +253,11 @@ class CelcoParser(BaseBrokerParser):
         file_format = self._detect_file_format(text)
 
         # --- Omission description ---
-        omission_description = ""
-        omit_match = re.search(r"OMIT[ \t:]+(.+?)(?:\n|$)", text, re.IGNORECASE)
-        if omit_match:
-            omission_description = omit_match.group(1).strip()
+        omission_description = self._collect_continuation_block(
+            text, r"OMIT[ \t:]+\S"
+        )
+        if omission_description:
+            omission_description = re.sub(r"(?i)^OMIT[ \t:]+", "", omission_description, count=1)
 
         # --- Other fees: auto-detect State Omits ---
         other_fees = self._detect_state_omits(omission_description)

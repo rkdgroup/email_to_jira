@@ -186,13 +186,14 @@ class NamesInNewsParser(BaseBrokerParser):
         special_seed_instructions = self._extract_special_seed_instructions(text)
 
         # --- Other fees: auto-detect State Omits ---
-        omission_description = ""
-        omit_match = re.search(r"OMIT[ \t:]+(.+?)(?:\n|$)", text, re.IGNORECASE)
-        if omit_match:
-            candidate = omit_match.group(1).strip()
+        omission_description = self._collect_continuation_block(
+            text, r"OMIT[ \t:]+\S"
+        )
+        if omission_description:
+            omission_description = re.sub(r"(?i)^OMIT[ \t:]+", "", omission_description, count=1)
             # Skip non-descriptive placeholder values from the order form
-            if candidate.lower() not in ("required.", "required", "yes", "no", "n/a"):
-                omission_description = candidate
+            if omission_description.lower() in ("required.", "required", "yes", "no", "n/a"):
+                omission_description = ""
         other_fees = self._detect_state_omits(omission_description)
 
         # --- Segment criteria ---

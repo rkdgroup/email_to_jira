@@ -227,10 +227,11 @@ class RmiDirectParser(BaseBrokerParser):
         file_format = ""
 
         # --- Omissions ---
-        omission_description = ""
-        m = re.search(r"Omit[ \t:]+(.+?)(?:\n|$)", text, re.IGNORECASE)
-        if m:
-            omission_description = m.group(1).strip()
+        omission_description = self._collect_continuation_block(
+            text, r"Omit[ \t:]+\S"
+        )
+        if omission_description:
+            omission_description = re.sub(r"(?i)^Omit[ \t:]+", "", omission_description, count=1)
 
         # --- Other fees: auto-detect State Omits ---
         other_fees = self._detect_state_omits(omission_description)

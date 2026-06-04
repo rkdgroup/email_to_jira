@@ -222,10 +222,12 @@ class KapParser(BaseBrokerParser):
         shipping_instructions = f"CC: {requestor_email}" if requestor_email else ""
 
         # --- Omission ---
-        omission_description = ""
-        m = re.search(r"Omit[ \t:]+(.+?)(?:\n|$)", text, re.IGNORECASE)
-        if m:
-            omission_description = m.group(1).strip()
+        omission_description = self._collect_continuation_block(
+            text, r"Omit[ \t:]+\S"
+        )
+        # Strip the "Omit:" label prefix from the first line
+        if omission_description:
+            omission_description = re.sub(r"(?i)^Omit[ \t:]+", "", omission_description, count=1)
 
         # --- Other fees: auto-detect State Omits ---
         other_fees = self._detect_state_omits(omission_description)

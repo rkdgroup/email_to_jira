@@ -64,6 +64,8 @@ class BaseBrokerParser(ABC):
         """
         Find quantity and availability rule.
         Returns (quantity_int, availability_rule).
+        If Nth: returns the exact number stated. If All Available: returns the
+        approximate number stated near "ALL AVAILABLE" (or any number found).
         """
         raw = self._find(text, pattern)
         if not raw:
@@ -71,15 +73,47 @@ class BaseBrokerParser(ABC):
 
         # Check for "ALL AVAILABLE"
         if re.search(r"ALL\s+AVAILABLE", raw, re.IGNORECASE):
-            # Extract the number before "OR ALL AVAILABLE"
+            # Try "X OR ALL AVAILABLE" format first
             m = re.search(r"([\d,]+)\s+(?:OR\s+)?ALL\s+AVAILABLE", raw, re.IGNORECASE)
+            if not m:
+                # ALL AVAILABLE without a preceding number — use any number in raw as approximation
+                m = re.search(r"([\d,]+)", raw)
             qty = int(m.group(1).replace(",", "")) if m else 0
             return qty, "All Available"
 
-        # Fixed quantity
+        # Fixed (Nth) quantity — must be exact
         m = re.search(r"([\d,]+)", raw)
         qty = int(m.group(1).replace(",", "")) if m else 0
         return qty, "Nth"
+
+    def _collect_continuation_block(
+        self,
+        text: str,
+        anchor_pattern: str,
+        cont_pattern: str = r"^\s*OR\s*=",
+        max_lines: int = 30,
+    ) -> str:
+        """
+        Capture a multi-line block: the first line matching anchor_pattern,
+        then any immediately-following lines that match cont_pattern (e.g. "OR = ...").
+        Returns all matched lines stripped and joined with newlines.
+        """
+        found_lines: list[str] = []
+        capturing = False
+        for line in text.split("\n"):
+            stripped = line.strip()
+            if not capturing:
+                if re.search(anchor_pattern, stripped, re.IGNORECASE):
+                    capturing = True
+                    found_lines.append(stripped)
+            else:
+                if stripped and re.match(cont_pattern, stripped, re.IGNORECASE):
+                    found_lines.append(stripped)
+                    if len(found_lines) >= max_lines:
+                        break
+                else:
+                    break
+        return "\n".join(found_lines)
 
     def _map_shipping_method(self, raw: str) -> str:
         """Map raw shipping method text to standard value."""
