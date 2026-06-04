@@ -244,7 +244,7 @@ def create_jira_ticket(
 
 def search_jira_tickets(jql: str, max_results: int = 10) -> dict:
     """Search Jira tickets using JQL. Returns list of matching issues."""
-    url = f"{_get_jira_base_url()}/rest/api/3/search"
+    url = f"{_get_jira_base_url()}/rest/api/3/search/jql"
     params = {"jql": jql, "maxResults": max_results, "fields": "summary,status,customfield_12193,customfield_12194"}
 
     try:
@@ -385,15 +385,20 @@ def update_ticket_fields(ticket_key: str, fields: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 QC_FIELDS = [
-    "summary", "status", "attachment",
+    "summary", "status", "attachment", "description",
     "customfield_12155",  # Client Database
     "customfield_12156",  # Seed Database
     "customfield_12192",  # Manager Order Number
     "customfield_12194",  # Mailer Name
-    "customfield_12196",  # Mail Date
+    "customfield_12234",  # List Name
     "customfield_12270",  # Omission Description (ADF)
     "customfield_12271",  # Requested Quantity
     "customfield_12231",  # List Manager
+    "customfield_12273",  # Availability Rule (Nth / All Available)
+    "customfield_12274",  # File Format
+    "customfield_12275",  # Ship To Email
+    "customfield_12276",  # Shipping Method
+    "customfield_12277",  # Shipping Instructions (CC: email)
 ]
 
 
@@ -442,17 +447,23 @@ def get_ticket_qc_fields(ticket_key: str) -> dict:
             return v.get("value", "") if isinstance(v, dict) else ""
 
         return {
-            "summary":       raw.get("summary", ""),
-            "status":        (raw.get("status") or {}).get("name", ""),
-            "attachments":   raw.get("attachment") or [],
-            "client_db":     _select("customfield_12155"),
-            "seed_db":       _select("customfield_12156"),
-            "manager_order": raw.get("customfield_12192") or "",
-            "mailer_name":   raw.get("customfield_12194") or "",
-            "mail_date":     raw.get("customfield_12196") or "",
-            "omission_adf":  raw.get("customfield_12270"),
-            "requested_qty": raw.get("customfield_12271") or 0,
-            "list_manager":  raw.get("customfield_12231") or "",
+            "summary":           raw.get("summary", ""),
+            "status":            (raw.get("status") or {}).get("name", ""),
+            "attachments":       raw.get("attachment") or [],
+            "client_db":         _select("customfield_12155"),
+            "seed_db":           _select("customfield_12156"),
+            "manager_order":     raw.get("customfield_12192") or "",
+            "mailer_name":       raw.get("customfield_12194") or "",
+            "list_name":              raw.get("customfield_12234") or "",
+            "description_adf":        raw.get("description"),
+            "omission_adf":           raw.get("customfield_12270"),
+            "requested_qty":          raw.get("customfield_12271") or 0,
+            "list_manager":           raw.get("customfield_12231") or "",
+            "availability_rule":      _select("customfield_12273"),
+            "file_format":            _select("customfield_12274"),
+            "ship_to_email":          raw.get("customfield_12275") or "",
+            "shipping_method":        _select("customfield_12276"),
+            "shipping_instructions":  raw.get("customfield_12277") or "",
         }
     except Exception as e:
         log.warning("get_ticket_qc_fields failed for %s: %s", ticket_key, e)

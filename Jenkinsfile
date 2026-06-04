@@ -36,6 +36,11 @@ pipeline {
                 sh 'python3 email_scanner/email_scanner.py'
             }
         }
+        stage('Scan QC queue') {
+            steps {
+                sh 'python3 qc_checker.py'
+            }
+        }
     }
 
     post {

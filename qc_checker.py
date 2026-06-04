@@ -41,8 +41,7 @@ log = logging.getLogger(__name__)
 
 QC_PASS_THRESHOLD = 4
 HARD_REQUIRED     = {"Client Database", "Manager Order #"}
-QC_PASSED_STATUS  = "QC Passed"
-NEED_QC_STATUS    = "Need QC"
+NEED_QC_STATUS    = "Needs QC"
 
 
 # ---------------------------------------------------------------------------
@@ -699,7 +698,7 @@ def format_qc_comment(ticket_key: str, select_filename: str,
 def process_ticket_qc(ticket_key: str, dry_run: bool = False) -> dict:
     """Run full QC pipeline for one ticket. Returns result dict."""
     from tools_jira import (get_ticket_qc_fields, download_attachment,
-                             add_comment_to_ticket, transition_ticket)
+                             add_comment_to_ticket)
 
     log.info("QC check: %s%s", ticket_key, " [DRY RUN]" if dry_run else "")
 
@@ -749,9 +748,9 @@ def process_ticket_qc(ticket_key: str, dry_run: bool = False) -> dict:
         print(f"\n{comment}\n")
 
         if dry_run:
-            action = (f"transition to {QC_PASSED_STATUS!r}"
-                      if qc_result["overall_pass"] else "post report only (QC Failed — no transition)")
-            log.info("[DRY RUN] Would post comment and %s", action)
+            log.info("[DRY RUN] %s: QC %s — would post report comment (no transition)",
+                     ticket_key,
+                     "PASSED" if qc_result["overall_pass"] else "FAILED")
             return {
                 "ticket_key":      ticket_key,
                 "overall_pass":    qc_result["overall_pass"],
@@ -762,19 +761,15 @@ def process_ticket_qc(ticket_key: str, dry_run: bool = False) -> dict:
                 "dry_run":         True,
             }
 
-        # Post comment
+        # Post comment only — never transition (ticket stays in Needs QC regardless of result)
         cr = add_comment_to_ticket(ticket_key, comment)
         if "error" in cr:
             log.error("Could not post QC comment to %s: %s", ticket_key, cr["error"])
-
-        # Transition if passed
-        if qc_result["overall_pass"]:
-            tr = transition_ticket(ticket_key, QC_PASSED_STATUS)
-            if "error" in tr:
-                log.warning("Could not transition %s to %r: %s",
-                             ticket_key, QC_PASSED_STATUS, tr["error"])
         else:
-            log.info("%s: QC FAILED — leaving at %r with comment", ticket_key, NEED_QC_STATUS)
+            log.info("%s: QC %s — report posted, ticket stays in %r",
+                     ticket_key,
+                     "PASSED" if qc_result["overall_pass"] else "FAILED",
+                     NEED_QC_STATUS)
 
         return {
             "ticket_key":      ticket_key,
@@ -843,7 +838,7 @@ def scan_need_qc_tickets(dry_run: bool = False) -> list:
     start, batch = 0, 50
     while True:
         resp = _req.get(
-            f"{base_url}/rest/api/3/search", auth=auth,
+            f"{base_url}/rest/api/3/search/jql", auth=auth,
             headers={"Accept": "application/json"},
             params={"jql": jql, "startAt": start, "maxResults": batch,
                     "fields": "summary,status,updated"},
