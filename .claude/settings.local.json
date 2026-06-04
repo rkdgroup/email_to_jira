@@ -54,7 +54,26 @@
       "PowerShell(pip install *)",
       "mcp__ibm-as400__loginRte",
       "Bash(Select-String *)",
-      "Bash(Get-ChildItem -Name \"*.xlsx\")"
+      "Bash(Get-ChildItem -Name \"*.xlsx\")",
+      "Read(//c/Users/suvam/Downloads/broker_pdf/amlc/**)",
+      "Read(//c/Users/suvam/Downloads/**)",
+      "Bash(curl *)",
+      "Skill(gsd-update)",
+      "PowerShell(npm view *)",
+      "Bash(Select-String -Pattern \"omission|OMIT|omit\" -Context 0,2)",
+      "mcp__claude_ai_Atlassian__lookupJiraAccountId",
+      "PowerShell($raw = Get-Content \"C:\\\\Users\\\\suvam\\\\.claude\\\\projects\\\\C--Users-suvam-Desktop-git-suvam-Jira-automation\\\\beb1e34c-0057-4f01-acee-e34313f0227f\\\\tool-results\\\\mcp-claude_ai_Atlassian-searchJiraIssuesUsingJql-1778783257597.txt\" -Raw | ConvertFrom-Json; $data = $raw[0].text | ConvertFrom-Json; $data.issues.Count; $data.isLast)",
+      "mcp__claude_ai_Atlassian__getVisibleJiraProjects",
+      "Bash(Select-String -Pattern \"Would create ticket|Mailer Name|Manager Order|List Name\")",
+      "Bash(Select-Object -First 60)",
+      "Bash(powershell -Command \"python parse_pipeline.py 'C:\\\\Users\\\\suvam\\\\Desktop\\\\git_suvam\\\\Jira_automation\\\\AMLC\\\\AMLC #668791-668797.pdf' --dry-run 2>&1 | Select-String -Pattern 'Would create ticket|Mailer Name|Manager Order|List Name' | Select-Object -First 60\")",
+      "Bash(dir C:\\\\Users\\\\suvam\\\\Desktop\\\\git_suvam\\\\Jira_automation\\\\AMLC\\\\mails with zip *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\suvam\\\\Desktop\\\\git_suvam\\\\Jira_automation\" -Recurse -Filter \"*selno*\" -ErrorAction SilentlyContinue)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\suvam\\\\Downloads\" -Filter \"*selno*\" -ErrorAction SilentlyContinue)",
+      "Bash(PYTHONIOENCODING=utf-8 python parse_pipeline.py \"C:\\\\Users\\\\suvam\\\\Downloads\\\\tmpyoiqwv4g.pdf\" --dry-run --verbose)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\suvam\\\\Desktop\\\\git_suvam\\\\Jira_automation\" -Recurse -File -Name)",
+      "PowerShell(head *)",
+      "Bash(xargs -I {} sh -c 'echo \"=== {} ===\" && head -30 \"{}\"')"
     ]
   }
 }
