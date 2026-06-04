@@ -81,6 +81,84 @@ def _extract_adf_text(adf) -> str:
     return " ".join(t for t in texts if t)
 
 
+_US_STATES = {
+    'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA',
+    'HI','ID','IL','IN','IA','KS','KY','LA','ME','MD',
+    'MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
+    'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
+    'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC',
+}
+
+_CRITERIA_LINE = re.compile(r'^\s*CRITERIA\s*\.+\s*:\s*\d+', re.IGNORECASE)
+
+
+_SELECT_FORMAT_MAP = {
+    'ASCII COMMA DELIMITED': 'ASCII Delimited',
+    'ASCII FIXED LENGTH':    'ASCII Fixed',
+    'ASCII FIXED':           'ASCII Fixed',
+    'EXCEL':                 'Excel',
+}
+
+_NAME_STOPWORDS = {
+    'LIST', 'DATA', 'FILE', 'MAIL', 'MAILING',
+    'DONOR', 'DONORS', 'NAME', 'NAMES', 'DIRECT',
+    'PROGRAM', 'PROGRAMS', 'FUND', 'FUNDS',
+}
+
+
+def _clean_select_name(raw: str) -> str:
+    """Strip trailing company footer and expand acronyms in parens for fuzzy matching."""
+    raw = re.sub(r'\s*DATA\s+MAIL\s+INC\.?\s*$', '', raw.strip(), flags=re.IGNORECASE)
+    raw = re.sub(r'\((\w+)\)', r' \1 ', raw)  # (ECAD) → ECAD
+    return raw.strip()
+
+
+def _name_words(s: str) -> set:
+    """Return significant words (4+ chars, not stopwords) from a name string, uppercased."""
+    s = re.sub(r'[^A-Z0-9\s]', ' ', s.upper())
+    return {w for w in s.split() if len(w) >= 4 and w not in _NAME_STOPWORDS}
+
+
+def _fuzzy_name_match(s_words: set, t_words: set) -> list[str]:
+    """
+    Match words between two sets via exact match or prefix overlap.
+    Prefix: one word starts with the other (covers abbreviations and truncations).
+    Returns list of match labels for display.
+    """
+    matches = []
+    used_t: set = set()
+    for sw in sorted(s_words):
+        if sw in t_words:
+            matches.append(sw)
+            used_t.add(sw)
+        else:
+            for tw in sorted(t_words - used_t):
+                if sw.startswith(tw) or tw.startswith(sw):
+                    matches.append(f"{sw}/{tw}")
+                    used_t.add(tw)
+                    break
+    return matches
+
+
+def _collect_criteria_block(text: str, criteria_keyword: str) -> list[str]:
+    """
+    Find the CRITERIA block whose header matches criteria_keyword and return its
+    non-empty value lines.  Stops when the next 'CRITERIA ...: N' line begins.
+    """
+    in_block = False
+    result: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if _CRITERIA_LINE.match(stripped):
+            if in_block:
+                break          # next criteria started
+            if re.search(criteria_keyword, stripped, re.IGNORECASE):
+                in_block = True
+        elif in_block and stripped:
+            result.append(stripped)
+    return result
+
+
 def _extract_ticket_flags(omission_adf) -> set:
     """Parse 'FLAG OMITS: D, N, R, $, A, X, !' from omission description ADF."""
     text = _extract_adf_text(omission_adf)
@@ -93,23 +171,50 @@ def _extract_ticket_flags(omission_adf) -> set:
     return set(re.findall(r'(?<![A-Z0-9])([A-Z0-9!\$])(?![A-Z0-9])', flag_str))
 
 
+def _extract_ticket_states(omission_adf) -> set:
+    """Extract 2-letter US state codes from the ticket's omission description ADF."""
+    text = _extract_adf_text(omission_adf)
+    if not text:
+        return set()
+    candidates = set(re.findall(r'\b([A-Z]{2})\b', text))
+    return candidates & _US_STATES
+
+
+def _extract_ticket_zips(omission_adf) -> set:
+    """Extract 5-digit zip codes from the ticket's omission description ADF."""
+    text = _extract_adf_text(omission_adf)
+    if not text:
+        return set()
+    return set(re.findall(r'\b(\d{5})\b', text))
+
+
 # ---------------------------------------------------------------------------
 # SELECT PDF identification
 # ---------------------------------------------------------------------------
 
-def find_select_attachment(attachments: list) -> dict | None:
-    """Find the SELECT PDF from a list of Jira attachment dicts."""
+def find_select_attachment(attachments: list) -> tuple[dict | None, list[str]]:
+    """
+    Find the SELECT PDF from a list of Jira attachment dicts.
+    Returns (attachment_or_None, warnings) where warnings is a list of
+    human-readable strings to surface in the QC comment.
+    """
     SELECT_RE = re.compile(r'(?<![A-Z])SELECT(?![A-Z])', re.IGNORECASE)
     matches = [a for a in attachments
                if SELECT_RE.search(a.get("filename", ""))
                and a.get("filename", "").lower().endswith(".pdf")]
+    warnings: list[str] = []
     if not matches:
-        return None
+        return None, warnings
     if len(matches) > 1:
-        log.warning("Multiple SELECT PDFs: %s — using most recent",
-                    [a["filename"] for a in matches])
+        names = [a["filename"] for a in matches]
+        log.warning("Multiple SELECT PDFs found: %s — using most recent", names)
         matches.sort(key=lambda a: a.get("created", ""), reverse=True)
-    return matches[0]
+        others = ", ".join(a["filename"] for a in matches[1:])
+        warnings.append(
+            f"Multiple SELECT PDFs found — used most recent: {matches[0]['filename']}; "
+            f"ignored: {others}"
+        )
+    return matches[0], warnings
 
 
 # ---------------------------------------------------------------------------
@@ -149,13 +254,29 @@ def parse_select_pdf(pdf_path: str) -> dict:
         result["customer_name"] = ""
         result["parse_errors"].append("JOB line not found (client_db, job_number, customer_name)")
 
-    # Manager order from REPORT: P.O.# J0094 ...
-    m = re.search(r'REPORT\s*:\s*P\.O\.#\s*([A-Z0-9]+)', text, re.IGNORECASE)
+    # Manager order + criteria suffix from REPORT: P.O.# J0094 $5+L3M FLAG
+    m = re.search(r'REPORT\s*:\s*P\.O\.#\s*([A-Z0-9]+)\s*(.*)', text, re.IGNORECASE)
     if m:
-        result["manager_order"] = m.group(1).strip()
+        result["manager_order"]  = m.group(1).strip()
+        suffix                   = m.group(2).strip()
+        result["criteria_suffix"] = suffix
+        # Dollar amounts: "$5+" or "05+" (zero-padded, no $ sign) — normalize to "$5+"
+        _digit_re = re.compile(r'\d+')
+        result["dollar_criteria"] = [
+            f"${int(_digit_re.search(t).group())}+"
+            for t in re.findall(r'\$?\d+\+', suffix)
+        ]
+        # Time periods: "L3M" or "L03" (zero-padded, trailing M optional) — normalize to "L3M"
+        result["period_criteria"] = [
+            f"L{int(n)}M"
+            for n in re.findall(r'\bL(\d+)M?\b', suffix, re.IGNORECASE)
+        ]
     else:
-        result["manager_order"] = ""
-        result["parse_errors"].append("REPORT/P.O.# line not found (manager_order)")
+        result["manager_order"]    = ""
+        result["criteria_suffix"]  = ""
+        result["dollar_criteria"]  = []
+        result["period_criteria"]  = []
+        result["parse_errors"].append("REPORT/P.O.# line not found (manager_order, criteria)")
 
     # Total records selected
     m = re.search(r'TOTAL\s+RECORDS\s+SELECTED[\s.]*\s*([\d,]+)', text, re.IGNORECASE)
@@ -184,24 +305,72 @@ def parse_select_pdf(pdf_path: str) -> dict:
         result["seed_db"] = ""
         result["parse_errors"].append("SEED RECORDS INCLUDED FROM LIST line not found")
 
-    # Flag omits from OMIT FLAGS criteria block
-    m = re.search(r'FLAGS\s*=\s*(.+?)(?:\n|$)', text)
-    if m:
-        flag_raw = m.group(1).strip()
-        result["flags"] = set(re.findall(r'(?:^|[\s/])([A-Z0-9!\$])(?:\s+[A-Z]|\s*$|\s*/)', flag_raw))
-        if not result["flags"]:
-            # fallback: single-char tokens separated by DMA-style description words
-            result["flags"] = set(re.findall(r'\b([A-Z!\$])\s+[A-Z]{2,}', flag_raw))
+    # Flag omits — collect every value line in the OMIT FLAGS criteria block,
+    # which ends when the next CRITERIA line begins.
+    flag_lines = _collect_criteria_block(text, r'OMIT\s+FLAGS\b')
+    if flag_lines:
+        result["flags"] = set()
+        for _fl in flag_lines:
+            _fm = re.match(r'(?:FLAGS|OR)\s*=\s*([A-Z0-9!\$])', _fl, re.IGNORECASE)
+            if _fm:
+                result["flags"].add(_fm.group(1))
     else:
         result["flags"] = set()
-        result["parse_errors"].append("FLAGS= line not found (flag omits check skipped)")
+        result["parse_errors"].append("OMIT FLAGS criteria block not found (flag omits check skipped)")
 
-    # State / zip omits (informational)
-    state_parts = re.findall(r'OMIT\s+STATE\s*=\s*(.+?)(?:\n|/\s*OMIT|\Z)', text, re.IGNORECASE)
-    result["state_omits"] = " / ".join(p.strip() for p in state_parts)
+    # State omits — OMIT STATES criteria block (order-specific, not standard territory block)
+    state_lines = _collect_criteria_block(text, r'OMIT\s+STATES?\b')
+    result["omit_states"] = set()
+    for _sl in state_lines:
+        _sm = re.match(r'(?:STATE|OR)\s*=\s*([A-Z]{2})\b', _sl, re.IGNORECASE)
+        if _sm:
+            result["omit_states"].add(_sm.group(1).upper())
 
-    zip_parts = re.findall(r'OMIT\s+ZIP\s*=\s*(.+?)(?:\n|\Z)', text, re.IGNORECASE)
-    result["zip_omits"] = " / ".join(p.strip() for p in zip_parts)
+    # Zip omits — OMIT ZIPS criteria block
+    zip_lines = _collect_criteria_block(text, r'OMIT\s+ZIPS?\b')
+    result["omit_zips"] = set()
+    for _zl in zip_lines:
+        _zm = re.match(r'(?:ZIP\s*CODE|OR)\s*=\s*(\d{5})', _zl, re.IGNORECASE)
+        if _zm:
+            result["omit_zips"].add(_zm.group(1))
+
+    # File format — from REPORT PROGRAMS section (page 2 typically)
+    # e.g. "ASCII COMMA DELIMITED W/WRKDTA", "ASCII FIXED LENGTH", "EXCEL"
+    m = re.search(
+        r'(ASCII\s+COMMA\s+DELIMITED|ASCII\s+FIXED(?:\s+LENGTH)?|EXCEL)',
+        text, re.IGNORECASE
+    )
+    if m:
+        raw_fmt = re.sub(r'\s+', ' ', m.group(1).strip().upper())
+        result["file_format"] = _SELECT_FORMAT_MAP.get(raw_fmt, "Other")
+    else:
+        result["file_format"] = ""
+        result["parse_errors"].append("File format (ASCII/EXCEL) line not found")
+
+    # Shipping info from NOTES section of last page:
+    #   Email: TO:<email> and CC: <email>
+    #   FTP:   FILENAME: <name>.ZIP
+    _email_re = r'[\w.\-]+@[\w.\-]+'
+    m_to = re.search(r'\bTO\s*:\s*(' + _email_re + r')', text, re.IGNORECASE)
+    m_cc = re.search(r'\bCC\s*:\s*(' + _email_re + r')', text, re.IGNORECASE)
+    m_fn = re.search(r'\bFILENAME\s*:\s*(\S+\.ZIP)', text, re.IGNORECASE)
+
+    if m_to:
+        result["shipping_method"] = "Email"
+        result["ship_to_email"]   = m_to.group(1).strip().upper()
+        result["cc_email"]        = m_cc.group(1).strip().upper() if m_cc else ""
+        result["ftp_filename"]    = ""
+    elif m_fn:
+        result["shipping_method"] = "FTP"
+        result["ftp_filename"]    = m_fn.group(1).strip().upper()
+        result["ship_to_email"]   = ""
+        result["cc_email"]        = ""
+    else:
+        result["shipping_method"] = ""
+        result["ship_to_email"]   = ""
+        result["cc_email"]        = ""
+        result["ftp_filename"]    = ""
+        result["parse_errors"].append("Shipping info (TO:/CC:/FILENAME:) not found in SELECT PDF")
 
     return result
 
@@ -244,33 +413,94 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
     else:
         _check("FAIL", "Manager Order #", f"SELECT has {s_ord!r} but ticket has {t_ord!r}")
 
-    # 3. Records selected >= requested quantity
-    total_sel = select_data.get("total_records", 0)
-    req_qty   = ticket_fields.get("requested_qty", 0)
+    # 3. List Name — fuzzy word-overlap match
+    s_name = select_data.get("customer_name", "")
+    t_list = ticket_fields.get("list_name", "")
+    if not s_name:
+        _check("WARN", "List Name", "Could not parse account name from SELECT PDF")
+    elif not t_list:
+        _check("WARN", "List Name", f"SELECT has {s_name!r} but ticket has no List Name set")
+    else:
+        s_words = _name_words(_clean_select_name(s_name))
+        t_words = _name_words(t_list)
+        matches = _fuzzy_name_match(s_words, t_words)
+        if matches:
+            _check("PASS", "List Name", f"Matched on: {matches}")
+        else:
+            _check("FAIL", "List Name",
+                   f"No match — SELECT: {s_name!r}, ticket: {t_list!r}")
+
+    # 4. Records selected — logic differs by availability rule:
+    #   All Available : count just needs to be near the requested number (within 20%)
+    #   Nth           : count must not exceed the requested maximum
+    total_sel  = select_data.get("total_records", 0)
+    req_qty    = ticket_fields.get("requested_qty", 0)
+    avail_rule = (ticket_fields.get("availability_rule") or "").strip().lower()
+    is_all_avail = "all" in avail_rule  # matches "All Available"
+
     if total_sel == 0:
         _check("FAIL", "Records Selected", "Could not parse total records from SELECT PDF")
     elif req_qty == 0:
         _check("WARN", "Records Selected",
                f"SELECT has {total_sel:,} records — ticket has no Requested Qty set")
-    elif total_sel >= req_qty:
-        _check("PASS", "Records Selected", f"{total_sel:,} >= requested {req_qty:,}")
+    elif is_all_avail:
+        # All Available: pass if count is within 20% of the requested number
+        tolerance = req_qty * 0.20
+        if abs(total_sel - req_qty) <= tolerance:
+            _check("PASS", "Records Selected",
+                   f"{total_sel:,} is near requested {req_qty:,} (All Available)")
+        else:
+            _check("FAIL", "Records Selected",
+                   f"SELECT has {total_sel:,} but ticket requests ~{req_qty:,} (All Available)")
     else:
-        _check("FAIL", "Records Selected",
-               f"SELECT has {total_sel:,} but ticket requests {req_qty:,}")
+        # Nth: count must not exceed the requested maximum
+        if total_sel <= req_qty:
+            _check("PASS", "Records Selected",
+                   f"{total_sel:,} <= max {req_qty:,} (Nth)")
+        else:
+            _check("FAIL", "Records Selected",
+                   f"SELECT has {total_sel:,} which exceeds Nth maximum of {req_qty:,}")
 
-    # 4. Mailing date
-    s_dt = select_data.get("mailing_date", "")
-    t_dt = ticket_fields.get("mail_date", "")
-    if not s_dt:
-        _check("FAIL", "Mailing Date", "Could not parse mailing date from SELECT PDF")
-    elif not t_dt:
-        _check("WARN", "Mailing Date", f"SELECT has {s_dt!r} but ticket has no Mail Date set")
-    elif s_dt == t_dt:
-        _check("PASS", "Mailing Date", f"{s_dt} matches {t_dt}")
+    # 5. Selection criteria — $-amount and L#M tokens from REPORT line vs ticket description
+    s_dollar = select_data.get("dollar_criteria", [])
+    s_period = select_data.get("period_criteria", [])
+    desc_text = _extract_adf_text(ticket_fields.get("description_adf")).upper()
+
+    if not s_dollar and not s_period:
+        _check("WARN", "Selection Criteria",
+               f"No $-amount or L#M tokens in SELECT REPORT line "
+               f"({select_data.get('criteria_suffix', '') or 'no suffix'})")
     else:
-        _check("FAIL", "Mailing Date", f"SELECT has {s_dt!r} but ticket has {t_dt!r}")
+        missing_dollar = []  # FAIL — $ amount not found at all
+        missing_period = []  # WARN — no time period found in description
 
-    # 5. Seed database
+        for dc in s_dollar:
+            amount = dc.replace('$', '').rstrip('+')
+            if dc not in desc_text and f"${amount}" not in desc_text and f"{amount}+" not in desc_text:
+                missing_dollar.append(dc)
+
+        for pc in s_period:
+            n = re.match(r'L(\d+)M', pc).group(1)
+            # Pass if exact match OR any other time period is mentioned
+            if not (f"{n}M" in desc_text or f"{n} MONTH" in desc_text
+                    or re.search(r'\d+\s*M\b|\d+\s+MONTH', desc_text)):
+                missing_period.append(pc)
+
+        found = [c for c in s_dollar if c not in missing_dollar] + \
+                [c for c in s_period if c not in missing_period]
+        if not missing_dollar and not missing_period:
+            _check("PASS", "Selection Criteria",
+                   f"Criteria found in description: {', '.join(s_dollar + s_period)}")
+        elif missing_dollar:
+            _check("FAIL", "Selection Criteria",
+                   f"$ amount missing from description: {', '.join(missing_dollar)} "
+                   f"(SELECT: {select_data.get('criteria_suffix', '')})")
+        else:
+            _check("WARN", "Selection Criteria",
+                   f"No time period in description for {', '.join(missing_period)} "
+                   f"(SELECT: {select_data.get('criteria_suffix', '')})")
+
+    # 6. Seed database
     s_seed = select_data.get("seed_db", "")
     t_seed = ticket_fields.get("seed_db", "")
     if not s_seed:
@@ -282,7 +512,21 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
     else:
         _check("FAIL", "Seed Database", f"SELECT has {s_seed!r} but ticket has {t_seed!r}")
 
-    # 6. Flag omits
+    # 7. File Format
+    s_fmt = select_data.get("file_format", "")
+    t_fmt = ticket_fields.get("file_format", "")
+    if not s_fmt:
+        _check("WARN", "File Format", "Could not parse file format from SELECT PDF")
+    elif not t_fmt:
+        _check("WARN", "File Format",
+               f"SELECT indicates {s_fmt!r} but ticket has no File Format set")
+    elif s_fmt == t_fmt:
+        _check("PASS", "File Format", f"{s_fmt} matches ticket")
+    else:
+        _check("FAIL", "File Format",
+               f"SELECT has {s_fmt!r} but ticket has {t_fmt!r}")
+
+    # 8. Flag omits (note: State=9, Zip=10, Shipping=11-13)
     s_flags = select_data.get("flags", set())
     t_flags = _extract_ticket_flags(ticket_fields.get("omission_adf"))
 
@@ -306,6 +550,97 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
             _check("FAIL", "Flag Omits",
                    f"Mismatch — SELECT: {sorted(s_flags)}, ticket: {sorted(t_flags)}")
 
+    # 8. State omits
+    s_states = select_data.get("omit_states", set())
+    t_states = _extract_ticket_states(ticket_fields.get("omission_adf"))
+
+    if not s_states and not t_states:
+        _check("WARN", "State Omits", "No state omit data in SELECT or ticket")
+    elif not t_states:
+        _check("WARN", "State Omits",
+               f"SELECT omitted {sorted(s_states)} — ticket has no states in omission description")
+    elif not s_states:
+        _check("WARN", "State Omits",
+               f"Ticket specifies {sorted(t_states)} but no OMIT STATES block in SELECT")
+    else:
+        missing = t_states - s_states
+        if not missing:
+            _check("PASS", "State Omits",
+                   f"All required states omitted: {sorted(s_states)}")
+        else:
+            _check("FAIL", "State Omits",
+                   f"Missing from SELECT: {sorted(missing)} "
+                   f"(SELECT has {sorted(s_states)}, ticket has {sorted(t_states)})")
+
+    # 9. Zip omits (only checked when either side has zip data)
+    s_zips = select_data.get("omit_zips", set())
+    t_zips = _extract_ticket_zips(ticket_fields.get("omission_adf"))
+
+    if t_zips or s_zips:
+        if not t_zips:
+            _check("WARN", "Zip Omits",
+                   f"SELECT omitted {len(s_zips)} zip(s) — ticket has none specified")
+        elif not s_zips:
+            _check("FAIL", "Zip Omits",
+                   f"Ticket specifies {sorted(t_zips)} but no OMIT ZIPS block in SELECT")
+        else:
+            missing = t_zips - s_zips
+            if not missing:
+                _check("PASS", "Zip Omits",
+                       f"All required zips omitted ({len(s_zips)} total)")
+            else:
+                _check("FAIL", "Zip Omits",
+                       f"Missing zips: {sorted(missing)} "
+                       f"(SELECT has {sorted(s_zips)}, ticket has {sorted(t_zips)})")
+
+    # 10. Shipping Method
+    s_method = select_data.get("shipping_method", "")
+    t_method = ticket_fields.get("shipping_method", "")
+    if not s_method:
+        _check("WARN", "Shipping Method",
+               "Could not determine shipping method from SELECT PDF")
+    elif not t_method:
+        _check("WARN", "Shipping Method",
+               f"SELECT indicates {s_method!r} but ticket has no Shipping Method set")
+    elif s_method.lower() == t_method.lower():
+        _check("PASS", "Shipping Method", f"{s_method} matches ticket")
+    else:
+        _check("FAIL", "Shipping Method",
+               f"SELECT indicates {s_method!r} but ticket has {t_method!r}")
+
+    # 11. Ship To Email (Email method only)
+    if s_method == "Email":
+        s_to = select_data.get("ship_to_email", "")
+        t_to = ticket_fields.get("ship_to_email", "").upper()
+        if not s_to:
+            _check("WARN", "Ship To Email",
+                   "Could not parse TO: email from SELECT PDF")
+        elif not t_to:
+            _check("WARN", "Ship To Email",
+                   f"SELECT has TO: {s_to} but ticket has no Ship To Email set")
+        elif s_to == t_to:
+            _check("PASS", "Ship To Email", f"{s_to} matches ticket")
+        else:
+            _check("FAIL", "Ship To Email",
+                   f"SELECT has {s_to!r} but ticket has {t_to!r}")
+
+    # 12. Shipping CC (Email method only)
+    if s_method == "Email":
+        s_cc = select_data.get("cc_email", "")
+        t_instr = ticket_fields.get("shipping_instructions", "").upper()
+        if not s_cc:
+            _check("WARN", "Shipping CC",
+                   "Could not parse CC: email from SELECT PDF")
+        elif not t_instr:
+            _check("WARN", "Shipping CC",
+                   f"SELECT has CC: {s_cc} but ticket has no Shipping Instructions set")
+        elif s_cc in t_instr:
+            _check("PASS", "Shipping CC",
+                   f"CC: {s_cc} found in Shipping Instructions")
+        else:
+            _check("FAIL", "Shipping CC",
+                   f"SELECT CC: {s_cc!r} not in ticket Shipping Instructions {t_instr!r}")
+
     pass_count  = sum(1 for s, _, _ in checks if s == "PASS")
     overall_pass = (pass_count >= QC_PASS_THRESHOLD) and (not hard_fails)
 
@@ -323,7 +658,8 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def format_qc_comment(ticket_key: str, select_filename: str,
-                      qc_result: dict, parse_errors: list) -> str:
+                      qc_result: dict, parse_errors: list,
+                      select_warnings: list | None = None) -> str:
     """Build the plain-text Jira comment for the QC result."""
     checks     = qc_result["checks"]
     pass_count = qc_result["pass_count"]
@@ -346,11 +682,12 @@ def format_qc_comment(ticket_key: str, select_filename: str,
     if hard_fails:
         lines.append(f"HARD FAIL: {', '.join(hard_fails)} must match")
 
-    if parse_errors:
+    all_warnings = list(select_warnings or []) + list(parse_errors or [])
+    if all_warnings:
         lines.append("")
-        lines.append("PARSE WARNINGS:")
-        for e in parse_errors:
-            lines.append(f"  - {e}")
+        lines.append("WARNINGS:")
+        for w in all_warnings:
+            lines.append(f"  - {w}")
 
     return "\n".join(lines)
 
@@ -372,7 +709,7 @@ def process_ticket_qc(ticket_key: str, dry_run: bool = False) -> dict:
         return {"ticket_key": ticket_key, "error": fields["error"]}
 
     # Find SELECT PDF
-    select_att = find_select_attachment(fields["attachments"])
+    select_att, select_warnings = find_select_attachment(fields["attachments"])
     if not select_att:
         msg = f"No SELECT PDF attachment found on {ticket_key}"
         log.warning(msg)
@@ -407,12 +744,13 @@ def process_ticket_qc(ticket_key: str, dry_run: bool = False) -> dict:
         qc_result = run_qc_checks(select_data, fields)
 
         # Format + print
-        comment = format_qc_comment(ticket_key, select_filename, qc_result, parse_errors)
+        comment = format_qc_comment(ticket_key, select_filename, qc_result,
+                                    parse_errors, select_warnings)
         print(f"\n{comment}\n")
 
         if dry_run:
             action = (f"transition to {QC_PASSED_STATUS!r}"
-                      if qc_result["overall_pass"] else f"leave at {NEED_QC_STATUS!r} (QC Failed)")
+                      if qc_result["overall_pass"] else "post report only (QC Failed — no transition)")
             log.info("[DRY RUN] Would post comment and %s", action)
             return {
                 "ticket_key":      ticket_key,
@@ -455,8 +793,43 @@ def process_ticket_qc(ticket_key: str, dry_run: bool = False) -> dict:
 # Batch scanner
 # ---------------------------------------------------------------------------
 
+_QC_COMMENT_PREFIXES = ("QC PASSED", "QC FAILED", "QC SKIPPED")
+_RERUN_GRACE_SECONDS = 120  # ignore ticket updates within 2 min of QC comment (comment post itself updates the ticket)
+
+
+def _last_qc_comment_time(ticket_key: str, base_url: str, auth) -> str | None:
+    """Return the ISO timestamp of the most recent QC comment, or None if none exists."""
+    import requests as _req
+    resp = _req.get(
+        f"{base_url}/rest/api/3/issue/{ticket_key}/comment",
+        auth=auth,
+        headers={"Accept": "application/json"},
+        params={"maxResults": 100, "orderBy": "-created"},
+        timeout=15,
+    )
+    if resp.status_code != 200:
+        return None
+    for c in resp.json().get("comments", []):
+        body = _extract_adf_text(c.get("body", ""))
+        if body.startswith(_QC_COMMENT_PREFIXES):
+            return c.get("created", "")
+    return None
+
+
+def _updated_after_qc(ticket_updated: str, qc_created: str) -> bool:
+    """Return True if the ticket was meaningfully updated after the QC comment was posted."""
+    try:
+        from datetime import datetime
+        fmt = "%Y-%m-%dT%H:%M:%S"
+        t_ticket = datetime.strptime(ticket_updated[:19], fmt)
+        t_qc     = datetime.strptime(qc_created[:19], fmt)
+        return (t_ticket - t_qc).total_seconds() > _RERUN_GRACE_SECONDS
+    except Exception:
+        return False
+
+
 def scan_need_qc_tickets(dry_run: bool = False) -> list:
-    """Scan all 'Need QC' tickets and run QC on each."""
+    """Scan 'Need QC' tickets. Skips tickets with a QC comment unless changes were made after it."""
     import requests as _req
     from requests.auth import HTTPBasicAuth as _Auth
 
@@ -466,14 +839,14 @@ def scan_need_qc_tickets(dry_run: bool = False) -> list:
 
     log.info("Scanning: %s", jql)
 
-    all_keys = []
+    all_issues = []
     start, batch = 0, 50
     while True:
         resp = _req.get(
             f"{base_url}/rest/api/3/search", auth=auth,
             headers={"Accept": "application/json"},
             params={"jql": jql, "startAt": start, "maxResults": batch,
-                    "fields": "summary,status"},
+                    "fields": "summary,status,updated"},
             timeout=15,
         )
         if resp.status_code != 200:
@@ -481,15 +854,26 @@ def scan_need_qc_tickets(dry_run: bool = False) -> list:
             break
         data   = resp.json()
         issues = data.get("issues", [])
-        all_keys.extend(i["key"] for i in issues)
+        all_issues.extend(issues)
         if start + batch >= data.get("total", 0):
             break
         start += batch
 
-    log.info("Found %d ticket(s) in %r", len(all_keys), NEED_QC_STATUS)
+    log.info("Found %d ticket(s) in %r", len(all_issues), NEED_QC_STATUS)
 
     results = []
-    for key in all_keys:
+    for issue in all_issues:
+        key             = issue["key"]
+        ticket_updated  = issue["fields"].get("updated", "")
+        last_qc_time    = _last_qc_comment_time(key, base_url, auth)
+
+        if last_qc_time:
+            if _updated_after_qc(ticket_updated, last_qc_time):
+                log.info("%s: changes made after last QC — re-running QC", key)
+            else:
+                log.info("%s: no changes since last QC — skipping", key)
+                continue
+
         results.append(process_ticket_qc(key, dry_run=dry_run))
 
     return results
@@ -505,11 +889,15 @@ def main():
     )
     parser.add_argument(
         "ticket_key", nargs="?", default=None,
-        help="Ticket key (e.g. DSLF-123). Omit to scan all 'Need QC' tickets."
+        help="Ticket key (e.g. DSLF-123). Omit to scan all unprocessed 'Need QC' tickets."
     )
     parser.add_argument(
         "--dry-run", action="store_true",
         help="Parse and compare but do not post comments or transition tickets."
+    )
+    parser.add_argument(
+        "--watch", metavar="MINUTES", type=int, nargs="?", const=5,
+        help="Keep running, scanning for new 'Need QC' tickets every MINUTES (default 5)."
     )
     args = parser.parse_args()
 
@@ -527,25 +915,42 @@ def main():
         print(f"\n{label}{args.ticket_key}: QC {overall} "
               f"({result.get('pass_count', 0)}/{result.get('total_checks', 0)})")
     else:
-        results = scan_need_qc_tickets(dry_run=args.dry_run)
+        import time
 
-        print(f"\n{'Ticket':<12} {'Result':<10} {'Checks':<10} {'SELECT File'}")
-        print("-" * 70)
-        for r in results:
-            if "error" in r:
-                print(f"{r['ticket_key']:<12} {'ERROR':<10} {'':10} {r['error'][:40]}")
-            else:
-                overall = "PASSED" if r.get("overall_pass") else "FAILED"
-                checks  = f"{r.get('pass_count', 0)}/{r.get('total_checks', 0)}"
-                fname   = r.get("select_filename", "")[:30]
-                print(f"{r['ticket_key']:<12} {overall:<10} {checks:<10} {fname}")
+        def _run_scan():
+            results = scan_need_qc_tickets(dry_run=args.dry_run)
+            if results:
+                print(f"\n{'Ticket':<12} {'Result':<10} {'Checks':<10} {'SELECT File'}")
+                print("-" * 70)
+                for r in results:
+                    if "error" in r:
+                        print(f"{r['ticket_key']:<12} {'ERROR':<10} {'':10} {r['error'][:40]}")
+                    else:
+                        overall = "PASSED" if r.get("overall_pass") else "FAILED"
+                        checks  = f"{r.get('pass_count', 0)}/{r.get('total_checks', 0)}"
+                        fname   = r.get("select_filename", "")[:30]
+                        print(f"{r['ticket_key']:<12} {overall:<10} {checks:<10} {fname}")
 
-        passed = sum(1 for r in results if r.get("overall_pass"))
-        failed = sum(1 for r in results
-                     if not r.get("overall_pass") and "error" not in r)
-        errors = sum(1 for r in results if "error" in r)
-        print(f"\nSummary: {passed} passed, {failed} failed, {errors} errors "
-              f"({len(results)} total)")
+                passed = sum(1 for r in results if r.get("overall_pass"))
+                failed = sum(1 for r in results
+                             if not r.get("overall_pass") and "error" not in r)
+                errors = sum(1 for r in results if "error" in r)
+                print(f"\nSummary: {passed} passed, {failed} failed, {errors} errors "
+                      f"({len(results)} total)")
+            return results
+
+        _run_scan()
+
+        if args.watch:
+            interval = args.watch * 60
+            log.info("Watch mode: scanning every %d minute(s). Ctrl-C to stop.", args.watch)
+            try:
+                while True:
+                    time.sleep(interval)
+                    log.info("Watch: polling for new Need QC tickets...")
+                    _run_scan()
+            except KeyboardInterrupt:
+                log.info("Watch mode stopped.")
 
 
 if __name__ == "__main__":
