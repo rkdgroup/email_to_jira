@@ -788,7 +788,7 @@ def process_ticket_qc(ticket_key: str, dry_run: bool = False) -> dict:
 # Batch scanner
 # ---------------------------------------------------------------------------
 
-_QC_COMMENT_PREFIXES = ("QC PASSED", "QC FAILED", "QC SKIPPED")
+_QC_COMMENT_PREFIXES = ("QC CHECK RESULTS", "QC SKIPPED")
 _RERUN_GRACE_SECONDS = 120  # ignore ticket updates within 2 min of QC comment (comment post itself updates the ticket)
 
 
