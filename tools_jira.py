@@ -101,6 +101,17 @@ def create_jira_ticket(
 ) -> dict:
     """Create a DSLF Jira ticket. Returns dict with 'key' on success or 'error' on failure."""
 
+    # Saturn Corp rule: any ship-to routed to Saturn Corp — whether the
+    # CONVERT@SATURNCORP.COM address or a note like "PLACE ON SATURN'S FTP SITE" —
+    # is an FTP upload (never email) and the file is ALWAYS ASCII Fixed. Force both
+    # regardless of what the order/parser produced. Most common in ADSTRA orders.
+    if ship_to_email and "saturn" in ship_to_email.lower():
+        file_format = "ASCII Fixed"
+        shipping_method = "FTP"
+        # Bare email destinations get an FTP NOTIFY prefix; free-text notes stay as-is.
+        if "@" in ship_to_email and not ship_to_email.upper().lstrip().startswith("FTP NOTIFY:"):
+            ship_to_email = f"FTP NOTIFY: {ship_to_email.strip()}"
+
     fields: dict = {
         "project": {"key": DSLF_PROJECT_KEY},
         "issuetype": {"id": DSLF_ISSUE_TYPE_ID},

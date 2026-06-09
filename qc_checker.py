@@ -517,7 +517,21 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
     # 7. File Format
     s_fmt = select_data.get("file_format", "")
     t_fmt = ticket_fields.get("file_format", "")
-    if not s_fmt:
+    saturn = (
+        "saturn" in select_data.get("ship_to_email", "").lower()
+        or "saturn" in (ticket_fields.get("ship_to_email") or "").lower()
+    )
+    if saturn:
+        # Saturn Corp is ALWAYS ASCII Fixed regardless of what the SELECT/ticket says.
+        if t_fmt == "ASCII Fixed":
+            _check("PASS", "File Format", "ASCII Fixed (Saturn Corp — always ASCII Fixed)")
+        elif not t_fmt:
+            _check("WARN", "File Format",
+                   "Saturn Corp order — ticket should be ASCII Fixed but File Format is unset")
+        else:
+            _check("FAIL", "File Format",
+                   f"Saturn Corp order must be 'ASCII Fixed' but ticket has {t_fmt!r}")
+    elif not s_fmt:
         _check("WARN", "File Format", "Could not parse file format from SELECT PDF")
     elif not t_fmt:
         _check("WARN", "File Format",
@@ -598,7 +612,21 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
     # 10. Shipping Method
     s_method = select_data.get("shipping_method", "")
     t_method = ticket_fields.get("shipping_method", "")
-    if not s_method:
+    saturn = (
+        "saturn" in select_data.get("ship_to_email", "").lower()
+        or "saturn" in (ticket_fields.get("ship_to_email") or "").lower()
+    )
+    if saturn:
+        # CONVERT@SATURNCORP.COM parses as a TO: email but is really an FTP upload.
+        if t_method.lower() == "ftp":
+            _check("PASS", "Shipping Method", "FTP (Saturn Corp — always shipped via FTP)")
+        elif not t_method:
+            _check("WARN", "Shipping Method",
+                   "Saturn Corp order — ticket should be FTP but Shipping Method is unset")
+        else:
+            _check("FAIL", "Shipping Method",
+                   f"Saturn Corp order must ship via FTP but ticket has {t_method!r}")
+    elif not s_method:
         _check("WARN", "Shipping Method",
                "Could not determine shipping method from SELECT PDF")
     elif not t_method:
