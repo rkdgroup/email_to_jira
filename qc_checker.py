@@ -335,6 +335,7 @@ def parse_select_pdf(pdf_path: str) -> dict:
 
     # File format — from REPORT PROGRAMS section (page 2 typically)
     # e.g. "ASCII COMMA DELIMITED W/WRKDTA", "ASCII FIXED LENGTH", "EXCEL"
+    # Also: "<N> TAPE DON'T TOP LOAD" = ASCII Fixed
     m = re.search(
         r'(ASCII\s+COMMA\s+DELIMITED|ASCII\s+FIXED(?:\s+LENGTH)?|EXCEL)',
         text, re.IGNORECASE
@@ -342,6 +343,8 @@ def parse_select_pdf(pdf_path: str) -> dict:
     if m:
         raw_fmt = re.sub(r'\s+', ' ', m.group(1).strip().upper())
         result["file_format"] = _SELECT_FORMAT_MAP.get(raw_fmt, "Other")
+    elif re.search(r"TAPE\s+DON'?T\s+TOP\s+LOAD", text, re.IGNORECASE):
+        result["file_format"] = "ASCII Fixed"
     else:
         result["file_format"] = ""
         result["parse_errors"].append("File format (ASCII/EXCEL) line not found")
