@@ -795,7 +795,8 @@ def process_ticket_qc(ticket_key: str, dry_run: bool = False) -> dict:
         if not dry_run:
             cr = add_comment_to_ticket(
                 ticket_key,
-                f"QC SKIPPED — {msg}\n\nPlease attach the SELECT PDF and re-run QC."
+                f"QC SKIPPED — {msg}\n\nPlease attach the SELECT PDF and re-run QC.",
+                code_block=True,
             )
             if "error" in cr:
                 log.error("Could not post QC-SKIPPED comment to %s: %s",
@@ -845,7 +846,7 @@ def process_ticket_qc(ticket_key: str, dry_run: bool = False) -> dict:
             }
 
         # Post comment only — never transition (ticket stays in Needs QC regardless of result)
-        cr = add_comment_to_ticket(ticket_key, comment)
+        cr = add_comment_to_ticket(ticket_key, comment, code_block=True)
         if "error" in cr:
             log.error("Could not post QC comment to %s: %s", ticket_key, cr["error"])
         else:

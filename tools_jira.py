@@ -290,23 +290,26 @@ def flag_for_review(reason: str, details: str = "") -> dict:
     }
 
 
-def add_comment_to_ticket(ticket_key: str, body: str) -> dict:
+def add_comment_to_ticket(ticket_key: str, body: str, code_block: bool = False) -> dict:
     """
     Add a plain-text comment to an existing Jira ticket.
     body is plain text; wrapped in ADF paragraph format for the v3 API.
+    code_block=True posts it as a monospace code block instead (preserves
+    column alignment, e.g. for QC reports).
     Returns dict with 'id' on success or 'error' on failure.
     """
     url = f"{_get_jira_base_url()}/rest/api/3/issue/{ticket_key}/comment"
+    node = {
+        "type": "codeBlock" if code_block else "paragraph",
+        "content": [{"type": "text", "text": body}],
+    }
+    if code_block:
+        node["attrs"] = {"language": "text"}
     payload = {
         "body": {
             "type": "doc",
             "version": 1,
-            "content": [
-                {
-                    "type": "paragraph",
-                    "content": [{"type": "text", "text": body}],
-                }
-            ],
+            "content": [node],
         }
     }
     try:
