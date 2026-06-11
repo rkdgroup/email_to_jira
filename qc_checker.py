@@ -773,6 +773,24 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
             _check("FAIL", "Shipping CC",
                    f"SELECT CC: {s_cc!r} not in ticket Shipping Instructions {t_instr!r}")
 
+    # 14. FTP Notify (FTP method only) — ticket Ship To Email should hold the
+    # notification address as "FTP NOTIFY: email@domain.com". WARN-only.
+    if s_method == "FTP" or t_method.lower() == "ftp":
+        t_to    = (ticket_fields.get("ship_to_email") or "").strip()
+        ftp_fn  = select_data.get("ftp_filename", "")
+        fn_note = f" (SELECT filename: {ftp_fn})" if ftp_fn else ""
+        if not t_to:
+            _check("WARN", "FTP Notify",
+                   f"FTP order — ticket Ship To Email is empty, expected "
+                   f"'FTP NOTIFY: email@domain.com'{fn_note}")
+        elif re.match(r'(?i)^\s*FTP\s+NOTIFY\s*:\s*[\w.\-]+@[\w.\-]+', t_to):
+            _check("PASS", "FTP Notify",
+                   f"Ship To Email has FTP notify address: {t_to}{fn_note}")
+        else:
+            _check("WARN", "FTP Notify",
+                   f"FTP order — ticket Ship To Email is {t_to!r}, expected "
+                   f"'FTP NOTIFY: email@domain.com'{fn_note}")
+
     pass_count  = sum(1 for s, _, _ in checks if s == "PASS")
     overall_pass = (pass_count >= QC_PASS_THRESHOLD) and (not hard_fails)
 
