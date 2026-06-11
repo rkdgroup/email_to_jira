@@ -171,20 +171,66 @@ def _extract_ticket_flags(omission_adf) -> set:
 
 
 def _extract_ticket_states(omission_adf) -> set:
-    """Extract 2-letter US state codes from the ticket's omission description ADF."""
+    """
+    Extract 2-letter US state codes from the ticket's omission description ADF.
+
+    A bare \\b[A-Z]{2}\\b scan turns uppercase prose words (OR, IN, ME, OK...)
+    into phantom states, so codes only count when they appear in state context:
+      A. a comma-delimited run of 2+ codes ("AK, HI, OR" — Oregon kept)
+      B. a list following a STATES keyword — where OR/AND between codes
+         are conjunctions, not Oregon ("OMIT STATES: AK OR HI" -> {AK, HI})
+      C. directly after OMIT ("OMIT AK")
+    """
     text = _extract_adf_text(omission_adf)
     if not text:
         return set()
-    candidates = set(re.findall(r'\b([A-Z]{2})\b', text))
-    return candidates & _US_STATES
+
+    def _codes_from_span(span: str) -> set:
+        span = re.sub(r'\bAND\b', ',', span)
+        tokens = set(re.findall(r'\b([A-Z]{2})\b', span))
+        if 'OR' in tokens:
+            # OR space-separated between codes is a conjunction ("AK OR HI");
+            # it only counts as Oregon when comma-delimited or standing alone
+            if not re.search(r'(?:^|,)\s*OR\s*(?:,|$)|,\s*OR\b|\bOR\s*,', span):
+                tokens.discard('OR')
+        return tokens
+
+    found: set = set()
+
+    # Rule A: comma-delimited runs of 2+ codes, with optional "OR/AND XX" tail
+    # ("AK, HI OR ME" — OR is the conjunction, ME is the last item)
+    for m in re.finditer(
+            r'\b[A-Z]{2}(?:\s*,\s*[A-Z]{2}\b)+(?:\s*,?\s*\b(?:OR|AND)\s+[A-Z]{2}\b)?',
+            text):
+        found |= _codes_from_span(m.group(0))
+
+    # Rule B: list after a STATES keyword ("OMIT STATES: ...", "STATE OMITS - ...");
+    # codes separated by spaces, commas, slashes, ampersands, or OR/AND
+    for m in re.finditer(
+            r'STATES?\b(?:\s+(?:OMITS?|TO|EXCLUDED?|EXCLUSIONS?))*[^A-Za-z0-9\n]{0,20}'
+            r'((?:[A-Z]{2}\b(?:\s*(?:,|/|&|\bOR\b|\bAND\b)\s*|\s+))*[A-Z]{2}\b)',
+            text):
+        found |= _codes_from_span(m.group(1))
+
+    # Rule C: "OMIT XX" directly, including short chains ("OMIT AK AND HI")
+    for m in re.finditer(
+            r'\bOMIT\s+([A-Z]{2}\b(?:\s*(?:,|&|/|\bAND\b|\bOR\b)\s*[A-Z]{2}\b)*)',
+            text):
+        found |= _codes_from_span(m.group(1))
+
+    return found & _US_STATES
 
 
 def _extract_ticket_zips(omission_adf) -> set:
-    """Extract 5-digit zip codes from the ticket's omission description ADF."""
+    """
+    Extract 5-digit zip codes from the ticket's omission description ADF.
+    Only attempted when the text mentions zips at all — otherwise standalone
+    5-digit numbers ("25000 LIFETIME", "$25000") become phantom zips.
+    """
     text = _extract_adf_text(omission_adf)
-    if not text:
+    if not text or not re.search(r'\bZIP(?:\s*CODE)?S?\b', text, re.IGNORECASE):
         return set()
-    return set(re.findall(r'\b(\d{5})\b', text))
+    return set(re.findall(r'(?<![\d$.,])(\d{5})(?!\s*[\d+])', text))
 
 
 # ---------------------------------------------------------------------------
@@ -477,8 +523,11 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
         missing_period = []  # WARN — no time period found in description
 
         for dc in s_dollar:
-            amount = dc.replace('$', '').rstrip('+')
-            if dc not in desc_text and f"${amount}" not in desc_text and f"{amount}+" not in desc_text:
+            amount = re.escape(dc.replace('$', '').rstrip('+'))
+            # digit boundaries so "$5+" is not satisfied by "$15+" or "$50+"
+            pat = (rf'(?<![\d.,])\$?\s*{amount}(?:\.0+)?\s*\+'
+                   rf'|\$\s*{amount}(?:\.0+)?(?![\d.])')
+            if not re.search(pat, desc_text):
                 missing_dollar.append(dc)
 
         for pc in s_period:
