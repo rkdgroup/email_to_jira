@@ -1,9 +1,10 @@
 """
 QC Checker for DSLF List Rental Pipeline.
 
-Downloads the SELECT PDF attached to a 'Need QC' Jira ticket, parses key
-fields, compares them against the ticket's requirements, posts a structured
-pass/fail comment, and transitions the ticket to 'QC Passed' if it passes.
+Downloads the SELECT PDF attached to a 'Needs QC' Jira ticket, parses key
+fields, compares them against the ticket's requirements, and posts a
+structured pass/fail report comment. The ticket is never transitioned —
+it stays in 'Needs QC' regardless of the result.
 
 Usage:
     python qc_checker.py                    # scan all Need QC tickets
@@ -156,6 +157,12 @@ def _collect_criteria_block(text: str, criteria_keyword: str) -> list[str]:
         elif in_block and stripped:
             result.append(stripped)
     return result
+
+
+def _is_saturn(select_data: dict, ticket_fields: dict) -> bool:
+    """Saturn Corp orders are always FTP + ASCII Fixed regardless of the order form."""
+    return ("saturn" in select_data.get("ship_to_email", "").lower()
+            or "saturn" in (ticket_fields.get("ship_to_email") or "").lower())
 
 
 def _extract_ticket_flags(omission_adf) -> set:
@@ -482,7 +489,7 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
     #   All Available : count just needs to be near the requested number (within 20%)
     #   Nth           : count must not exceed the requested maximum
     total_sel  = select_data.get("total_records", 0)
-    req_qty    = ticket_fields.get("requested_qty", 0)
+    req_qty    = int(ticket_fields.get("requested_qty", 0) or 0)  # Jira returns floats (3000.0)
     avail_rule = (ticket_fields.get("availability_rule") or "").strip().lower()
     is_all_avail = "all" in avail_rule  # matches "All Available"
 
@@ -566,10 +573,7 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
     # 7. File Format
     s_fmt = select_data.get("file_format", "")
     t_fmt = ticket_fields.get("file_format", "")
-    saturn = (
-        "saturn" in select_data.get("ship_to_email", "").lower()
-        or "saturn" in (ticket_fields.get("ship_to_email") or "").lower()
-    )
+    saturn = _is_saturn(select_data, ticket_fields)
     if saturn:
         # Saturn Corp is ALWAYS ASCII Fixed regardless of what the SELECT/ticket says.
         if t_fmt == "ASCII Fixed":
@@ -591,7 +595,7 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
         _check("FAIL", "File Format",
                f"SELECT has {s_fmt!r} but ticket has {t_fmt!r}")
 
-    # 8. Flag omits (note: State=9, Zip=10, Shipping=11-13)
+    # 8. Flag omits
     s_flags = select_data.get("flags", set())
     t_flags = _extract_ticket_flags(ticket_fields.get("omission_adf"))
 
@@ -615,7 +619,7 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
             _check("FAIL", "Flag Omits",
                    f"Mismatch — SELECT: {sorted(s_flags)}, ticket: {sorted(t_flags)}")
 
-    # 8. State omits
+    # 9. State omits
     s_states = select_data.get("omit_states", set())
     t_states = _extract_ticket_states(ticket_fields.get("omission_adf"))
 
@@ -637,7 +641,7 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
                    f"Missing from SELECT: {sorted(missing)} "
                    f"(SELECT has {sorted(s_states)}, ticket has {sorted(t_states)})")
 
-    # 9. Zip omits (only checked when either side has zip data)
+    # 10. Zip omits (only checked when either side has zip data)
     s_zips = select_data.get("omit_zips", set())
     t_zips = _extract_ticket_zips(ticket_fields.get("omission_adf"))
 
@@ -658,13 +662,9 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
                        f"Missing zips: {sorted(missing)} "
                        f"(SELECT has {sorted(s_zips)}, ticket has {sorted(t_zips)})")
 
-    # 10. Shipping Method
+    # 11. Shipping Method
     s_method = select_data.get("shipping_method", "")
     t_method = ticket_fields.get("shipping_method", "")
-    saturn = (
-        "saturn" in select_data.get("ship_to_email", "").lower()
-        or "saturn" in (ticket_fields.get("ship_to_email") or "").lower()
-    )
     if saturn:
         # CONVERT@SATURNCORP.COM parses as a TO: email but is really an FTP upload.
         if t_method.lower() == "ftp":
@@ -687,7 +687,7 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
         _check("FAIL", "Shipping Method",
                f"SELECT indicates {s_method!r} but ticket has {t_method!r}")
 
-    # 11. Ship To Email (Email method only)
+    # 12. Ship To Email (Email method only)
     if s_method == "Email":
         s_to = select_data.get("ship_to_email", "")
         t_to = ticket_fields.get("ship_to_email", "").upper()
@@ -703,7 +703,7 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
             _check("FAIL", "Ship To Email",
                    f"SELECT has {s_to!r} but ticket has {t_to!r}")
 
-    # 12. Shipping CC (Email method only)
+    # 13. Shipping CC (Email method only)
     if s_method == "Email":
         s_cc = select_data.get("cc_email", "")
         t_instr = ticket_fields.get("shipping_instructions", "").upper()
@@ -793,10 +793,13 @@ def process_ticket_qc(ticket_key: str, dry_run: bool = False) -> dict:
         msg = f"No SELECT PDF attachment found on {ticket_key}"
         log.warning(msg)
         if not dry_run:
-            add_comment_to_ticket(
+            cr = add_comment_to_ticket(
                 ticket_key,
                 f"QC SKIPPED — {msg}\n\nPlease attach the SELECT PDF and re-run QC."
             )
+            if "error" in cr:
+                log.error("Could not post QC-SKIPPED comment to %s: %s",
+                          ticket_key, cr["error"])
         return {"ticket_key": ticket_key, "error": msg}
 
     select_filename = select_att["filename"]
@@ -815,7 +818,7 @@ def process_ticket_qc(ticket_key: str, dry_run: bool = False) -> dict:
         select_data  = parse_select_pdf(tmp_path)
         parse_errors = select_data.pop("parse_errors", [])
 
-        if not any(v for k, v in select_data.items() if k != "parse_errors"):
+        if not any(select_data.values()):
             return {"ticket_key": ticket_key,
                     "error": "SELECT PDF parsing returned no usable data"}
 
@@ -884,14 +887,24 @@ def _last_qc_comment_time(ticket_key: str) -> str | None:
 
 def _updated_after_qc(ticket_updated: str, qc_created: str) -> bool:
     """Return True if the ticket was meaningfully updated after the QC comment was posted."""
+    from datetime import datetime
     try:
-        from datetime import datetime
-        fmt = "%Y-%m-%dT%H:%M:%S"
-        t_ticket = datetime.strptime(ticket_updated[:19], fmt)
-        t_qc     = datetime.strptime(qc_created[:19], fmt)
-        return (t_ticket - t_qc).total_seconds() > _RERUN_GRACE_SECONDS
+        # Jira format: 2026-06-11T08:15:30.123-0400 — compare TZ-aware
+        fmt = "%Y-%m-%dT%H:%M:%S.%f%z"
+        t_ticket = datetime.strptime(ticket_updated, fmt)
+        t_qc     = datetime.strptime(qc_created, fmt)
     except Exception:
-        return False
+        try:
+            # fallback: naive compare (both timestamps share the Jira TZ)
+            fmt = "%Y-%m-%dT%H:%M:%S"
+            t_ticket = datetime.strptime(ticket_updated[:19], fmt)
+            t_qc     = datetime.strptime(qc_created[:19], fmt)
+        except Exception:
+            log.warning("Could not parse timestamps (updated=%r, qc=%r) — "
+                        "treating as no change since last QC",
+                        ticket_updated, qc_created)
+            return False
+    return (t_ticket - t_qc).total_seconds() > _RERUN_GRACE_SECONDS
 
 
 def scan_need_qc_tickets(dry_run: bool = False) -> list:
