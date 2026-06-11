@@ -271,7 +271,8 @@ def search_jira_tickets(jql: str, max_results: int = 10) -> dict:
                 }
                 for i in data.get("issues", [])
             ]
-            return {"total": data.get("total", 0), "issues": issues}
+            # /search/jql returns no "total" — report the count we actually got
+            return {"total": len(issues), "issues": issues}
         else:
             return {"error": f"HTTP {resp.status_code}: {resp.text}"}
     except Exception as e:
@@ -411,6 +412,53 @@ QC_FIELDS = [
     "customfield_12276",  # Shipping Method
     "customfield_12277",  # Shipping Instructions (CC: email)
 ]
+
+
+def search_issues_paged(jql: str, fields: str, batch: int = 50, max_pages: int = 40) -> list:
+    """
+    Search issues via /rest/api/3/search/jql, following nextPageToken until
+    the last page. Returns the combined raw issue list ([] on failure).
+    The endpoint is token-paginated: it ignores startAt and returns no total.
+    """
+    issues: list = []
+    token = None
+    for _ in range(max_pages):
+        params = {"jql": jql, "maxResults": batch, "fields": fields}
+        if token:
+            params["nextPageToken"] = token
+        try:
+            resp = requests.get(f"{_get_jira_base_url()}/rest/api/3/search/jql",
+                                auth=_auth(), headers={"Accept": "application/json"},
+                                params=params, timeout=15)
+        except Exception as e:
+            log.error("Search request failed: %s", e)
+            break
+        if resp.status_code != 200:
+            log.error("Search failed: %s %s", resp.status_code, resp.text[:200])
+            break
+        data = resp.json()
+        issues.extend(data.get("issues", []))
+        token = data.get("nextPageToken")
+        if data.get("isLast", True) or not token:
+            break
+    return issues
+
+
+def get_issue_comments(ticket_key: str, max_results: int = 100) -> list:
+    """Return a ticket's comments (newest first). [] on failure."""
+    url = f"{_get_jira_base_url()}/rest/api/3/issue/{ticket_key}/comment"
+    try:
+        resp = requests.get(url, auth=_auth(),
+                            headers={"Accept": "application/json"},
+                            params={"maxResults": max_results, "orderBy": "-created"},
+                            timeout=15)
+        if resp.status_code == 200:
+            return resp.json().get("comments", [])
+        log.warning("get_issue_comments %s: HTTP %s", ticket_key, resp.status_code)
+        return []
+    except Exception as e:
+        log.warning("get_issue_comments failed for %s: %s", ticket_key, e)
+        return []
 
 
 def get_ticket_attachments(ticket_key: str) -> list:

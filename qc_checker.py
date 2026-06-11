@@ -823,19 +823,10 @@ _QC_COMMENT_PREFIXES = ("QC CHECK RESULTS", "QC SKIPPED")
 _RERUN_GRACE_SECONDS = 120  # ignore ticket updates within 2 min of QC comment (comment post itself updates the ticket)
 
 
-def _last_qc_comment_time(ticket_key: str, base_url: str, auth) -> str | None:
+def _last_qc_comment_time(ticket_key: str) -> str | None:
     """Return the ISO timestamp of the most recent QC comment, or None if none exists."""
-    import requests as _req
-    resp = _req.get(
-        f"{base_url}/rest/api/3/issue/{ticket_key}/comment",
-        auth=auth,
-        headers={"Accept": "application/json"},
-        params={"maxResults": 100, "orderBy": "-created"},
-        timeout=15,
-    )
-    if resp.status_code != 200:
-        return None
-    for c in resp.json().get("comments", []):
+    from tools_jira import get_issue_comments
+    for c in get_issue_comments(ticket_key):
         body = _extract_adf_text(c.get("body", ""))
         if body.startswith(_QC_COMMENT_PREFIXES):
             return c.get("created", "")
@@ -856,42 +847,19 @@ def _updated_after_qc(ticket_updated: str, qc_created: str) -> bool:
 
 def scan_need_qc_tickets(dry_run: bool = False) -> list:
     """Scan 'Need QC' tickets. Skips tickets with a QC comment unless changes were made after it."""
-    import requests as _req
-    from requests.auth import HTTPBasicAuth as _Auth
+    from tools_jira import search_issues_paged
 
-    base_url = os.getenv("JIRA_BASE_URL", "https://rkdgroup.atlassian.net")
-    auth     = _Auth(os.getenv("JIRA_EMAIL"), os.getenv("JIRA_API_TOKEN"))
-    jql      = f'project = DSLF AND status = "{NEED_QC_STATUS}" ORDER BY created ASC'
-
+    jql = f'project = DSLF AND status = "{NEED_QC_STATUS}" ORDER BY created ASC'
     log.info("Scanning: %s", jql)
 
-    all_issues = []
-    start, batch = 0, 50
-    while True:
-        resp = _req.get(
-            f"{base_url}/rest/api/3/search/jql", auth=auth,
-            headers={"Accept": "application/json"},
-            params={"jql": jql, "startAt": start, "maxResults": batch,
-                    "fields": "summary,status,updated"},
-            timeout=15,
-        )
-        if resp.status_code != 200:
-            log.error("Search failed: %s %s", resp.status_code, resp.text[:200])
-            break
-        data   = resp.json()
-        issues = data.get("issues", [])
-        all_issues.extend(issues)
-        if start + batch >= data.get("total", 0):
-            break
-        start += batch
-
+    all_issues = search_issues_paged(jql, "summary,status,updated")
     log.info("Found %d ticket(s) in %r", len(all_issues), NEED_QC_STATUS)
 
     results = []
     for issue in all_issues:
         key             = issue["key"]
         ticket_updated  = issue["fields"].get("updated", "")
-        last_qc_time    = _last_qc_comment_time(key, base_url, auth)
+        last_qc_time    = _last_qc_comment_time(key)
 
         if last_qc_time:
             if _updated_after_qc(ticket_updated, last_qc_time):
