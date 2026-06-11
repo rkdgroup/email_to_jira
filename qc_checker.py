@@ -159,6 +159,34 @@ def _collect_criteria_block(text: str, criteria_keyword: str) -> list[str]:
     return result
 
 
+def _load_adstra_flag_omits() -> dict:
+    """
+    seed_database → expected flag-omit set, from config/adstra_omit_database.yaml.
+    Mirrors parse_pipeline's loader (first entry wins on duplicate seeds) but
+    splits compound entries like "!$" into single characters for set compare.
+    """
+    yaml_path = _ROOT / "config" / "adstra_omit_database.yaml"
+    if not yaml_path.exists():
+        return {}
+    try:
+        import yaml
+        with open(yaml_path, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except Exception as e:
+        log.warning("Could not load %s: %s", yaml_path.name, e)
+        return {}
+    result: dict = {}
+    for entry in data.get("adstra_database", []):
+        seed_db = str(entry.get("seed_database", "")).upper()
+        flags   = entry.get("flags", [])
+        if seed_db and flags and seed_db not in result:
+            result[seed_db] = {ch for fl in flags for ch in str(fl)}
+    return result
+
+
+_ADSTRA_FLAG_OMITS = _load_adstra_flag_omits()
+
+
 def _is_saturn(select_data: dict, ticket_fields: dict) -> bool:
     """Saturn Corp orders are always FTP + ASCII Fixed regardless of the order form."""
     return ("saturn" in select_data.get("ship_to_email", "").lower()
@@ -618,6 +646,31 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
         else:
             _check("FAIL", "Flag Omits",
                    f"Mismatch — SELECT: {sorted(s_flags)}, ticket: {sorted(t_flags)}")
+
+    # 8b. ADSTRA expected flags — third source: known defaults per seed DB
+    # from config/adstra_omit_database.yaml. WARN-only by design.
+    t_seed_key = (ticket_fields.get("seed_db") or "").strip().upper()
+    expected_flags = _ADSTRA_FLAG_OMITS.get(t_seed_key)
+    if expected_flags:
+        if not s_flags:
+            _check("WARN", "ADSTRA Flag Omits",
+                   f"ADSTRA expects {sorted(expected_flags)} for {t_seed_key} — "
+                   f"no flags parsed from SELECT")
+        elif s_flags == expected_flags:
+            _check("PASS", "ADSTRA Flag Omits",
+                   f"SELECT flags match ADSTRA defaults for {t_seed_key}: "
+                   f"{sorted(expected_flags)}")
+        else:
+            missing = expected_flags - s_flags
+            extra   = s_flags - expected_flags
+            parts = []
+            if missing:
+                parts.append(f"missing {sorted(missing)}")
+            if extra:
+                parts.append(f"extra {sorted(extra)}")
+            _check("WARN", "ADSTRA Flag Omits",
+                   f"SELECT has {sorted(s_flags)} but ADSTRA defaults for "
+                   f"{t_seed_key} are {sorted(expected_flags)} ({'; '.join(parts)})")
 
     # 9. State omits
     s_states = select_data.get("omit_states", set())
