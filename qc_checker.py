@@ -555,7 +555,7 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
                f"({select_data.get('criteria_suffix', '') or 'no suffix'})")
     else:
         missing_dollar = []  # FAIL — $ amount not found at all
-        missing_period = []  # WARN — no time period found in description
+        missing_period = []  # WARN — period missing or different in description
 
         for dc in s_dollar:
             amount = re.escape(dc.replace('$', '').rstrip('+'))
@@ -567,13 +567,13 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
 
         for pc in s_period:
             n = re.match(r'L(\d+)M', pc).group(1)
-            # Pass if exact match OR any other time period is mentioned
-            if not (f"{n}M" in desc_text or f"{n} MONTH" in desc_text
-                    or re.search(r'\d+\s*M\b|\d+\s+MONTH', desc_text)):
-                missing_period.append(pc)
+            # Exact period with digit boundary ("3M" must not match "13M")
+            if re.search(rf'(?<!\d){n}\s*M(?:ONTHS?)?\b', desc_text):
+                continue
+            other = re.search(r'(?<!\d)(\d+)\s*M(?:ONTHS?)?\b', desc_text)
+            missing_period.append(
+                (pc, other.group(0).strip() if other else None))
 
-        found = [c for c in s_dollar if c not in missing_dollar] + \
-                [c for c in s_period if c not in missing_period]
         if not missing_dollar and not missing_period:
             _check("PASS", "Selection Criteria",
                    f"Criteria found in description: {', '.join(s_dollar + s_period)}")
@@ -582,8 +582,13 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
                    f"$ amount missing from description: {', '.join(missing_dollar)} "
                    f"(SELECT: {select_data.get('criteria_suffix', '')})")
         else:
+            details = [
+                f"SELECT specifies {pc} but description mentions {other!r}"
+                if other else f"no time period in description for {pc}"
+                for pc, other in missing_period
+            ]
             _check("WARN", "Selection Criteria",
-                   f"No time period in description for {', '.join(missing_period)} "
+                   f"{'; '.join(details)} "
                    f"(SELECT: {select_data.get('criteria_suffix', '')})")
 
     # 6. Seed database
