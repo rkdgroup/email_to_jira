@@ -7,6 +7,7 @@ import os
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
+import jpype
 import jaydebeapi
 
 load_dotenv(Path(__file__).parent / ".env")
@@ -43,12 +44,24 @@ _DRIVER   = "com.ibm.as400.access.AS400JDBCDriver"
 _JDBC_URL = f"jdbc:as400://{_HOST}"
 
 
+def _ensure_jvm() -> None:
+    """Start the JVM with headless flag before jaydebeapi can start it without one."""
+    if jpype.isJVMStarted():
+        return
+    jpype.startJVM(
+        jpype.getDefaultJVMPath(),
+        "-Djava.awt.headless=true",
+        f"-Djava.class.path={_JT400}",
+    )
+
+
 def get_connection():
     if not Path(_JT400).exists():
         raise FileNotFoundError(
             f"jt400.jar not found at: {_JT400}\n"
             "Set IBMI_JT400_JAR in .env to the correct path on this machine."
         )
+    _ensure_jvm()
     return jaydebeapi.connect(_DRIVER, _JDBC_URL, [_USER, _PASSWORD], _JT400)
 
 
