@@ -73,7 +73,16 @@
       "Bash(PYTHONIOENCODING=utf-8 python parse_pipeline.py \"C:\\\\Users\\\\suvam\\\\Downloads\\\\tmpyoiqwv4g.pdf\" --dry-run --verbose)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\suvam\\\\Desktop\\\\git_suvam\\\\Jira_automation\" -Recurse -File -Name)",
       "PowerShell(head *)",
-      "Bash(xargs -I {} sh -c 'echo \"=== {} ===\" && head -30 \"{}\"')"
+      "Bash(xargs -I {} sh -c 'echo \"=== {} ===\" && head -30 \"{}\"')",
+      "mcp__claude_ai_Atlassian__getAccessibleAtlassianResources",
+      "PowerShell(python \"D:\\\\Users\\\\smondal\\\\Documents\\\\email_to_jira\\\\WO#\\\\_check_wo_671_673.py\")",
+      "PowerShell($j = Get-Content \"D:\\\\Users\\\\smondal\\\\.claude\\\\projects\\\\D--Users-smondal-Documents-email-to-jira\\\\fe5cef47-9dba-4f45-818d-3ddc82fd07af\\\\tool-results\\\\mcp-claude_ai_Atlassian-searchJiraIssuesUsingJql-1781285190289.txt\" -Raw | ConvertFrom-Json; $j.issues.nodes | ForEach-Object { $wo = $_.fields.customfield_12089; if \\($null -eq $wo\\) { $wo = 'NO-WO' }; $ba = $_.fields.customfield_12191; if \\($null -eq $ba\\) { $bav = 'no-billable' } else { $bav = $ba.value }; \"{0}`t{1}`t{2}`t{3}`t{4}\" -f $_.key, $_.fields.created, $wo, $bav, $_.fields.customfield_12231 })",
+      "WebFetch(domain:pypi.org)",
+      "PowerShell(Remove-Item *)",
+      "PowerShell(python \"D:\\\\Users\\\\smondal\\\\Documents\\\\email_to_jira\\\\WO#\\\\_backfill_671_673.py\")",
+      "PowerShell(Get-CimInstance *)",
+      "PowerShell(python \"D:\\\\Users\\\\smondal\\\\Documents\\\\email_to_jira\\\\WO#\\\\_backfill_671.py\")",
+      "PowerShell(python \"D:\\\\Users\\\\smondal\\\\Documents\\\\email_to_jira\\\\WO#\\\\_verify_671.py\")"
     ]
   }
 }

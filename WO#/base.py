@@ -4,6 +4,7 @@ Requires: jaydebeapi, JPype1, jt400.jar
 """
 
 import os
+import sys
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
@@ -45,14 +46,14 @@ _JDBC_URL = f"jdbc:as400://{_HOST}"
 
 
 def _ensure_jvm() -> None:
-    """Start the JVM with headless flag before jaydebeapi can start it without one."""
+    """Start the JVM with headless flag before jaydebeapi can start it without one.
+    Headless is only needed on Linux (Jenkins); on Windows the AS400 driver uses AWT."""
     if jpype.isJVMStarted():
         return
-    jpype.startJVM(
-        jpype.getDefaultJVMPath(),
-        "-Djava.awt.headless=true",
-        f"-Djava.class.path={_JT400}",
-    )
+    jvm_args = [f"-Djava.class.path={_JT400}"]
+    if sys.platform != "win32":
+        jvm_args.insert(0, "-Djava.awt.headless=true")
+    jpype.startJVM(jpype.getDefaultJVMPath(), *jvm_args)
 
 
 def get_connection():
