@@ -1,0 +1,324 @@
+------------------------------------------------------------
+  DSLF JIRA: LIST NAMES & MAILER NAMES WITH SHORT FORMS
+  Generated: 2026-06-17  |  Tickets scanned: 628
+  List Names: 131 unique  |  Mailer Names: 156 unique
+------------------------------------------------------------
+
+------------------------------------------------------------
+  LIST NAMES  (131 unique)
+------------------------------------------------------------
+
+SECTION 1 — Coded Entries  (Code => Description)
+------------------------------------------------------------
+Stored as '3-CODE Description' in Jira. The code is the short form.
+
+  BFF  =>  BrightFocus Foundation  (covers multiple programs):
+            - ALZHEIMERS DISEASE RES
+            - BRIGHTFOCUS FDN MF (DMI)
+            - BRIGHTFOCUS INTERNALS
+            - MACULAR DEGENERATION RES
+            - NATL GLAUCOMA RESEARCH
+  PFOT =>  Peace for Our Troops
+
+  AACA  =>  AM AGAINST CHILD ABUSE
+  ACBF  =>  AM CHILD CAN BENV FUND
+  ACF  =>  A CHILD IS FOREVER
+  ACR  =>  AGGRESSIVE CANCER RES
+  BCP  =>  BREAST CANCER PROJECT
+  CARI  =>  CHILDREN AT RISK INTL
+  CCC  =>  COMBATING CHILD CANC FD
+  CCP  =>  CHILDRENS CANCER FND S
+  CFM  =>  COMM FOR MISSING CHILDRE
+  CPP  =>  CHILDPROTECTION PROGRAM
+  CWS  =>  CARE F/O WOUNDED SOLDIER
+  DDF  =>  DEFEAT DIABETES FND
+  ECAD  =>  EDUC CANINES ASST W/DIS
+  FCF  =>  FIREFIGHTERS CHARIT FND
+  FCL  =>  FIGHT CHILDHOOD LEUKEMIA
+  FEP  =>  FREEDOM EDUCATION PROJEC
+  HOC  =>  HEAL OUR CHILDREN
+  ICCF  =>  ISRAEL CHILDREN CAN FND
+  INV  =>  PROTECT ENFORCE OFF USA
+  KWN  =>  KIDS WISH NETWORK SWEEPS
+  MBF  =>  MANS BEST FRIEND
+  MR  =>  SAVE MISSION RECOVERY
+  NBLPF  =>  NATL BLUE LINE POL. FD
+  NCCI  =>  NATIONAL CANCER CENTER
+  NCF  =>  NATL CAREGIVING FND
+  NFOF  =>  NAT FALLEN OFFICER FDN
+  OR2  =>  OPERATION ROVER RESCUE
+  ORR  =>  OPERATION RAPID RESPONSE
+  PCP  =>  PROSTATE CANCER PROJECT
+  PF  =>  PROJECT FOSTER
+  PFOT  =>  PEACE FOR OUR TROOPS
+  PROJECT  =>  HEAL VETERANS
+  PTD  =>  PROJECT TOY DROP
+  SAVE  =>  SURVIVORS & VICTIMS EMP
+  SDCA  =>  CHARITABLE APPEALS MF
+
+SECTION 2 — Standalone Short Codes
+------------------------------------------------------------
+These appear without a description in the List Name field.
+
+  ACBF  =>  AM CHILD CAN BENV FUND
+  ACF  =>  A CHILD IS FOREVER
+  ACR  =>  AGGRESSIVE CANCER RES
+  ADR  =>  Alzheimers Disease Research
+  BCP  =>  BREAST CANCER PROJECT
+  CCCF  =>  Combating Child Cancer Fund
+  CFM  =>  COMM FOR MISSING CHILDRE
+  CPP  =>  CHILDPROTECTION PROGRAM
+  CWS  =>  CARE F/O WOUNDED SOLDIER
+  DDF  =>  DEFEAT DIABETES FND
+  ECAD  =>  EDUC CANINES ASST W/DIS
+  FCF  =>  FIREFIGHTERS CHARIT FND
+  FCL  =>  FIGHT CHILDHOOD LEUKEMIA
+  FEP  =>  FREEDOM EDUCATION PROJEC
+  HOC  =>  HEAL OUR CHILDREN
+  ICCF  =>  ISRAEL CHILDREN CAN FND
+  KWN  =>  KIDS WISH NETWORK SWEEPS
+  MDR  =>  Macular Degeneration Research
+  NCCI  =>  NATIONAL CANCER CENTER
+  NCF  =>  NATL CAREGIVING FND
+  NFOF  =>  NAT FALLEN OFFICER FDN
+  NGR  =>  National Glaucoma Research
+  NLEOMF  =>  National Law Enforcement Officers Memorial Fund
+  OR2  =>  OPERATION ROVER RESCUE
+  ORR  =>  OPERATION RAPID RESPONSE
+  PF  =>  PROJECT FOSTER
+  PFOT  =>  PEACE FOR OUR TROOPS
+  PHV  =>  Project Heal Veterans
+  PTD  =>  PROJECT TOY DROP
+  SAVE  =>  SURVIVORS & VICTIMS EMP
+  SHSM  =>  Sacred Heart Southern Missions
+  WWP  =>  Wounded Warrior Project
+
+SECTION 3 — Full Name Entries  (abbreviation where known)
+------------------------------------------------------------
+
+  21st Century Conservative Donors
+  60 Plus Association c/o American Target
+  ABANDONED CHILDRENS FUND
+  AID FOR STARVING CHILDREN
+  ALLIANCE FOR RETIRED AMERICANS
+  Americans for a Conservative Agenda (Am f/t Tru
+  Americans for Term Limits
+  Ann Children's Fund
+  CATHOLIC VOTE
+  Catholic Vote (formerly known as Fidelis)
+  Citizens Behind the Badge
+  Coalition to Salute America's Heroes-ATA
+  Conservatives against the United Nations
+  DIRECT MAIL SENIOR DONORS
+  Early Vote Action PAC
+  FEDERATION FOR AMERICAN IMMIGRATION REFORM  [Short: FAIR]
+  Foundation for Liberty and American Greatness
+  Frontiers of Freedom Foundation
+  Hotline Senior Superfile
+  Howard Jarvis Taxpayers Association
+  International Eye Foundation
+  Judicial Watch  [Short: JW]
+  JUDICIAL WATCH DONORS  [Short: JW]
+  JUDICIAL WATCH SUPPORTERS  [Short: JW]
+  Kurt Alme for Senate (MT)
+  Man's Best Friend
+  MATURE HEALTH
+  Mature Health Age 50+
+  National Caregiving Foundation
+  National Council For Survivors
+  National Republican Senatorial Committee
+  Natl Humane Education Society
+  NATURAL RESOURCES DEFENSE COUNCIL ( NRDC )  [Short: NRDC]
+  NLEOMF DONORS  [Short: NLEOMF]
+  OR2 OPERATION ROVER RESCUE  [Short: OR2]
+  Paws of Honor (PAWS)  [Short: PAWS]
+  Paws of Honor (PAWS) Sweeps  [Short: PAWS]
+  Project Open Hand
+  Rosie's Place
+  Sacred Heart Southern Missions Donors
+  Sacred Heart Southern Missions Mass Card Donors
+  Senior Citizens Alliance
+  Seniors United to Protect Social Security
+  Students for Life
+  Susan G. Komen
+  The Conservative Caucus
+  U.S. Justice Foundation/Legacy
+  US Deputy Sheriffs Association
+  US Deputy Sheriffs Association Sweeps DB
+  Viguerie Best Consumers
+  Viguerie Best Donors
+  VIGUERIE BEST POLITICAL
+  VIGUERIE BEST SWEEPS
+  Viguerie Best Sweepstakes Donors
+  Viguerie Fundraising superfile
+  Viguerie Powerhouse & GOP
+  Viguerie's Statewide Campaign Donor Superfile
+  Wounded Warrior Project  [Short: WWP]
+
+------------------------------------------------------------
+  MAILER NAMES  (156 unique)
+------------------------------------------------------------
+
+Format:  MAILER NAME  (short form)
+  * = derived acronym from initials  |  no * = known/used abbreviation
+------------------------------------------------------------
+
+  21st Century Conservative Donors  (*21CCD)
+  60 PLUS ASSOCIATION  (*60PA)
+  60 Plus Association c/o American Target  (*60PACOAT)
+  60+ ASSOC  (= 60 Plus Association)
+  ACF  (= A Child Is Forever)
+  ACL  (= Americans with Cancer/Leukemia)
+  AICR  (= American Institute for Cancer Research)
+  ALSAC / ST. JUDE HOSPITAL  (*ASJH)
+  ALZHEIMERS DISEASE FUND  (*ADF)
+  ALZHEIMERS DISEASE RESEARCH  (*ADR)
+  AMER. F/CONSTITUTIONAL LIBERTY  (*AFCL)
+  AMER. PARKINSON DISEASE ASSOC.  (*APDA)
+  AMERICAN ACTION FUND FOR BLIND  (*AAFB)
+  AMERICAN CANCER SOCIETY  (*ACS)
+  American Conservative Union  (*ACU)
+  AMERICAN DIABETES ASSOCIATION  (*ADA)
+  American Farmland Trust  (*AFT)
+  AMERICAN HEART ASSOCIATION  (*AHA)
+  AMERICAN INST. CANCER RESEARCH  (*AICR)
+  AMERICAN KIDNEY FUND  (*AKF)
+  American Mailing Lists Corporation Management  (*AMLCM)
+  Americans Against Child Abuse  (*AACA)
+  Americares
+  Animal Welfare  (*AW)
+  ARBOR DAY FOUNDATION  (*ADF)
+  ARTHRITIS FOUNDATION  (*AF)
+  AUTISM SPEAKS  (*AS)
+  Autism Spectrum Disorder Fdtn Sweeps  (*ASDFS)
+  AUTISM SPECTRUM DISORDER FND.  (*ASDF)
+  BAYLOR COLLEGE OF MEDICINE  (*BCM)
+  Blue Star Families  (*BSF)
+  BOYS & GIRLS CLUB OF AMERICA  (*BGCA)
+  Breast Cancer Project  (*BCP)
+  CALL TRADER  (*CT)
+  Cardinal Newman Society  (*CNS)
+  CARL BLOOM ASSOCIATES, INC.  (*CBA)
+  CHF  (= Children's Health Fund)
+  Child Protection Program (CPP)  (CPP)
+  Children's Cancer Project Sweeps  (*CCPS)
+  CITIZENS BEHIND THE BADGE  (*CBB)
+  CITIZENS TO STOP PLASTIC POLLU  (*CSPP)
+  CMN  (= Children's Miracle Network)
+  COMING HOME FOUNDATION  (*CHF)
+  Common Sense for America PAC  (*CSAP)
+  Council For Retirement Security  (*CRS)
+  CSAH-ATA  (= Coalition to Salute America's Heroes - ATA)
+  DANA FARBER CANCER INSTITUTE  (*DFCI)
+  DATALOGIX
+  DISABLED AMERICAN VETERANS  (*DAV)
+  Dominican Sisters of St Cecilia  (*DSSC)
+  ELIZABETH DOLE FDTN  (*EDF)
+  EMERSON PUBLISHING  (*EP)
+  ENDURANCE WARRANTY SERVICES  (*EWS)
+  Endurance Warranty Services, LLC  (*EWS)
+  EVERCARE PROTECTION  (*EP)
+  Exchange
+  Eyebank For Sight  (*ES)
+  EYEBANK FOR SIGHT RESTORATION  (*ESR)
+  Faith And Freedom Coalition  (*FFC)
+  FEEDING PETS OF THE HOMELESS  (*FPH)
+  FLAG  (= Foundation for Liberty and American Greatness)
+  FND  (= Foundation (generic))
+  FND.F/LIBERTY & AMER GREATNESS  (= Foundation for Liberty and American Greatness)
+  FOOD BANKS  (*FB)
+  FOOD FOR THE POOR  (*FP)
+  Foundation for Liberty and American Greatness  (*FLAG)
+  Franciscan Friars of the Atonement  (*FFA)
+  Franciscan Friars TOR Mass Card  (*FFTMC)
+  Freedom Education Project  (*FEP)
+  FUND INTEGRATIVE CANCER TREAT.  (*FICT)
+  GUIDE DOGS FOR THE BLIND  (*GDB)
+  Heal Our Children  (*HOC)
+  HEALTHY DIRECTIONS LLC  (*HD)
+  HELP ME SEE INC  (*HMS)
+  HELP OUR MILITARY & POLICE DOG  (*HOMPD)
+  HERITAGE FDTN  (= Heritage Foundation)
+  Heritage Foundation  (*HF)
+  HOC  (= Heal Our Children)
+  Husted For Senate  (*HS)
+  IL POLICY INSTITUTE  (= Illinois Policy Institute)
+  Illinois Policy Institute  (*IPI)
+  In Vest USA  (*VU)
+  In Vest USA $50+  (*VU$)
+  International Fund for Animal Welfare  (*IFAW)
+  Judicial Watch-$100-999.99  (*JW$99999)
+  League of the Miraculous Infant Jesus of Prague  (*LMIJP)
+  LITTLETON COIN CO  (*LC)
+  Littleton Coin Company  (*LCC)
+  MACULAR DEGENERATION RESEARCH  (*MDR)
+  Mercy Home For Boys & Girls  (*MHBG)
+  MERCY HOME FOR BOYS/GIRLS  (*MHBG)
+  MERCY SHIPS  (*MS)
+  MIAMI PROJECT CURE PARALYSIS  (*MPCP)
+  Mission Recovery  (*MR)
+  NATIONAL AUDUBON SOCIETY  (*NAS)
+  National Cancer Center-Fighting Childhood Leuk  (*NCCFCL)
+  NATIONAL CANCER RESEARCH CTR.  (*NCRC)
+  National Center for Police Defense  (*NCPD)
+  NATIONAL FEDERATION O/T BLIND  (*NFOTB)
+  National Foundation for Cancer Research  (*NFCR)
+  NATIONAL GLAUCOMA RESEARCH  (*NGR)
+  National Organization of Retired Americans  (*NORA)
+  NATIONAL POLICE ASSOCIATION  (*NPA)
+  NATIONAL SHERIFF'S ASSOCIATION  (*NSA)
+  Neighborhood Christian Clinic  (*NCC)
+  OPEN DOORS US  (*ODU)
+  Outright International  (*OI)
+  PARKINSON'S FOUNDATION  (*PF)
+  Partners in Health  (*PH)
+  Paws for Purple Hearts  (*PPH)
+  PAWS OF HONOR  (*PH)
+  Pine Street Inn  (*PSI)
+  PMI INSURANCE CO  (*PI)
+  PRIESTS OF THE SACRED HEART  (*PSH)
+  Prison Fellowship International  (*PFI)
+  Protection Direct  (*PD)
+  PUBLIC BROADCASTING SERVICE  (*PBS)
+  PUBLIC CITIZEN  (*PC)
+  Rental
+  RESCUE MISSION CONSORTIUM  (*RMC)
+  Ronald Reagan Presidential Library Foundation  (*RRPLF)
+  SALESIAN MISSIONS  (*SM)
+  SCF  (= Sacred Heart Southern Missions)
+  Secure America Now  (*SAN)
+  SHARED HOPE INT'L  (*SHI)
+  SILENT CRY FOUNDATION  (*SCF)
+  Sixty Plus Foundation  (*SPF)
+  SOUTHERN POVERTY LAW CENTER  (*SPLC)
+  SPECIAL OLYMPICS  (*SO)
+  SUSAN G. KOMEN FOUNDATION  (*SGKF)
+  SW RESERVATION AID  (= Southwest Reservation Aid)
+  Tafoya For Senate  (*TS)
+  Tafoya for Senate (MN)  (*TS)
+  Texas Public Policy  (*TPP)
+  THE ANN CHILDREN'S FUND  (*ACF)
+  The Conservative Caucus  (*CC)
+  The Humane League  (*HL)
+  Trust for Public Land  (*TPL)
+  TUNNELS TO TOWERS  (*TT)
+  Turning Point Action  (*TPA)
+  TX PUBLIC POLICY  (= Texas Public Policy Foundation)
+  U.S. DEPUTY SHERIFFS ASSOC.  (*UDSA)
+  U.S. MONEY RESERVE  (*UMR)
+  UNIVERSITY OF IL HEALTH  (*UIH)
+  USDSA  (= US Deputy Sheriffs Association)
+  VETERANS RELIEF NETWORK  (*VRN)
+  Veterans Relief Network Sweeps  (*VRNS)
+  Vietnam Veterans Memorial Fund (#5310027)  (*VVMF)
+  Viguerie Best Donors  (*VBD)
+  Viguerie Best Sweepstakes Donors  (*VBSD)
+  VOLUNTEER FIREFIGHTER ALLIANCE  (*VFA)
+  Women's Rights Without Frontiers  (*WRWF)
+  World Changers (NACF)  (NACF | *WC)
+  WORLD CHILDREN'S FUND  (*WCF)
+  XAVIER SOCIETY FOR THE BLIND  (*XSB)
+  YOUTH VILLAGES  (*YV)
+
+------------------------------------------------------------
+END OF FILE
