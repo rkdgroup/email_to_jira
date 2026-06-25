@@ -3,7 +3,7 @@ Qty Approval Queue Scanner
 1. Scans service-account inbox for unread "NPA/QTY APPROVAL/<order#>" emails.
    - Parses approved qty from body (format: "<order#> = <qty>")
    - Updates Requested Quantity on the matching Jira ticket
-   - Transitions ticket out of "Waiting on Qty Approval"
+   - Never transitions the ticket — it stays in "Waiting on Qty Approval"
    - Marks the email as read so it is not reprocessed
 2. For tickets still waiting (no approval email found), downloads the SELECT PDF
    and reads TOTAL RECORDS SELECTED as a fallback qty.
@@ -44,7 +44,8 @@ GRAPH_BASE     = "https://graph.microsoft.com/v1.0"
 STATUS         = "Waiting on Qty Approval"
 PROJECT        = "DSLF"
 
-DEFAULT_EMAIL_TO = "smondal@data-management.com"
+DEFAULT_EMAIL_TO = "ADoyle@data-management.com"
+#DEFAULT_EMAIL_TO = "smondal@data-management.com"
 DEFAULT_EMAIL_CC = "smondal@data-management.com"
 
 FIELDS = [
@@ -59,8 +60,6 @@ FIELDS = [
 
 # Matches: "NPA/QTY APPROVAL/J2044", "QTY APPROVAL J2044", etc.
 _SUBJECT_RE = re.compile(r'QTY\s*APPROVAL[/\s]+([A-Z0-9\-]+)', re.IGNORECASE)
-# Matches body line: "J2044 = 3570" or "J2044=3,570"
-_BODY_QTY_RE = re.compile(r'\b[A-Z0-9\-]+=\s*([\d,]+)', re.IGNORECASE)
 
 
 def _auth():
@@ -91,7 +90,7 @@ def send_email(to: str, subject: str, body: str, cc: str = "") -> None:
         "body": {"contentType": "Text", "content": body},
         "toRecipients": [{"emailAddress": {"address": a.strip()}}
                          for a in to.split(",")],
-        "replyTo": [{"emailAddress": {"address": "smondal@data-management.com"}}],
+        "replyTo": [{"emailAddress": {"address": "ADoyle@data-management.com"}}],
     }
     if cc:
         msg["ccRecipients"] = [{"emailAddress": {"address": a.strip()}}
@@ -115,7 +114,7 @@ def scan_approval_emails() -> dict[str, int]:
     Scan the service-account inbox for unread NPA/QTY APPROVAL emails.
 
     Subject format:  NPA/QTY APPROVAL/J2044
-    Body format:     J2044 = 3570
+    Body format:     J2044 = 3570   (the '=' is required; spaces around it optional)
 
     Returns {manager_order_number (uppercased): approved_qty}.
     Marks matched emails as read so they are not reprocessed on the next run.
@@ -164,7 +163,12 @@ def scan_approval_emails() -> dict[str, int]:
         body_text = re.sub(r'<[^>]+>', ' ', raw_body)
         body_text = re.sub(r'&[a-z]+;', ' ', body_text)
 
-        qty_m = _BODY_QTY_RE.search(body_text)
+        # Require "<order#> = <qty>": the order number from the subject, an '='
+        # sign (spaces optional on either side), then the approved quantity.
+        # Anchoring to order_num guarantees the qty belongs to this order and
+        # not some unrelated "X=N" line in the body.
+        qty_pat = re.compile(rf'\b{re.escape(order_num)}\s*=\s*([\d,]+)', re.IGNORECASE)
+        qty_m = qty_pat.search(body_text)
         if not qty_m:
             continue
 
@@ -198,54 +202,12 @@ def scan_approval_emails() -> dict[str, int]:
 # Applying an approval to a Jira ticket
 # ---------------------------------------------------------------------------
 
-def _transition_ticket(key: str) -> bool:
-    """
-    Transition a ticket out of Waiting on Qty Approval.
-    Tries transitions whose name contains 'approv' or whose target status
-    is 'in progress' / 'ready'. Falls back to the first non-waiting transition.
-    Returns True if a transition was applied.
-    """
-    resp = requests.get(
-        f"{JIRA_BASE_URL}/rest/api/3/issue/{key}/transitions",
-        auth=_auth(), timeout=15,
-    )
-    if not resp.ok:
-        return False
-
-    transitions = resp.json().get("transitions", [])
-    target_id = None
-
-    for t in transitions:
-        name      = t.get("name", "").lower()
-        to_status = (t.get("to") or {}).get("name", "").lower()
-        if "approv" in name or "in progress" in to_status or "ready" in name:
-            target_id = t["id"]
-            break
-
-    if not target_id:
-        for t in transitions:
-            to_status = (t.get("to") or {}).get("name", "").lower()
-            if "waiting" not in to_status and "qty" not in to_status:
-                target_id = t["id"]
-                break
-
-    if not target_id:
-        return False
-
-    r = requests.post(
-        f"{JIRA_BASE_URL}/rest/api/3/issue/{key}/transitions",
-        auth=_auth(),
-        headers={"Content-Type": "application/json"},
-        json={"transition": {"id": target_id}},
-        timeout=15,
-    )
-    return r.ok
-
-
 def apply_qty_approval(ticket: dict, qty: int) -> str:
     """
-    Update Requested Quantity (customfield_12271) and transition the ticket.
-    Returns one of: "updated+transitioned", "updated", "failed".
+    Update Requested Quantity (customfield_12271) only.
+
+    The ticket is NEVER transitioned — it stays in 'Waiting on Qty Approval'
+    regardless of the result. Returns one of: "updated", "failed".
     """
     key = ticket["key"]
 
@@ -261,8 +223,7 @@ def apply_qty_approval(ticket: dict, qty: int) -> str:
         print(f"  ERROR updating {key}: {resp.status_code} {resp.text[:120]}")
         return "failed"
 
-    transitioned = _transition_ticket(key)
-    return "updated+transitioned" if transitioned else "updated"
+    return "updated"
 
 
 # ---------------------------------------------------------------------------
@@ -463,6 +424,109 @@ def build_report(waiting: list[dict], processed: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def build_mailer_report(mailer: str, processed: list[dict], waiting: list[dict]) -> str:
+    """
+    Body is just '<order#> = <qty>' lines, one per order — nothing else.
+    e.g.
+        J2044 = 3,570
+        J2328 = 5,816
+    Quantity is the approved qty for processed tickets, otherwise the SELECT
+    PDF qty (falling back to the ticket's Requested Quantity).
+    """
+    rows: list[tuple[str, int | None]] = []
+    for t in processed:
+        rows.append((t["manager_order"], t.get("approved_qty")))
+    for t in waiting:
+        rows.append((t["manager_order"], t.get("select_qty") or t.get("req_qty")))
+
+    lines = []
+    for order, qty in sorted(rows, key=lambda r: r[0]):
+        qty_str = f"{int(qty):,}" if qty is not None else "-"
+        lines.append(f"{order} = {qty_str}")
+
+    return "\n".join(lines)
+
+
+def group_by_mailer(processed: list[dict], waiting: list[dict]) -> dict[str, dict]:
+    """Group both processed and waiting tickets by mailer name (blank → '')."""
+    groups: dict[str, dict] = defaultdict(lambda: {"processed": [], "waiting": []})
+    for t in processed:
+        groups[(t.get("mailer_name") or "").strip()]["processed"].append(t)
+    for t in waiting:
+        groups[(t.get("mailer_name") or "").strip()]["waiting"].append(t)
+    return groups
+
+
+# Minimum length of a consecutive order run before it is collapsed to "first-last".
+_COLLAPSE_MIN_RUN = 2
+
+
+def _collapse_orders(orders: list[str]) -> str:
+    """
+    Join order numbers with '/', collapsing consecutive runs to 'first-last'.
+
+    A run is 2+ orders sharing the same alpha prefix with numbers incrementing
+    by 1 (e.g. J1000, J1001, J1002, J1003). Runs of _COLLAPSE_MIN_RUN or more
+    become 'J1000-J1003'; shorter runs and unparseable tokens stay as-is.
+    Original tokens are kept at the range endpoints so any zero-padding is
+    preserved.
+    """
+    items: list[tuple[str | None, int | None, str]] = []
+    for o in orders:
+        m = re.fullmatch(r'([A-Za-z]+)(\d+)', o)
+        items.append((m.group(1).upper(), int(m.group(2)), o) if m else (None, None, o))
+
+    # Sort parseable tokens by (prefix, number); unparseable ones fall to the end.
+    items.sort(key=lambda x: (x[0] is None, x[0] or "", x[1] if x[1] is not None else 0, x[2]))
+
+    parts: list[str] = []
+    i, n = 0, len(items)
+    while i < n:
+        pfx, num, orig = items[i]
+        if pfx is None:
+            parts.append(orig)
+            i += 1
+            continue
+        j = i
+        while j + 1 < n and items[j + 1][0] == pfx and items[j + 1][1] == items[j][1] + 1:
+            j += 1
+        if j - i + 1 >= _COLLAPSE_MIN_RUN:
+            parts.append(f"{items[i][2]}-{items[j][2]}")
+        else:
+            parts.extend(items[k][2] for k in range(i, j + 1))
+        i = j + 1
+    return "/".join(parts)
+
+
+def _subject_for(mailer: str, processed: list[dict], waiting: list[dict], default: str) -> str:
+    """
+    Build the subject as '<prefix>/QTY APPROVAL/<orders>'.
+
+    Prefix depends on whether this mailer is an individual or a group:
+      - 1 ticket  (individual) -> list-name abbreviation   e.g. NCF/QTY APPROVAL/J2113
+      - >1 tickets (group)     -> mailer-name abbreviation  e.g. HF/QTY APPROVAL/J2113/J2114
+    When no clean abbreviation is found, the prefix is omitted entirely
+    (just 'QTY APPROVAL/J2113'). Group orders collapse consecutive runs to
+    a range (see _collapse_orders).
+    """
+    tickets = processed + waiting
+    orders  = [t["manager_order"] for t in tickets if t.get("manager_order")]
+    if not orders:
+        return default
+
+    if len(tickets) == 1:
+        cand = _abbrev_list_name((tickets[0].get("list_name") or "").strip())
+        # A clean abbreviation has no spaces; a full/unrecognized name does -> omit.
+        prefix = cand if cand and " " not in cand else ""
+    else:
+        cand = _abbrev_mailer(mailer) if mailer else ""
+        # Only use it if the lookup actually abbreviated the mailer to a clean code.
+        prefix = cand if cand and cand != mailer and " " not in cand else ""
+
+    head = f"{prefix}/QTY APPROVAL" if prefix else "QTY APPROVAL"
+    return f"{head}/" + _collapse_orders(orders)
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -478,6 +542,8 @@ def main():
                         help=f"CC address(es), comma-separated (default: {DEFAULT_EMAIL_CC})")
     parser.add_argument("--no-email-scan",  action="store_true",
                         help="Skip inbox scan; use SELECT PDFs only")
+    parser.add_argument("--combined",        action="store_true",
+                        help="Send one combined digest email instead of one email per mailer")
     args = parser.parse_args()
 
     if not JIRA_EMAIL or not JIRA_TOKEN:
@@ -514,21 +580,35 @@ def main():
         print(f"Downloading SELECT PDFs for {len(waiting)} remaining ticket(s)...")
         enrich_with_select_qty(waiting)
 
-    # 5. Build and deliver report
-    report = build_report(waiting, processed)
-
-    all_orders = [t["manager_order"] for t in processed + waiting if t.get("manager_order")]
-    subject = "QTY APPROVAL/" + "/".join(all_orders) if all_orders else args.subject
+    # 5. Build and deliver report(s)
+    if args.combined:
+        # Single digest email (legacy behavior)
+        report  = build_report(waiting, processed)
+        subject = _subject_for("", processed, waiting, args.subject)
+        send_email(args.email, subject, report, cc=args.cc)
+        out_chunks = [report]
+    else:
+        # One email per mailer, all to the same recipient
+        groups     = group_by_mailer(processed, waiting)
+        out_chunks = []
+        for mailer in sorted(groups):
+            g       = groups[mailer]
+            report  = build_mailer_report(mailer, g["processed"], g["waiting"])
+            subject = _subject_for(mailer, g["processed"], g["waiting"], args.subject)
+            mailer_disp = _abbrev_mailer(mailer) if mailer else "Unspecified Mailer"
+            print(f"  Sending {mailer_disp}: "
+                  f"{len(g['processed'])} approved, {len(g['waiting'])} pending")
+            send_email(args.email, subject, report, cc=args.cc)
+            out_chunks.append(report)
+        if not groups:
+            print("  No tickets to report.")
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as fh:
-            fh.write(report + "\n")
+            fh.write(("\n" + "=" * 60 + "\n\n").join(out_chunks) + "\n")
         print(f"Report written to {args.output}")
-
-    send_email(args.email, subject, report, cc=args.cc)
-
-    if not args.output:
-        print(report)
+    else:
+        print(("\n" + "=" * 60 + "\n\n").join(out_chunks))
 
 
 if __name__ == "__main__":
