@@ -2,6 +2,7 @@
   billing_cust: N85
   db_name: NHES
   rental_name: NATL HUMANE EDU SOCIETY
+  abbrev: null
   list_manager: NITN
   lm_contact: CHERYL/JEN
   lrr: AWD
@@ -10,7 +11,26 @@
   billing_cust: P24
   db_name: PREVENT BLINDNESS
   rental_name: PREVENT BLINDNESS
+  abbrev: null
   list_manager: NITN
   lm_contact: CHERYL/JEN
   lrr: AWD
   comments: WHEN REQUESTED
+- db_code: U90D
+  billing_cust: U90
+  db_name: UNITED SPINAL ASSOCIATION
+  rental_name: UNITED SPINAL ASSOCIATION FUNRAISERS
+  abbrev: null
+  list_manager: NITN
+  lm_contact: CHERYL/JEN
+  lrr: AWD
+  comments: null
+- db_code: U90D
+  billing_cust: U90
+  db_name: UNITED SPINAL ASSOCIATION
+  rental_name: VETSFIRST
+  abbrev: null
+  list_manager: NITN
+  lm_contact: CHERYL/JEN
+  lrr: AWD
+  comments: null

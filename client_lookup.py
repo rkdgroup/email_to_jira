@@ -59,6 +59,46 @@ def _word_overlap(a: str, b: str) -> float:
     return matches / len(wa)
 
 
+_ABBREV_TOKEN_RE = re.compile(r"[A-Za-z0-9&]+")
+
+
+def _abbrev_tokens(*names: str) -> list[str]:
+    """
+    Ordered, de-duplicated uppercase tokens (2+ chars) from the given names.
+    Leading tokens come first, so an ADSTRA-style title like '3-NCF NATL
+    CAREGIVING FND' yields ['NCF', 'NATL', 'CAREGIVING', ...] — the list-code
+    abbreviation is tried before the descriptive words.
+    """
+    toks: list[str] = []
+    seen: set = set()
+    for nm in names:
+        if not nm:
+            continue
+        for w in _ABBREV_TOKEN_RE.findall(nm):
+            wu = w.upper()
+            if len(wu) >= 2 and wu not in seen:
+                seen.add(wu)
+                toks.append(wu)
+    return toks
+
+
+def _match_by_abbrev(rows: list[dict], tokens: list[str]) -> dict | None:
+    """
+    Return the first row whose 'abbrev' exactly equals one of the tokens,
+    testing tokens in order (so the leading list-code wins). Multi-word
+    abbreviations are skipped since tokens are single words.
+    """
+    index: dict[str, dict] = {}
+    for r in rows:
+        ab = (r.get("abbrev") or "").strip().upper()
+        if ab and " " not in ab and ab not in index:
+            index[ab] = r
+    for t in tokens:
+        if t in index:
+            return index[t]
+    return None
+
+
 def _load_yaml(path: Path) -> list[dict]:
     import yaml
     for enc in ("utf-8", "cp1252"):
@@ -215,6 +255,24 @@ def enrich_fields(
         for row in _load_broker_sheet(list_manager) + _load_all_clients():
             if row.get("db_code", "").upper().strip() == db_code.upper().strip():
                 return _row_to_result(row)
+
+    # 1.5. Abbreviation exact-token match — high precision. ADSTRA-style titles
+    # embed the list-code abbreviation (e.g. "3-PFOT ..." -> PFOT -> O29D).
+    # Broker rows first so a shared abbreviation (e.g. ACF = A Child Forever in
+    # ADSTRA vs Abandoned Children's Fund in KAP) resolves within the right broker.
+    abbr_tokens = _abbrev_tokens(list_name, mailer_name)
+    if abbr_tokens:
+        broker_rows = _load_broker_sheet(list_manager)
+        if row_manager_filter and broker_rows:
+            broker_rows = [r for r in broker_rows
+                           if row_manager_filter.upper() in (r.get("list_manager") or "").upper()]
+        hit = _match_by_abbrev(broker_rows, abbr_tokens)
+        if not hit and not broker_only:
+            hit = _match_by_abbrev(_load_all_clients(), abbr_tokens)
+        if hit:
+            log.info("Abbrev match: %s -> %s (%s)",
+                     list_name or mailer_name, hit.get("db_code"), hit.get("abbrev"))
+            return _row_to_result(hit)
 
     # 2. Broker-specific YAML
     broker_rows = _load_broker_sheet(list_manager)

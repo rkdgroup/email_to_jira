@@ -2,6 +2,7 @@
   billing_cust: A15
   db_name: ALLIANCE RETIRED AMERICANS
   rental_name: ARA
+  abbrev: null
   list_manager: CELCO
   lm_contact: MISTY
   lrr: AWD
@@ -10,6 +11,7 @@
   billing_cust: P88
   db_name: PROJECT OPEN HAND
   rental_name: PROJECT OPEN HAND
+  abbrev: null
   list_manager: CELCO
   lm_contact: SARA
   lrr: AWD

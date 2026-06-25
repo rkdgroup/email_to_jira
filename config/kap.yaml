@@ -2,23 +2,35 @@
   billing_cust: A68
   db_name: ABANDONED CHILDRENS FUND
   rental_name: ABANDONED CHILDRENS FUND
+  abbrev: ACF
   list_manager: KEY ACQUISITION
-  lm_contact: STACEY
-  lrr: JRH
-  comments: null
-- db_code: I12D
-  billing_cust: I13
-  db_name: CHILDRENS HUNGER RELIEF FUND
-  rental_name: CHILDRENS HUNGER RELIEF FUND
-  list_manager: KEY ACQUISITION
-  lm_contact: STACEY
-  lrr: JRH
+  lm_contact: JENNY
+  lrr: null
   comments: null
 - db_code: S05D
   billing_cust: S15
   db_name: AID FOR STARVING CHILDREN
   rental_name: AID FOR STARVING CHILDREN
+  abbrev: AFSC
   list_manager: KEY ACQUISITION
-  lm_contact: LIZ
-  lrr: JRH
+  lm_contact: JENNY
+  lrr: null
+  comments: null
+- db_code: I12D
+  billing_cust: I13
+  db_name: CHILDRENS HUNGER RELIEF FUND
+  rental_name: CHILDRENS HUNGER RELIEF FUND
+  abbrev: CHRF
+  list_manager: KEY ACQUISITION
+  lm_contact: JENNY
+  lrr: null
+  comments: null
+- db_code: S52D
+  billing_cust: S52
+  db_name: SBI - ST. BONAVENTURE INDIAN
+  rental_name: ST. BONAVENTURE INDIAN MISSION AND SCHOOL SWEEPS
+  abbrev: SBI
+  list_manager: KEY ACQUISITION
+  lm_contact: JENNY
+  lrr: null
   comments: null

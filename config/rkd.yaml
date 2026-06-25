@@ -1,15 +1,8 @@
-- db_code: M13D
-  billing_cust: M57
-  db_name: MADD
-  rental_name: MADD
-  list_manager: RKD GROUP
-  lm_contact: BRITTANY
-  lrr: JRH
-  comments: EFFECTIVE 7'2020
 - db_code: A98D
   billing_cust: A98
   db_name: AMERICAN BIBLE SOCIETY
   rental_name: AMERICAN BIBLE SOCIETY
+  abbrev: null
   list_manager: RKD GROUP
   lm_contact: BRITTANY
   lrr: JRH
@@ -18,6 +11,7 @@
   billing_cust: F72
   db_name: FREEDOM SERVICE DOGS
   rental_name: FREEDOM SERVICE DOGS
+  abbrev: null
   list_manager: RKD GROUP
   lm_contact: BRITTANY
   lrr: JRH
@@ -26,31 +20,53 @@
   billing_cust: G27
   db_name: GUIDE DOGS FOR THE BLIND
   rental_name: GUIDE DOGS FOR THE BLIND
+  abbrev: null
   list_manager: RKD GROUP
   lm_contact: BRITTANY
-  lrr: JRH
+  lrr: LAH
   comments: null
 - db_code: S56D
   billing_cust: S56
   db_name: SUSAN G KOMEN
   rental_name: SUSAN G KOMEN
+  abbrev: null
   list_manager: RKD GROUP
   lm_contact: BRITTANY
   lrr: JRH
   comments: null
-- db_code: T14D
+- db_code: T14A
   billing_cust: T15
   db_name: TOYS FOR TOTS
   rental_name: MTFT
+  abbrev: null
   list_manager: RKD GROUP
   lm_contact: BRITTANY
-  lrr: null
+  lrr: JRH
   comments: null
 - db_code: T39D
   billing_cust: T39
   db_name: TX CHILDREN'S HOSPITAL
   rental_name: TX CHILDREN'S HOSPITAL
+  abbrev: null
   list_manager: RKD GROUP
   lm_contact: BRITTANY
   lrr: JRH
   comments: null
+- db_code: M13D
+  billing_cust: M57
+  db_name: MADD
+  rental_name: MADD
+  abbrev: null
+  list_manager: RKD GROUP
+  lm_contact: BRITTANY
+  lrr: JRH
+  comments: EFFECTIVE 7'2020
+- db_code: T14D
+  billing_cust: T15
+  db_name: TOYS FOR TOTS
+  rental_name: MTFT
+  abbrev: null
+  list_manager: RKD GROUP
+  lm_contact: BRITTANY
+  lrr: null
+  comments: carried over - not in 2026 sheet

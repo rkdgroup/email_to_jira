@@ -2,6 +2,7 @@
   billing_cust: T11
   db_name: US DEPUTY SHERIFFS ASSOCIATION
   rental_name: US DEPUTY SHERIFFS ASSOCIATION
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -10,6 +11,7 @@
   billing_cust: T11
   db_name: COLLEGE REPUBLICANS OF AMERICA
   rental_name: COLLEGE REPUBLICANS OF AMERICA
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -18,6 +20,7 @@
   billing_cust: T11
   db_name: HOWARD JARVIS TAXPAYERS ASSOCIATION
   rental_name: HOWARD JARVIS TAXPAYERS ASSOCIATION
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -26,6 +29,7 @@
   billing_cust: T11
   db_name: AMERICANS UNITED FOR LIFE
   rental_name: AMERICANS UNITED FOR LIFE
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -34,6 +38,7 @@
   billing_cust: T11
   db_name: COMMITTEE FOR JUSTICE
   rental_name: COMMITTEE FOR JUSTICE
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -42,6 +47,7 @@
   billing_cust: T11
   db_name: CHRISTIAN SENIORS ASSOCIATION
   rental_name: CHRISTIAN SENIORS ASSOCIATION
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -50,6 +56,7 @@
   billing_cust: T11
   db_name: LAW ENFORCEMENT ACTION NETWORK
   rental_name: LEAN
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -58,6 +65,7 @@
   billing_cust: T11
   db_name: PRIESTS FOR LIFE
   rental_name: PRIESTS FOR LIFE
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -66,6 +74,7 @@
   billing_cust: T11
   db_name: SECURE FREEDOM
   rental_name: SECURE FREEDOM
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -74,222 +83,16 @@
   billing_cust: T11
   db_name: STUDENTS FOR LIFE
   rental_name: STUDENTS FOR LIFE
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
   comments: RUN ORDERS FROM T11R
-- db_code: A70D
-  billing_cust: A70
-  db_name: ANN CHILDREN'S FUND
-  rental_name: ANN CHILDREN'S FUND
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: C66D
-  billing_cust: C66
-  db_name: CENTER FOR SECURITY POLICY
-  rental_name: CENTER FOR SECURITY POLICY
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: C81D
-  billing_cust: C81
-  db_name: CITIZENS BEHIND THE BADGE
-  rental_name: CITIZENS BEHIND THE BADGE
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: C86D
-  billing_cust: C86
-  db_name: CONSERVATIVE CAUCUS
-  rental_name: AMERICANS FOR CONSTITUTIONAL LIBERTY/TCC
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: E25D
-  billing_cust: E25
-  db_name: AMERICAN ENERGY ALLIANCE (ANE)
-  rental_name: AMERICAN ENERGY ALLIANCE (ANE)
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: F12D
-  billing_cust: F12
-  db_name: FEDUP PAC
-  rental_name: FEDUP PAC
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: F27X
-  billing_cust: F27
-  db_name: FAITH & FREEDOM COALITION
-  rental_name: FAITH & FREEDOM COALITION
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: F43D
-  billing_cust: F43
-  db_name: FIDELITY CENTER FOR LAW & POLICY
-  rental_name: FIDELITY CENTER FOR LAW & POLICY
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: F41D
-  billing_cust: F41
-  db_name: CATHOLIC VOTE (FORMERLY FIDELIS)
-  rental_name: CATHOLIC VOTE
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: F41D
-  billing_cust: F41
-  db_name: CATHOLIC VOTE (FORMERLY FIDELIS)
-  rental_name: 2020 STAND WITH TRUMP CATHOLIC DONORS
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: F61D
-  billing_cust: F61
-  db_name: FLAG
-  rental_name: FOUNDATION FOR LIBERTY AND AMERICAN GREATNESS
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: F84D
-  billing_cust: F84
-  db_name: FREEDOMWORKS C3
-  rental_name: FREEDOMWORKS C3
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: F85D
-  billing_cust: F85
-  db_name: FREEDOMWORKS C4
-  rental_name: FREEDOMWORKS C4
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: L08D
-  billing_cust: L08
-  db_name: LIBERTY GUARD
-  rental_name: LIBERTY GUARD
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: M63D
-  billing_cust: M63
-  db_name: MOM MOTHERS FOR AMERICA
-  rental_name: MOM MOTHERS FOR AMERICA
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: M79D
-  billing_cust: M79
-  db_name: MFA MOMS FOR AMERICA ACTION
-  rental_name: MFA MOMS FOR AMERICA ACTION
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: P82D
-  billing_cust: P82
-  db_name: PAWS OF HONOR
-  rental_name: PAWS OF HONOR
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: S43D
-  billing_cust: S43
-  db_name: 60 Plus Association c/o American Target
-  rental_name: 60+ ASSOC
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: S48D
-  billing_cust: S48
-  db_name: COALITION FOR SAH (CSAH)
-  rental_name: COALITION FOR SAH (CSAH)
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: S63D
-  billing_cust: S63
-  db_name: CSAH ATA
-  rental_name: CSAH ATA
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: U19D
-  billing_cust: U19
-  db_name: USDSA
-  rental_name: US DEPUTY SHERIFFS ASSOCIATION
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: V19D
-  billing_cust: V19
-  db_name: VIDOL (VETERANS IN DEFENSE OF LIBERTY)
-  rental_name: VIDOL SWEEPS or CONVENTIONAL
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: W58D
-  billing_cust: W58
-  db_name: WOMEN'S RIGHTS WITHOUT FRONTIERS
-  rental_name: WOMEN'S RIGHTS WITHOUT FRONTIERS
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: Z10D
-  billing_cust: Z10
-  db_name: MATURE AMERICAN CITIZENS (AMAC)
-  rental_name: MATURE AMERICAN CITIZENS (AMAC)
-  list_manager: AMLC EXCHANGE
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: T11A
-  billing_cust: T11
-  db_name: 10 MILLION VIGUERIE SUPERFILE
-  rental_name: 10 MILLION VIGUERIE SUPERFILE
-  list_manager: AMLC RENTAL
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
-- db_code: T11A
-  billing_cust: T11
-  db_name: VIGUERIE STATEWIDE
-  rental_name: VIGUERIE STATEWIDE
-  list_manager: AMLC RENTAL
-  lm_contact: MARTY
-  lrr: AWD
-  comments: null
 - db_code: T11R
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: 2020 STAND WITH TRUMP CONSERVATIVE HOTLINE DNRS
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -298,6 +101,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: 21ST CENTURY CONSERVATIVE DONORS
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -306,6 +110,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: ALLEGIANCE;CONSERVATIVE CHRISTIAN MULTI DONORS
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -314,6 +119,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: AMERICAN'S CHRISTIAN VALUES IN GOV'T
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -322,6 +128,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: AMERICAN'S;STOP RADICAL ISLAM
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -330,6 +137,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: CONSERVATIVE SENIORS ALLIANCE
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -338,6 +146,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: CONSERVATIVE SENIOR DNRS;CHRISTIAN VALUES
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -346,6 +155,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: CONSERVATIVES AGAINST UNITED NATIONS
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -354,6 +164,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: HIGH $ CONSERVATIVE MULTIS
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -362,6 +173,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: HL GOP CAMPAIGN DONORS
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -370,6 +182,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: LIBERTY DEFENDERS OF AMERICA
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -378,6 +191,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: PATRIOTIC DONORS;STOP OBAMA'S RADICAL AGENDA
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -386,6 +200,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: RICHARD MOURDOCK FOR SENATE 2012
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -394,6 +209,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: SECURE FREEDOM RENTAL
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -402,6 +218,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: SENIORS UNITED TO PROTECT SOCIAL SECURITY
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -410,6 +227,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: SENIORS WHO SUPPORT PATRIOTIC CAUSES (SSPC)
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -418,6 +236,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: UNBEATABLE DONORS' (MANY VARIATIONS)
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -426,6 +245,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: VIGUERIE BEST CONSUMERS
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -434,6 +254,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: VIGUERIE BEST DONORS CHARITABLE or POLITICAL
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -442,6 +263,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: VIGUERIE CHRISTIAN DONORS
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -450,6 +272,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: VIGUERIE HL CONSERVATIVE MULTIS
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -458,6 +281,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: VIGUERIE POWERHOUSE & GOP
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -466,6 +290,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: VIGUERIE POWERHOUSE CONSERVATIVE
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -474,6 +299,7 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: VIGUERIE SUPERFILE
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -482,6 +308,241 @@
   billing_cust: T11
   db_name: TVC LIST RENTAL
   rental_name: VIGUERIE'S SUPPORT TRUMP'S CONSERVATIVE AGENDA
+  abbrev: null
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: A70D
+  billing_cust: A70
+  db_name: ANN CHILDREN'S FUND
+  rental_name: ANN CHILDREN'S FUND
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: C66D
+  billing_cust: C66
+  db_name: CENTER FOR SECURITY POLICY
+  rental_name: CENTER FOR SECURITY POLICY
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: C81D
+  billing_cust: C81
+  db_name: CITIZENS BEHIND THE BADGE
+  rental_name: CITIZENS BEHIND THE BADGE
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: C86D
+  billing_cust: C86
+  db_name: CONSERVATIVE CAUCUS
+  rental_name: AMERICANS FOR CONSTITUTIONAL LIBERTY/TCC
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: E75D
+  billing_cust: E75
+  db_name: AMERICAN ENERGY ALLIANCE (ANE)
+  rental_name: AMERICAN ENERGY ALLIANCE (ANE)
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: F12D
+  billing_cust: F12
+  db_name: FEDUP PAC
+  rental_name: FEDUP PAC
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: F27X
+  billing_cust: F27
+  db_name: FAITH & FREEDOM COALITION
+  rental_name: FAITH & FREEDOM COALITION
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: F43D
+  billing_cust: F43
+  db_name: FIDELITY CENTER FOR LAW & POLICY
+  rental_name: FIDELITY CENTER FOR LAW & POLICY
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: F41D
+  billing_cust: F41
+  db_name: CATHOLIC VOTE (FORMERLY FIDELIS)
+  rental_name: CATHOLIC VOTE
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: F41D
+  billing_cust: F41
+  db_name: CATHOLIC VOTE (FORMERLY FIDELIS)
+  rental_name: 2020 STAND WITH TRUMP CATHOLIC DONORS
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: F61D
+  billing_cust: F61
+  db_name: FLAG
+  rental_name: FLAG
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: F84D
+  billing_cust: F84
+  db_name: FREEDOMWORKS C3
+  rental_name: FREEDOMWORKS C3
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: F85D
+  billing_cust: F85
+  db_name: FREEDOMWORKS C4
+  rental_name: FREEDOMWORKS C4
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: L08D
+  billing_cust: L08
+  db_name: LIBERTY GUARD
+  rental_name: LIBERTY GUARD
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: M63D
+  billing_cust: M63
+  db_name: MOM MOTHERS FOR AMERICA
+  rental_name: MOM MOTHERS FOR AMERICA
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: M79D
+  billing_cust: M79
+  db_name: MFA MOMS FOR AMERICA ACTION
+  rental_name: MFA MOMS FOR AMERICA ACTION
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: P82D
+  billing_cust: P82
+  db_name: PAWS OF HONOR
+  rental_name: PAWS OF HONOR
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: S43D
+  billing_cust: S43
+  db_name: 60+ ASSOC
+  rental_name: 60+ ASSOC
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: S48D
+  billing_cust: S48
+  db_name: COALITION FOR SAH (CSAH)
+  rental_name: COALITION FOR SAH (CSAH) EXCHANGE or RENTAL
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: S63D
+  billing_cust: S63
+  db_name: CSAH ATA
+  rental_name: CSAH ATA
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: U19D
+  billing_cust: U19
+  db_name: USDSA
+  rental_name: USDSA
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: V19D
+  billing_cust: V19
+  db_name: VIDOL (VETERANS IN DEFENSE OF LIBERTY)
+  rental_name: VIDOL SWEEPS or CONVENTIONAL
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: W58D
+  billing_cust: W58
+  db_name: WOMEN'S RIGHTS WITHOUT FRONTIERS
+  rental_name: WOMEN'S RIGHTS WITHOUT FRONTIERS
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: Z10D
+  billing_cust: Z10
+  db_name: MATURE AMERICAN CITIZENS (AMAC)
+  rental_name: MATURE AMERICAN CITIZENS (AMAC)
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11A
+  billing_cust: T11
+  db_name: 10 MILLION VIGUERIE SUPERFILE
+  rental_name: 10 MILLION VIGUERIE SUPERFILE
+  abbrev: null
+  list_manager: AMLC RENTAL
+  lm_contact: MARTY
+  lrr: AWD
+  comments: null
+- db_code: T11A
+  billing_cust: T11
+  db_name: VIGUERIE STATEWIDE
+  rental_name: VIGUERIE STATEWIDE
+  abbrev: null
   list_manager: AMLC RENTAL
   lm_contact: MARTY
   lrr: AWD
@@ -490,6 +551,7 @@
   billing_cust: P59
   db_name: PORTCHESTER DATA LLC
   rental_name: AMERICAN PATRIOTS;STOP RADICAL ISLAM
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -498,6 +560,7 @@
   billing_cust: P59
   db_name: PORTCHESTER DATA LLC
   rental_name: BLACK TIE CONSERVATIVES DONORS
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -506,6 +569,7 @@
   billing_cust: P59
   db_name: PORTCHESTER DATA LLC
   rental_name: CHRISTIANS PROTECTING RELIGIOUS FREEDOM
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -514,6 +578,7 @@
   billing_cust: P59
   db_name: PORTCHESTER DATA LLC
   rental_name: CITIZENS AGAINST ILLEGAL IMMIGRATION DONORS
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -522,6 +587,7 @@
   billing_cust: P59
   db_name: PORTCHESTER DATA LLC
   rental_name: DONORS FOR A CONSERVATIVE AMERICA
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -530,6 +596,7 @@
   billing_cust: P59
   db_name: PORTCHESTER DATA LLC
   rental_name: RIGHT WING CONSERVATIVE MULTI DONORS
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -538,6 +605,7 @@
   billing_cust: P59
   db_name: PORTCHESTER DATA LLC
   rental_name: SAVE AMERICAN SOVEREIGNTY DONORS
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -546,6 +614,7 @@
   billing_cust: P59
   db_name: PORTCHESTER DATA LLC
   rental_name: SENIORS ALLIANCE DONORS
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
@@ -554,7 +623,17 @@
   billing_cust: P59
   db_name: PORTCHESTER DATA LLC
   rental_name: TAX & ECONOMIC FREEDOM
+  abbrev: null
   list_manager: AMLC
   lm_contact: MARTY
   lrr: AWD
   comments: null
+- db_code: E25D
+  billing_cust: E25
+  db_name: AMERICAN ENERGY ALLIANCE (ANE)
+  rental_name: AMERICAN ENERGY ALLIANCE (ANE)
+  abbrev: null
+  list_manager: AMLC EXCHANGE
+  lm_contact: MARTY
+  lrr: AWD
+  comments: carried over - not in 2026 sheet
