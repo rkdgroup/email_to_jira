@@ -88,16 +88,30 @@ class NamesInNewsParser(BaseBrokerParser):
         if dmi_idx >= 0 and dmi_idx + 1 < len(value_lines):
             list_name = value_lines[dmi_idx + 1]
 
-        # --- Quantity ---
+        # --- Quantity + segment criteria ---
+        # After the list name the values run: list code (#NNNN), the select /
+        # segment description, then the quantity. Anchor the search on the
+        # list-name index so we never grab the Mailer P.O. (also a 6-digit
+        # number that appears earlier in the values), and capture the last
+        # descriptive line before the quantity as the select criteria.
         requested_quantity = 0
         availability_rule = "Nth"
-        for ln in value_lines:
+        segment_criteria = ""
+        qty_start = (dmi_idx + 1) if dmi_idx >= 0 else 0
+        last_desc = ""
+        for ln in value_lines[qty_start:]:
+            if ln == mailer_po:
+                continue
             m = re.match(r"^([\d,]+)$", ln)
             if m:
                 val = int(m.group(1).replace(",", ""))
                 if 100 <= val <= 999999:
                     requested_quantity = val
+                    segment_criteria = last_desc
                     break
+            elif (ln != list_name and not ln.startswith("#")
+                    and len(ln) > 3 and re.search(r"[A-Za-z]", ln)):
+                last_desc = ln
 
         if re.search(r"all\s+available|Entire\s+list", text, re.IGNORECASE):
             availability_rule = "All Available"
@@ -196,12 +210,10 @@ class NamesInNewsParser(BaseBrokerParser):
                 omission_description = ""
         other_fees = self._detect_state_omits(omission_description)
 
-        # --- Segment criteria ---
-        # NIN orders use "Offer:" for selection criteria; fall back to generic Selects/Segment
-        segment_criteria = (
-            self._find(text, r"Offer[:\s]+([^\n]+)")
-            or self._find(text, r"(?:Selects?|Segment)[:\s]+([^\n]+)")
-        )
+        # --- File format ---
+        # Detect from text (e.g. "supply in excel format" → Excel). Falls back
+        # to the create_jira_ticket default (ASCII Delimited for Email) when blank.
+        file_format = self._detect_file_format(text)
 
         return ParseResult(
             source=f"rule:{self.broker_key}",
@@ -219,6 +231,7 @@ class NamesInNewsParser(BaseBrokerParser):
             ship_to_email=ship_to_email,
             key_code=key_code,
             availability_rule=availability_rule,
+            file_format=file_format,
             shipping_method=shipping_method,
             shipping_instructions=shipping_instructions,
             omission_description=omission_description,
