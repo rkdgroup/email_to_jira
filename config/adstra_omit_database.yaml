@@ -4,7 +4,7 @@ adstra_database:
     flags: [D, N, R, $, A, X, "!"]
   - seed_database: A12S
     adstra_list_name: HEAL OUR CHILDREN (AREIVIM)
-    flags: [A, D, N, R, "!$"]
+    flags: [A, D, N, R, "!", "$"]
   - seed_database: A18S
     adstra_list_name: 3-ACR AGGRESSIVE CANCER RES
     flags: [A, D, R, T, 5, $, "!"]
@@ -22,7 +22,7 @@ adstra_database:
     flags: [A, D, R, T, 5, "!", $]
   - seed_database: X14S
     adstra_list_name: Autism Spectrum Disorder Fdtn
-    flags: [A, D, N, R, "!$"]
+    flags: [A, D, N, R, "!", "$"]
   - seed_database: B28S
     adstra_list_name: 3-BCP BREAST CANCER PROJECT
     flags: [D, R, T, X, $, "!", B, C]
