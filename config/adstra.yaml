@@ -79,7 +79,7 @@
   lm_contact: BOBBI
   lrr: null
   comments: null
-- db_code: C12
+- db_code: C12D
   billing_cust: C12
   db_name: Comm for Missing Children
   rental_name: A3-CFM SWEEPS DONORS 00516
@@ -488,15 +488,6 @@
   billing_cust: P34
   db_name: Prostate Cancer Project Sweeps Donors
   rental_name: A3-PROSTATE CANC PROJ SWEEPS 00544
-  abbrev: null
-  list_manager: ADSTRA DATA
-  lm_contact: BOBBI
-  lrr: JRH
-  comments: carried over - not in 2026 sheet
-- db_code: C12D
-  billing_cust: C12
-  db_name: COMM FOR MISSING CHILDREN
-  rental_name: 3-CFM COMM FOR MISSING CHILDREN
   abbrev: null
   list_manager: ADSTRA DATA
   lm_contact: BOBBI
