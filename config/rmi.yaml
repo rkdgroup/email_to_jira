@@ -27,8 +27,8 @@
   comments: null
 - db_code: T34D
   billing_cust: T33
-  db_name: DIRECT MAIL SENIOR DONORS
-  rental_name: SENIOR CITIZENS LEAGUE TSCL
+  db_name: SENIOR CITIZENS LEAGUE TSCL
+  rental_name: DIRECT MAIL SENIOR DONORS
   abbrev: null
   list_manager: RMI DIRECT
   lm_contact: ALICIA
@@ -36,8 +36,8 @@
   comments: null
 - db_code: T34D
   billing_cust: T33
-  db_name: SENIORS FOR EQUITABLE RETIREMENT
-  rental_name: SENIOR CITIZENS LEAGUE TSCL
+  db_name: SENIOR CITIZENS LEAGUE TSCL
+  rental_name: SENIORS FOR EQUITABLE RETIREMENT
   abbrev: null
   list_manager: RMI DIRECT
   lm_contact: ALICIA

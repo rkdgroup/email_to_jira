@@ -106,7 +106,7 @@
   lm_contact: BOBBI
   lrr: JRH
   comments: null
-- db_code: C12
+- db_code: C12D
   billing_cust: C12
   db_name: Comm for Missing Children (CFM)
   rental_name: A3-CFM SWEEPS DONORS 00516
@@ -1386,8 +1386,8 @@
   comments: null
 - db_code: T34D
   billing_cust: T33
-  db_name: DIRECT MAIL SENIOR DONORS
-  rental_name: SENIOR CITIZENS LEAGUE TSCL
+  db_name: SENIOR CITIZENS LEAGUE TSCL
+  rental_name: DIRECT MAIL SENIOR DONORS
   abbrev: null
   list_manager: RMI DIRECT
   lm_contact: ALICIA
@@ -1395,15 +1395,15 @@
   comments: null
 - db_code: T34D
   billing_cust: T33
-  db_name: SENIORS FOR EQUITABLE RETIREMENT
-  rental_name: SENIOR CITIZENS LEAGUE TSCL
+  db_name: SENIOR CITIZENS LEAGUE TSCL
+  rental_name: SENIORS FOR EQUITABLE RETIREMENT
   abbrev: null
   list_manager: RMI DIRECT
   lm_contact: ALICIA
   lrr: JRH
   comments: null
 - db_code: M24R
-  billing_cust: M24
+  billing_cust: M24R
   db_name: MATURE HEALTH MASTERFILE
   rental_name: MATURE HEALTH 50+ / DEVOTED CATHOLIC DONORS
   abbrev: null
@@ -1412,7 +1412,7 @@
   lrr: LAH
   comments: LAH RUNS UPDATES
 - db_code: M24O
-  billing_cust: M24
+  billing_cust: M24R
   db_name: MATURE HEALTH SWEEPS NONDONORS
   rental_name: MATURE HEALTH SWEEPS NONDONORS
   abbrev: null
@@ -1421,7 +1421,7 @@
   lrr: LAH
   comments: RARELY GET ORDERS FOR THIS DATABASE
 - db_code: M24N
-  billing_cust: M24
+  billing_cust: M24R
   db_name: MATURE HEALTH NONDONOR
   rental_name: MATURE HEALTH NONDONOR
   abbrev: null
