@@ -1,0 +1,219 @@
+--------------------------------------------------------------
+  DSLF JIRA — DEDUPLICATED LIST NAMES
+  Generated: 2026-06-17  |  Raw entries: 131  |  Distinct lists: 86
+  (131 raw collapsed from duplicate code/name variants across tickets)
+--------------------------------------------------------------
+
+--------------------------------------------------------------
+  PART 1 — GROUPED ENTRIES  (48 groups)
+  Same list stored under multiple names/codes in Jira
+--------------------------------------------------------------
+
+  Format:
+    CODE  |  Canonical Name
+    Also stored as: alias1 / alias2 / ...
+    Note: (if applicable)
+--------------------------------------------------------------
+
+  AACA  |  Americans Against Child Abuse
+    Also stored as: 3-AACA AM AGAINST CHILD ABUSE
+
+  ACBF  |  American Child Can Benefit Fund
+    Also stored as: 3-ACBF AM CHILD CAN BENV FUND / ACBF
+
+  ACF  |  A Child Is Forever
+    Also stored as: 3-ACF A CHILD IS FOREVER / ACF
+
+  ACR  |  Aggressive Cancer Research
+    Also stored as: 3-ACR AGGRESSIVE CANCER RES / ACR
+
+  BCP  |  Breast Cancer Project
+    Also stored as: 3-BCP BREAST CANCER PROJECT / BCP
+
+  BFF-ADR  |  BrightFocus — Alzheimer's Disease Research
+    Also stored as: BFF- ALZHEIMERS DISEASE RES / ADR
+    Note: ADR standalone may be same list
+
+  BFF-DMI  |  BrightFocus — Main File (DMI) / Internals
+    Also stored as: BFF- BRIGHTFOCUS FDN MF (DMI) / BFF-BRIGHTFOCUS INTERNALS
+
+  BFF-MDR  |  BrightFocus — Macular Degeneration Research
+    Also stored as: BFF- MACULAR DEGENERATION RES / MDR
+    Note: MDR standalone may be same list
+
+  BFF-NGR  |  BrightFocus — National Glaucoma Research
+    Also stored as: BFF- NATL GLAUCOMA RESEARCH / NGR
+    Note: NGR standalone may be same list
+
+  CARI  |  Children at Risk International
+    Also stored as: 3-CARI CHILDREN AT RISK INTL
+
+  CATH  |  Catholic Vote
+    Also stored as: CATHOLIC VOTE / Catholic Vote (formerly known as Fidelis)
+
+  CCC/CCCF  |  Combating Child Cancer Fund
+    Also stored as: 3-CCC COMBATING CHILD CANC FD / CCCF
+    Note: Two codes (CCC, CCCF) used in Jira — likely same list
+
+  CCP  |  Children's Cancer Fund Sweeps
+    Also stored as: 3-CCP CHILDRENS CANCER FND S
+
+  CFM  |  Comm for Missing Children
+    Also stored as: 3-CFM COMM FOR MISSING CHILDRE / CFM
+
+  CPP  |  Child Protection Program
+    Also stored as: 3-CPP CHILDPROTECTION PROGRAM / CPP
+
+  CWS  |  Care for Wounded Soldiers
+    Also stored as: 3-CWS CARE F/O WOUNDED SOLDIER / CWS
+
+  DDF  |  Defeat Diabetes Foundation
+    Also stored as: 3-DDF DEFEAT DIABETES FND / DDF
+
+  ECAD  |  Educated Canines Assisting with Disabilities
+    Also stored as: 3-ECAD EDUC CANINES ASST W/DIS / ECAD
+
+  FCF  |  Firefighters Charitable Foundation
+    Also stored as: 3-FCF FIREFIGHTERS CHARIT FND / FCF
+
+  FCL  |  Fight Childhood Leukemia
+    Also stored as: 3-FCL FIGHT CHILDHOOD LEUKEMIA / FCL
+
+  FEP  |  Freedom Education Project
+    Also stored as: 3-FEP FREEDOM EDUCATION PROJEC / FEP
+
+  HOC  |  Heal Our Children
+    Also stored as: 3-HOC HEAL OUR CHILDREN / HOC
+
+  ICCF  |  Israel Children Can Foundation
+    Also stored as: 3-ICCF ISRAEL CHILDREN CAN FND / ICCF
+
+  INV  |  Protect & Enforce Officers USA
+    Also stored as: 3-INV PROTECT ENFORCE OFF USA
+
+  JW  |  Judicial Watch
+    Also stored as: Judicial Watch / JUDICIAL WATCH DONORS / JUDICIAL WATCH SUPPORTERS
+    Note: DONORS/SUPPORTERS may be distinct segments
+
+  KWN  |  Kids Wish Network Sweeps
+    Also stored as: 3-KWN KIDS WISH NETWORK SWEEPS / KWN
+
+  MBF  |  Man's Best Friend
+    Also stored as: 3-MBF MANS BEST FRIEND / Man's Best Friend
+
+  MH  |  Mature Health
+    Also stored as: MATURE HEALTH / Mature Health Age 50+
+    Note: Age 50+ may be a segment filter, not a separate list
+
+  MR  |  Mission Recovery
+    Also stored as: 3-MR SAVE MISSION RECOVERY
+
+  NBLPF  |  National Blue Line Police Foundation
+    Also stored as: 3-NBLPF NATL BLUE LINE POL. FD
+
+  NCCI  |  National Cancer Center
+    Also stored as: 3-NCCI NATIONAL CANCER CENTER / NCCI
+
+  NCF  |  National Caregiving Foundation
+    Also stored as: 3-NCF NATL CAREGIVING FND / NCF / National Caregiving Foundation
+
+  NFOF  |  National Fallen Officers Foundation
+    Also stored as: 3-NFOF NAT FALLEN OFFICER FDN / NFOF
+
+  NLEOMF  |  National Law Enforcement Officers Memorial Fund
+    Also stored as: NLEOMF / NLEOMF DONORS
+
+  OR2  |  Operation Rover Rescue
+    Also stored as: 3-OR2 OPERATION ROVER RESCUE / OR2 / OR2 OPERATION ROVER RESCUE
+
+  ORR  |  Operation Rapid Response
+    Also stored as: 3-ORR OPERATION RAPID RESPONSE / ORR
+
+  PAWS  |  Paws of Honor
+    Also stored as: Paws of Honor (PAWS) / Paws of Honor (PAWS) Sweeps
+    Note: Sweeps is a separate product
+
+  PCP  |  Prostate Cancer Project
+    Also stored as: 3-PCP PROSTATE CANCER PROJECT
+
+  PF  |  Project Foster
+    Also stored as: 3-PF PROJECT FOSTER / PF
+
+  PFOT  |  Peace for Our Troops
+    Also stored as: 3-PFOT PEACE FOR OUR TROOPS / PFOT / PFOT - PEACE FOR OUR TROOPS
+
+  PHV  |  Project Heal Veterans
+    Also stored as: 3- PROJECT HEAL VETERANS / PHV
+
+  PTD  |  Project Toy Drop
+    Also stored as: 3-PTD PROJECT TOY DROP / PTD
+
+  SAVE  |  Survivors & Victims Empowerment
+    Also stored as: 3-SAVE SURVIVORS & VICTIMS EMP / SAVE
+
+  SDCA  |  Charitable Appeals MF
+    Also stored as: 3-SDCA CHARITABLE APPEALS MF
+
+  SHSM  |  Sacred Heart Southern Missions
+    Also stored as: SHSM / Sacred Heart Southern Missions Donors / Sacred Heart Southern Missions Mass Card Donors
+    Note: Donors vs Mass Card are different mail formats
+
+  USDSA  |  US Deputy Sheriffs Association
+    Also stored as: US Deputy Sheriffs Association / US Deputy Sheriffs Association Sweeps DB
+    Note: Sweeps DB is a separate product
+
+  VIG-SWEEPS  |  Viguerie Best Sweepstakes
+    Also stored as: VIGUERIE BEST SWEEPS / Viguerie Best Sweepstakes Donors
+
+  WWP  |  Wounded Warrior Project
+    Also stored as: WWP / Wounded Warrior Project
+
+--------------------------------------------------------------
+  PART 2 — STANDALONE ENTRIES  (38 entries)
+  Appear under a single consistent name; no duplicates found
+--------------------------------------------------------------
+
+  CODE   |  Full Name
+--------------------------------------------------------------
+
+  21CCD    |  21st Century Conservative Donors
+  60+      |  60 Plus Association c/o American Target  [NOTE: Likely a mailer name entered in wrong field]
+  ACF2     |  ABANDONED CHILDRENS FUND
+  ACN      |  Americans for a Conservative Agenda (Am f/t Tru
+  AID      |  AID FOR STARVING CHILDREN
+  ANN      |  Ann Children's Fund
+  ARA      |  ALLIANCE FOR RETIRED AMERICANS
+  ATL      |  Americans for Term Limits
+  CBB      |  Citizens Behind the Badge
+  CSAH     |  Coalition to Salute America's Heroes-ATA
+  CUN      |  Conservatives against the United Nations
+  DMSD     |  DIRECT MAIL SENIOR DONORS
+  EVA      |  Early Vote Action PAC
+  FAIR     |  FEDERATION FOR AMERICAN IMMIGRATION REFORM
+  FFF      |  Frontiers of Freedom Foundation
+  FLAG     |  Foundation for Liberty and American Greatness
+  HJTA     |  Howard Jarvis Taxpayers Association
+  HSS      |  Hotline Senior Superfile
+  IEF      |  International Eye Foundation
+  KAS      |  Kurt Alme for Senate (MT)
+  NCS      |  National Council For Survivors
+  NHES     |  Natl Humane Education Society
+  NRDC     |  NATURAL RESOURCES DEFENSE COUNCIL ( NRDC )
+  NRSC     |  National Republican Senatorial Committee
+  POH      |  Project Open Hand
+  RP       |  Rosie's Place
+  SCA      |  Senior Citizens Alliance
+  SFL      |  Students for Life
+  SGK      |  Susan G. Komen
+  SUPSS    |  Seniors United to Protect Social Security
+  TCC      |  The Conservative Caucus
+  USJF     |  U.S. Justice Foundation/Legacy
+  VBC      |  Viguerie Best Consumers
+  VBD      |  Viguerie Best Donors
+  VBP      |  VIGUERIE BEST POLITICAL
+  VFS      |  Viguerie Fundraising superfile
+  VPG      |  Viguerie Powerhouse & GOP
+  VSCD     |  Viguerie's Statewide Campaign Donor Superfile
+
+--------------------------------------------------------------
+END OF FILE
