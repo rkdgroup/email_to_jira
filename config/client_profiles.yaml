@@ -194,7 +194,7 @@ A49D:
     ON THE FILE.
 A52D:
   select_by: MOST RECENT DATE/DOLLAR
-  flags: A, N, O, X, Y, Z, 7, 2, 3, $, 4
+  flags: A, N, O, X, Y, Z, 7, 2, 3, $, 4, !
   dollar_cap: $99.99
   standard_suppressions:
   - NO PERSONAL NAME
@@ -229,7 +229,7 @@ A58D:
   - 'PULL SINGLE & MULTIS BY TOTAL # OF GIFTS'
 A63D:
   select_by: MACULAR DEGENERATION RSCH
-  flags: FLAGS LISTED ABOVE IN SPECIAL INST.
+  flags: FLAGS LISTED BELOW IN SPECIAL INST.
   dollar_cap: $99.99
   standard_suppressions:
   - NO PERSON NAME
