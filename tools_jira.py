@@ -112,6 +112,16 @@ def create_jira_ticket(
         if "@" in ship_to_email and not ship_to_email.upper().lstrip().startswith("FTP NOTIFY:"):
             ship_to_email = f"FTP NOTIFY: {ship_to_email.strip()}"
 
+    # Fixed-format processing houses (CREAT 4300 TAPE, DON'T TOP LOAD): files sent to
+    # these addresses are ALWAYS fixed-length ASCII. Delivery stays Email (these are
+    # emailed, unlike the Saturn / Data Axle FTP uploads). See fixed_format_ship_to_emails.
+    _FIXED_FORMAT_EMAILS = (
+        "data@trylondm.com", "data@talonmm.com", "data@rkdgroup.com",
+        "tisdata@trinitydirect.net", "tapelibrarian@directmail.com",
+    )
+    if ship_to_email and any(a in ship_to_email.lower() for a in _FIXED_FORMAT_EMAILS):
+        file_format = "ASCII Fixed"
+
     fields: dict = {
         "project": {"key": DSLF_PROJECT_KEY},
         "issuetype": {"id": DSLF_ISSUE_TYPE_ID},

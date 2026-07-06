@@ -207,8 +207,13 @@ class KapParser(BaseBrokerParser):
                     break
 
         # --- Ship to email ---
+        # The Ship To block states delivery as "Email to: <addr>"; prefer that over the
+        # first "Email:" match, which is the mailer/broker contact (e.g. DSLF-802).
+        # The address may be preceded by a name ("Email to: Ted Borie at ted@x.com").
         ship_to_email = ""
-        m = re.search(r"Email:\s*([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
+        m = re.search(r"Email\s+to:[^\n@]*?([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
+        if not m:
+            m = re.search(r"Email:\s*([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
         if m:
             ship_to_email = m.group(1)
 
@@ -218,6 +223,10 @@ class KapParser(BaseBrokerParser):
             shipping_method = "FTP"
         elif re.search(r"\bE-?mail\b", text, re.IGNORECASE):
             shipping_method = "Email"
+
+        # FTP orders: the ship-to is a notification address, not an email delivery.
+        if shipping_method == "FTP" and ship_to_email and not ship_to_email.upper().startswith("FTP NOTIFY:"):
+            ship_to_email = f"FTP NOTIFY: {ship_to_email}"
 
         shipping_instructions = f"CC: {requestor_email}" if requestor_email else ""
 

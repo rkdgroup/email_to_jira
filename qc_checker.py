@@ -193,6 +193,21 @@ def _is_saturn(select_data: dict, ticket_fields: dict) -> bool:
             or "saturn" in (ticket_fields.get("ship_to_email") or "").lower())
 
 
+# Fixed-format processing houses (CREAT 4300 TAPE, DON'T TOP LOAD): files sent to these
+# addresses are ALWAYS fixed-length ASCII. Kept in sync with tools_jira._FIXED_FORMAT_EMAILS.
+_FIXED_FORMAT_EMAILS = (
+    "data@trylondm.com", "data@talonmm.com", "data@rkdgroup.com",
+    "tisdata@trinitydirect.net", "tapelibrarian@directmail.com",
+)
+
+
+def _is_fixed_format(select_data: dict, ticket_fields: dict) -> bool:
+    """Ship-to routed to a fixed-format house is always ASCII Fixed (like Saturn, but Email)."""
+    s = (select_data.get("ship_to_email") or "").lower()
+    t = (ticket_fields.get("ship_to_email") or "").lower()
+    return any(a in s or a in t for a in _FIXED_FORMAT_EMAILS)
+
+
 def _extract_ticket_flags(omission_adf) -> set:
     """Parse 'FLAG OMITS: D, N, R, $, A, X, !' from omission description ADF."""
     text = _extract_adf_text(omission_adf)
@@ -617,6 +632,16 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
         else:
             _check("FAIL", "File Format",
                    f"Saturn Corp order must be 'ASCII Fixed' but ticket has {t_fmt!r}")
+    elif _is_fixed_format(select_data, ticket_fields):
+        # Fixed-format houses (CREAT 4300 TAPE) are ALWAYS ASCII Fixed regardless of SELECT.
+        if t_fmt == "ASCII Fixed":
+            _check("PASS", "File Format", "ASCII Fixed (fixed-format address — always ASCII Fixed)")
+        elif not t_fmt:
+            _check("WARN", "File Format",
+                   "Fixed-format address — ticket should be ASCII Fixed but File Format is unset")
+        else:
+            _check("FAIL", "File Format",
+                   f"Fixed-format address must be 'ASCII Fixed' but ticket has {t_fmt!r}")
     elif not s_fmt:
         _check("WARN", "File Format", "Could not parse file format from SELECT PDF")
     elif not t_fmt:
