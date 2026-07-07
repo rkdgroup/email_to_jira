@@ -406,7 +406,9 @@ def parse_select_pdf(pdf_path: str) -> dict:
     if flag_lines:
         result["flags"] = set()
         for _fl in flag_lines:
-            _fm = re.match(r'(?:FLAGS|OR)\s*=\s*([A-Z0-9!\$])', _fl, re.IGNORECASE)
+            # First flag line is "FLAGS  :  = !" (colon before =); the rest are "OR = X".
+            # Allow any non-'=' chars between the keyword and '=' so the leading flag is caught.
+            _fm = re.match(r'(?:FLAGS|OR)\b[^=\n]*=\s*([A-Z0-9!\$])', _fl, re.IGNORECASE)
             if _fm:
                 result["flags"].add(_fm.group(1))
     else:
@@ -483,6 +485,10 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
     hard_fails = []
 
     def _check(status, label, detail):
+        # WARN = something that can't be measured / doesn't apply. Skip it entirely
+        # so only PASS/FAIL surface (no WARN rows, no dilution of the check total).
+        if status == "WARN":
+            return
         checks.append((status, label, detail))
         if status == "FAIL" and label in HARD_REQUIRED:
             hard_fails.append(label)
