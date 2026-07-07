@@ -231,13 +231,14 @@ def apply_qty_approval(ticket: dict, qty: int) -> str:
 # ---------------------------------------------------------------------------
 
 def _get_select_qty(attachments: list) -> tuple[int | None, str]:
-    select_att = next(
-        (a for a in attachments if "SELECT" in a.get("filename", "").upper()
-         and a.get("filename", "").upper().endswith(".PDF")),
-        None,
-    )
-    if not select_att:
+    select_atts = [a for a in attachments
+                   if "SELECT" in a.get("filename", "").upper()
+                   and a.get("filename", "").upper().endswith(".PDF")]
+    if not select_atts:
         return None, ""
+    # Multiple SELECT PDFs (list re-selected) → use the most recently uploaded,
+    # matching qc_checker. The first attachment can be a stale earlier count.
+    select_att = max(select_atts, key=lambda a: a.get("created", ""))
 
     filename    = select_att["filename"]
     content_url = select_att["content"]
