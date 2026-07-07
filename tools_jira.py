@@ -112,11 +112,11 @@ def create_jira_ticket(
         if "@" in ship_to_email and not ship_to_email.upper().lstrip().startswith("FTP NOTIFY:"):
             ship_to_email = f"FTP NOTIFY: {ship_to_email.strip()}"
 
-    # Data Axle rule: incoming.files@data-axle.com is NEVER emailed — it's an FTP upload,
-    # and the address only receives the shipping confirmation. Force FTP + the notify
-    # prefix. Do NOT force a file format (unlike Saturn, the doc doesn't mark Data Axle
-    # as fixed-format). See fixed_format_ship_to_emails.
+    # Data Axle rule: incoming.files@data-axle.com is Fixed Format delivered via FTP
+    # (per List_Fulfillment_File_Format_and_Delivery_Guide_v2). It is NEVER emailed — the
+    # address only receives the shipping confirmation. Force ASCII Fixed + FTP + notify prefix.
     if ship_to_email and "data-axle.com" in ship_to_email.lower():
+        file_format = "ASCII Fixed"
         shipping_method = "FTP"
         if "@" in ship_to_email and not ship_to_email.upper().lstrip().startswith("FTP NOTIFY:"):
             ship_to_email = f"FTP NOTIFY: {ship_to_email.strip()}"

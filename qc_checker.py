@@ -642,8 +642,8 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
         else:
             _check("FAIL", "File Format",
                    f"Saturn Corp order must be 'ASCII Fixed' but ticket has {t_fmt!r}")
-    elif _is_fixed_format(select_data, ticket_fields):
-        # Fixed-format houses (CREAT 4300 TAPE) are ALWAYS ASCII Fixed regardless of SELECT.
+    elif _is_fixed_format(select_data, ticket_fields) or _is_data_axle_ftp(select_data, ticket_fields):
+        # Fixed-format houses (incl. Data Axle) are ALWAYS ASCII Fixed regardless of SELECT.
         if t_fmt == "ASCII Fixed":
             _check("PASS", "File Format", "ASCII Fixed (fixed-format address — always ASCII Fixed)")
         elif not t_fmt:
