@@ -184,8 +184,10 @@ def create_jira_ticket(
     if ship_by_date:
         fields["duedate"] = ship_by_date
 
-    # Default file format to ASCII Delimited if shipping is Email and no format specified
-    if not file_format and shipping_method == "Email":
+    # Default file format to ASCII Delimited when the order specifies none, regardless of
+    # shipping method (FTP orders with no stated format previously fell through to blank —
+    # e.g. DSLF-837). The Saturn / fixed-format ASCII-Fixed rules run earlier, so they win.
+    if not file_format:
         file_format = "ASCII Delimited"
 
     # Select fields — map friendly name to option ID
