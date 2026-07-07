@@ -208,6 +208,13 @@ def _is_fixed_format(select_data: dict, ticket_fields: dict) -> bool:
     return any(a in s or a in t for a in _FIXED_FORMAT_EMAILS)
 
 
+def _is_data_axle_ftp(select_data: dict, ticket_fields: dict) -> bool:
+    """incoming.files@data-axle.com is never emailed — always an FTP upload (not fixed-format)."""
+    s = (select_data.get("ship_to_email") or "").lower()
+    t = (ticket_fields.get("ship_to_email") or "").lower()
+    return "data-axle.com" in s or "data-axle.com" in t
+
+
 def _extract_ticket_flags(omission_adf) -> set:
     """Parse 'FLAG OMITS: D, N, R, $, A, X, !' from omission description ADF."""
     text = _extract_adf_text(omission_adf)
@@ -761,6 +768,13 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
         else:
             _check("FAIL", "Shipping Method",
                    f"Saturn Corp order must ship via FTP but ticket has {t_method!r}")
+    elif _is_data_axle_ftp(select_data, ticket_fields):
+        # incoming.files@data-axle.com is always an FTP upload, never emailed.
+        if t_method.lower() == "ftp":
+            _check("PASS", "Shipping Method", "FTP (Data Axle — always an FTP upload)")
+        else:
+            _check("FAIL", "Shipping Method",
+                   f"Data Axle order must ship via FTP but ticket has {t_method!r}")
     elif not s_method:
         _check("WARN", "Shipping Method",
                "Could not determine shipping method from SELECT PDF")
