@@ -529,27 +529,24 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
                    f"No match — SELECT: {s_name!r}, ticket: {t_list!r}")
 
     # 4. Records selected — logic differs by availability rule:
-    #   All Available : count just needs to be near the requested number (within 20%)
+    #   All Available : quantity is whatever the SELECT returns — the requested qty
+    #                   is only an estimate, so DON'T check it (skip the comparison).
     #   Nth           : count must not exceed the requested maximum
     total_sel  = select_data.get("total_records", 0)
     req_qty    = int(ticket_fields.get("requested_qty", 0) or 0)  # Jira returns floats (3000.0)
     avail_rule = (ticket_fields.get("availability_rule") or "").strip().lower()
     is_all_avail = "all" in avail_rule  # matches "All Available"
 
-    if total_sel == 0:
+    if is_all_avail:
+        # All Available: no quantity check — report the count for information only.
+        msg = f"{total_sel:,} records (All Available — quantity not checked)" if total_sel \
+              else "All Available — quantity not checked"
+        _check("PASS", "Records Selected", msg)
+    elif total_sel == 0:
         _check("FAIL", "Records Selected", "Could not parse total records from SELECT PDF")
     elif req_qty == 0:
         _check("WARN", "Records Selected",
                f"SELECT has {total_sel:,} records — ticket has no Requested Qty set")
-    elif is_all_avail:
-        # All Available: pass if count is within 20% of the requested number
-        tolerance = req_qty * 0.20
-        if abs(total_sel - req_qty) <= tolerance:
-            _check("PASS", "Records Selected",
-                   f"{total_sel:,} is near requested {req_qty:,} (All Available)")
-        else:
-            _check("FAIL", "Records Selected",
-                   f"SELECT has {total_sel:,} but ticket requests ~{req_qty:,} (All Available)")
     else:
         # Nth: count must not exceed the requested maximum
         if total_sel <= req_qty:
