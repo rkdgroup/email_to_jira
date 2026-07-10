@@ -34,6 +34,7 @@ class _FakeDB:
         self.rows = set(rows)            # set of (wworko, wsufx)
         self.race_same_suffix = 0        # inject N same-suffix racers (one per insert)
         self.race_cross_suffix = False   # inject a human '01' row right after our insert
+        self.pepbk = None                # PEPBK# counter value (None -> unreadable -> floor 0)
 
 
 class _FakeCursor:
@@ -43,7 +44,9 @@ class _FakeCursor:
 
     def execute(self, sql, params=None):
         s = " ".join(sql.upper().split())
-        if s.startswith("SELECT MAX(WWORKO)"):
+        if "DATA_AREA_INFO" in s:
+            self._fetch = (self.db.pepbk,)   # PEPBK# read; None => floor 0
+        elif s.startswith("SELECT MAX(WWORKO)"):
             live = [w for (w, _) in self.db.rows if w < _WO_MAX]
             self._fetch = (max(live) if live else None,)
         elif s.startswith("SELECT WWORKO FROM") and "WHERE WWORKO = ?" in s:
@@ -159,6 +162,27 @@ def test_exhaustion_raises():
     except RuntimeError as e:
         assert "after 5 attempts" in str(e)
     assert any(r.levelno == logging.ERROR for r in _cap.records)
+
+
+def test_pepbk_floor():
+    # Counter reserved 1005 ahead of committed MAX (1000); allocate at the floor, not 1001.
+    _cap.records.clear()
+    db = _FakeDB({(1000, "  ")})
+    db.pepbk = 1005
+    got = _FakeManager(db).allocate_and_create(**_ARGS)
+    assert got == 1005, got
+    assert (1005, "  ") in db.rows
+    assert (1001, "  ") not in db.rows       # skipped the reserved gap
+    assert _warnings() == []
+
+
+def test_pepbk_floor_below_max_ignored():
+    # Stale/low counter must not pull allocation below MAX+1.
+    _cap.records.clear()
+    db = _FakeDB({(1000, "  ")})
+    db.pepbk = 500                            # behind the table
+    got = _FakeManager(db).allocate_and_create(**_ARGS)
+    assert got == 1001, got                   # MAX+1 wins
 
 
 def test_dry_run_no_writes():

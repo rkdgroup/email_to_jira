@@ -20,6 +20,10 @@ sharing one WWORKO if a human keys the same number with a *different* suffix —
 that is the real collision this module guards against. allocate_and_create()
 does the whole scan -> insert -> verify -> auto-reassign cycle on a single
 connection so the pipeline never leaves a WWORKO shared with another order.
+
+It also reads the shop's next-WO counter (data area PEPBK#) and uses it as an
+allocation floor, so it won't pick a number order-entry has reserved ahead of
+the committed MAX. The counter is only read; the ARWRKSCH trigger advances it.
 """
 
 from __future__ import annotations
@@ -32,6 +36,12 @@ log = logging.getLogger(__name__)
 
 _WO_LIBRARY = "DMIJOBS"
 _WO_MAX     = 500_000
+
+# Shop's "next WO number" counter (data area). We READ it as a floor so the
+# pipeline never allocates below a number order-entry has already reserved. We do
+# NOT write it — the ARWRKSCH trigger (ARWRKSCHT) advances it on our insert.
+_PEPBK_LIB  = "DMIJOBS"
+_PEPBK_NAME = "PEPBK#"
 
 # Single source of truth for the INSERT shape. Blank suffix ('  ') is a literal
 # so the pipeline's row is always uniquely (WWORKO, '  ').
@@ -101,13 +111,32 @@ class WorkOrderManager(IBMiBase):
 
     # --- cursor-level helpers (all share one connection/cursor) -------------
 
-    def _scan_next_free(self, cur) -> int:
-        """MAX(WWORKO)+1, then climb past any WWORKO already present with ANY suffix."""
+    def _read_pepbk_floor(self, cur) -> int:
+        """Read the shop's next-WO counter (PEPBK#) as an allocation floor.
+
+        Returns its integer value, or 0 if it can't be read (then we fall back to
+        pure MAX+1). This keeps the pipeline from picking a number order-entry has
+        already reserved ahead of the committed MAX.
+        """
+        try:
+            cur.execute(
+                "SELECT DATA_AREA_VALUE FROM TABLE(QSYS2.DATA_AREA_INFO("
+                f"DATA_AREA_LIBRARY => '{_PEPBK_LIB}', DATA_AREA_NAME => '{_PEPBK_NAME}'))"
+            )
+            row = cur.fetchone()
+            if row and row[0] is not None:
+                return int(str(row[0]).strip())
+        except Exception as exc:
+            log.warning("Could not read %s counter (%s); using MAX+1 only", _PEPBK_NAME, exc)
+        return 0
+
+    def _scan_next_free(self, cur, floor: int = 0) -> int:
+        """max(MAX(WWORKO)+1, floor), then climb past any WWORKO already present with ANY suffix."""
         cur.execute(
             f"SELECT MAX(WWORKO) FROM {_WO_LIBRARY}.ARWRKSCH WHERE WWORKO < {_WO_MAX}"
         )
         row = cur.fetchone()
-        candidate = int(row[0] or 460000) + 1
+        candidate = max(int(row[0] or 460000) + 1, floor)
         while True:
             cur.execute(
                 f"SELECT WWORKO FROM {_WO_LIBRARY}.ARWRKSCH "
@@ -176,11 +205,15 @@ class WorkOrderManager(IBMiBase):
 
             cur = conn.cursor()
 
+            # Floor allocation at the shop counter so we never pick below a number
+            # order-entry has reserved. 0 = counter unreadable -> pure MAX+1.
+            floor = self._read_pepbk_floor(cur)
+
             if dry_run:
-                return self._scan_next_free(cur)
+                return self._scan_next_free(cur, floor=floor)
 
             for attempt in range(1, max_attempts + 1):
-                candidate = self._scan_next_free(cur)
+                candidate = self._scan_next_free(cur, floor=floor)
                 if candidate >= _WO_MAX:
                     raise RuntimeError(f"WO number space exhausted (reached {candidate})")
 
