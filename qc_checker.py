@@ -362,16 +362,18 @@ def parse_select_pdf(pdf_path: str) -> dict:
         result["manager_order"]  = m.group(1).strip()
         suffix                   = m.group(2).strip()
         result["criteria_suffix"] = suffix
-        # Dollar amounts: "$5+" or "05+" (zero-padded, no $ sign) — normalize to "$5+"
-        _digit_re = re.compile(r'\d+')
-        result["dollar_criteria"] = [
-            f"${int(_digit_re.search(t).group())}+"
-            for t in re.findall(r'\$?\d+\+', suffix)
-        ]
-        # Time periods: "L3M" or "L03" (zero-padded, trailing M optional) — normalize to "L3M"
+        # Dollar criteria: RANGES "$10-99.99" (KAP style) AND thresholds "$5+" / "05+".
+        def _dnum(x):
+            return str(int(x)) if '.' not in x else x
+        dollar = [f"${_dnum(lo)}-{_dnum(hi)}"
+                  for lo, hi in re.findall(r'\$\s*(\d+(?:\.\d+)?)\s*-\s*\$?\s*(\d+(?:\.\d+)?)', suffix)]
+        dollar += [f"${int(t)}+" for t in re.findall(r'\$?(\d+)\+', suffix)]
+        result["dollar_criteria"] = dollar
+        # Time periods: "L12M"/"L3M"/"L03" (trailing M optional). The 'L' can abut a digit
+        # in KAP's range suffix ("99.99L12M"), so use a letter-only lookbehind, not \b.
         result["period_criteria"] = [
             f"L{int(n)}M"
-            for n in re.findall(r'\bL(\d+)M?\b', suffix, re.IGNORECASE)
+            for n in re.findall(r'(?<![A-Za-z])L(\d+)M?', suffix, re.IGNORECASE)
         ]
     else:
         result["manager_order"]    = ""
@@ -583,19 +585,24 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
         missing_period = []  # WARN — period missing or different in description
 
         for dc in s_dollar:
-            amount = re.escape(dc.replace('$', '').rstrip('+'))
-            # digit boundaries so "$5+" is not satisfied by "$15+" or "$50+"
-            pat = (rf'(?<![\d.,])\$?\s*{amount}(?:\.0+)?\s*\+'
-                   rf'|\$\s*{amount}(?:\.0+)?(?![\d.])')
+            if '-' in dc:  # range like "$10-99.99"; description may write "$10-$99.99"
+                lo, hi = dc.lstrip('$').split('-', 1)
+                pat = rf'(?<![\d.]){re.escape(lo)}(?:\.0+)?\s*-\s*\$?\s*{re.escape(hi)}'
+            else:
+                amount = re.escape(dc.replace('$', '').rstrip('+'))
+                # digit boundaries so "$5+" is not satisfied by "$15+" or "$50+"
+                pat = (rf'(?<![\d.,])\$?\s*{amount}(?:\.0+)?\s*\+'
+                       rf'|\$\s*{amount}(?:\.0+)?(?![\d.])')
             if not re.search(pat, desc_text):
                 missing_dollar.append(dc)
 
         for pc in s_period:
             n = re.match(r'L(\d+)M', pc).group(1)
-            # Exact period with digit boundary ("3M" must not match "13M")
-            if re.search(rf'(?<!\d){n}\s*M(?:ONTHS?)?\b', desc_text):
+            # Exact period with digit boundary ("3M" must not match "13M"). Accept the
+            # KAP "12MO" abbreviation as well as "12M"/"12 MONTH(S)".
+            if re.search(rf'(?<!\d){n}\s*M(?:ONTHS?|O)?\b', desc_text):
                 continue
-            other = re.search(r'(?<!\d)(\d+)\s*M(?:ONTHS?)?\b', desc_text)
+            other = re.search(r'(?<!\d)(\d+)\s*M(?:ONTHS?|O)?\b', desc_text)
             missing_period.append(
                 (pc, other.group(0).strip() if other else None))
 
