@@ -2552,7 +2552,7 @@ R61:
   - OMIT COLUMBUS OH PO BOX 2168, ZIP 43216
 S05D:
   select_by: MOST RECENT DATE/DOLLAR
-  flags: A, N, O, X, Y, Z,  2, 3,  4, 7, "!" , "$"
+  flags: A, N, O, X, Y, Z,  2, 3,  4, 7, ! , $
   dollar_cap: $99.99
   standard_suppressions:
   - NO PERSONAL NAME
