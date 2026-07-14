@@ -454,6 +454,8 @@ def run_scan() -> None:
 
 
 def main():
+    from config_guard import validate_configs_or_exit
+    validate_configs_or_exit()  # fail fast on malformed config/*.yaml
     run_scan()
 
 

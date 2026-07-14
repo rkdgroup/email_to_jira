@@ -1083,6 +1083,9 @@ def main():
     )
     args = parser.parse_args()
 
+    from config_guard import validate_configs_or_exit
+    validate_configs_or_exit()  # fail fast on malformed config/*.yaml
+
     if not os.getenv("JIRA_API_TOKEN") and not args.dry_run:
         print("ERROR: JIRA_API_TOKEN not set in .env")
         sys.exit(1)
