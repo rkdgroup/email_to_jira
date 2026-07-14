@@ -2678,14 +2678,14 @@ S42:
 
 
   special_instructions:
- - Masterfile is made up of Southern Mission, Auto League and Mass Card donors, Cards (CA DNR), Premium (PR DNR) and Web (WB DNR)
+  - Masterfile is made up of Southern Mission, Auto League and Mass Card donors, Cards (CA DNR), Premium (PR DNR) and Web (WB DNR)
 
- - List can be rented for the different sub-files also, make sure you link the specific codes with trans.dates. There are Include Sets available for those.
+  - List can be rented for the different sub-files also, make sure you link the specific codes with trans.dates. There are Include Sets available for those.
 
- - Sacred Heart Spanish Donors can also be rented (orders come from Specialists Marketing)- Select by flag “S” in query; date & dollar and flag “S” in bottom select criteria.
+  - Sacred Heart Spanish Donors can also be rented (orders come from Specialists Marketing)- Select by flag “S” in query; date & dollar and flag “S” in bottom select criteria.
 
 
- - 6-20-2016 – The database is now called SACRED HEART SOUTHERN MISSIONS – If they want Mass Card, Materfile, Auto League, Spanish, etc. then that will be tacked onto the end (i.e. SACRED HEART SOUTHERN MISSION AUTO LEAGUE). However, if they want just Southern Mission then nothing will be tacked on. 
+  - 6-20-2016 – The database is now called SACRED HEART SOUTHERN MISSIONS – If they want Mass Card, Materfile, Auto League, Spanish, etc. then that will be tacked onto the end (i.e. SACRED HEART SOUTHERN MISSION AUTO LEAGUE). However, if they want just Southern Mission then nothing will be tacked on. 
 
 S43D:
   select_by: Transaction $, and date
