@@ -112,23 +112,58 @@ class AdstraParser(BaseBrokerParser):
             "COMPANY\n"
             "NCOA REASON CODES"
         )
-        # Extract SPECIAL INSTRUCTIONS block (stop before FTP credentials / payment line)
-        si_m = re.search(
-            r"SPECIAL\s+INSTRUCTIONS[^\n]*\n(.*?)(?=UPLOAD\s+FILES|PAYMENT\s+DUE|\Z)",
-            text, re.IGNORECASE | re.DOTALL,
-        )
-        order_omit_lines = []
-        if si_m:
-            lines = si_m.group(1).splitlines()
-            for i, ln in enumerate(lines):
-                ln = ln.strip()
+        # Collect OMIT lines from the order. Geographic / selection omits (e.g.
+        # "OMIT NJ AND DC") live in the Pull Description block, while handling
+        # omits (e.g. "OMIT CAN., P.R., ...") live in SPECIAL INSTRUCTIONS.
+        # Scan both blocks so neither source is dropped.
+        def _collect_omit_lines(block: str) -> list[str]:
+            out: list[str] = []
+            lines = block.splitlines()
+            i = 0
+            while i < len(lines):
+                ln = lines[i].strip()
                 if ln and re.search(r"\bOMIT\b", ln, re.IGNORECASE) and not re.search(r"DO\s+NOT\s+OMIT", ln, re.IGNORECASE):
                     # Join continuation lines: if this line ends with a comma,
                     # the next line continues the same list (e.g. wrapped state codes).
                     while ln.endswith(",") and i + 1 < len(lines):
                         i += 1
                         ln = ln + " " + lines[i].strip()
-                    order_omit_lines.append(ln)
+                    out.append(ln)
+                i += 1
+            return out
+
+        # Pull Description block (stop at the next field label / SPECIAL INSTRUCTIONS)
+        pd_m = re.search(
+            r"Pull\s+Description:\s*(.*?)(?=\n\s*L/O\s+Ref|\n\s*SPECIAL\s+INSTRUCTIONS|\Z)",
+            text, re.IGNORECASE | re.DOTALL,
+        )
+        # SPECIAL INSTRUCTIONS block (stop before FTP credentials / payment line)
+        si_m = re.search(
+            r"SPECIAL\s+INSTRUCTIONS[^\n]*\n(.*?)(?=UPLOAD\s+FILES|PAYMENT\s+DUE|\Z)",
+            text, re.IGNORECASE | re.DOTALL,
+        )
+        # Pure state-omit lines ("OMIT NJ AND DC") are collapsed into a single
+        # canonical "STATE OMITS: NJ, DC" line (mirroring the FLAG OMITS line).
+        # Any other omit line is kept verbatim.
+        state_codes: list[str] = []
+        other_omit_lines: list[str] = []
+        seen: set[str] = set()
+        for ln in _collect_omit_lines(pd_m.group(1) if pd_m else "") + _collect_omit_lines(si_m.group(1) if si_m else ""):
+            key = ln.upper()
+            if key in seen:
+                continue
+            seen.add(key)
+            codes = self._state_codes_from_omit(ln)
+            if codes:
+                for c in codes:
+                    if c not in state_codes:
+                        state_codes.append(c)
+            else:
+                other_omit_lines.append(ln)
+        order_omit_lines: list[str] = []
+        if state_codes:
+            order_omit_lines.append("STATE OMITS: " + ", ".join(state_codes))
+        order_omit_lines.extend(other_omit_lines)
         if order_omit_lines:
             omission_description = _STANDARD_OMITS + "\n\n" + "\n".join(order_omit_lines)
         else:

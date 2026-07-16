@@ -131,11 +131,11 @@ From Excel lookup via db_code (e.g., F41D):
 - **Availability Rule**: "Full Run" = "All Available". Confirmed.
 - **List Name abbreviations**: FAIR = Federation for American Immigration Reform.
 
-## Supported Brokers (11)
+## Supported Brokers (12)
 
-data_axle, simiocloud, rmi_direct, celco, rkd_group, amlc, kap, washington_lists, conrad_direct, names_in_news, we_are_moore
+adstra, data_axle, simiocloud, rmi_direct, celco, rkd_group, amlc, kap, washington_lists, conrad_direct, names_in_news, we_are_moore
 
-Note: ADSTRA has no dedicated parser — it falls through to `claude_fallback.py`.
+Note: ADSTRA now has a dedicated rule-based parser (`parsers/adstra.py`, `AdstraParser`, confidence 0.92), registered in `PARSER_REGISTRY` with detection regex (`adstradata.com`, `Adstra order#`) in `_RULES`. `claude_fallback.py` (Claude AI parse, `claude-sonnet-4-6`, confidence 0.75) now fires only for a broker matching none of the 12 fingerprints.
 
 ## Adding a New Broker Parser
 

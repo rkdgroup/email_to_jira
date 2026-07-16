@@ -149,6 +149,56 @@ class BaseBrokerParser(ABC):
         "DC",
     }
 
+    # --- Full state name → abbreviation (for canonical STATE OMITS lines) ---
+    _STATE_NAME_TO_ABBR = {
+        "ALABAMA": "AL", "ALASKA": "AK", "ARIZONA": "AZ", "ARKANSAS": "AR",
+        "CALIFORNIA": "CA", "COLORADO": "CO", "CONNECTICUT": "CT",
+        "DELAWARE": "DE", "DISTRICT OF COLUMBIA": "DC", "FLORIDA": "FL",
+        "GEORGIA": "GA", "HAWAII": "HI", "IDAHO": "ID", "ILLINOIS": "IL",
+        "INDIANA": "IN", "IOWA": "IA", "KANSAS": "KS", "KENTUCKY": "KY",
+        "LOUISIANA": "LA", "MAINE": "ME", "MARYLAND": "MD",
+        "MASSACHUSETTS": "MA", "MICHIGAN": "MI", "MINNESOTA": "MN",
+        "MISSISSIPPI": "MS", "MISSOURI": "MO", "MONTANA": "MT",
+        "NEBRASKA": "NE", "NEVADA": "NV", "NEW HAMPSHIRE": "NH",
+        "NEW JERSEY": "NJ", "NEW MEXICO": "NM", "NEW YORK": "NY",
+        "NORTH CAROLINA": "NC", "NORTH DAKOTA": "ND", "OHIO": "OH",
+        "OKLAHOMA": "OK", "OREGON": "OR", "PENNSYLVANIA": "PA",
+        "RHODE ISLAND": "RI", "SOUTH CAROLINA": "SC", "SOUTH DAKOTA": "SD",
+        "TENNESSEE": "TN", "TEXAS": "TX", "UTAH": "UT", "VERMONT": "VT",
+        "VIRGINIA": "VA", "WASHINGTON": "WA", "WEST VIRGINIA": "WV",
+        "WISCONSIN": "WI", "WYOMING": "WY",
+    }
+
+    def _state_codes_from_omit(self, omit_line: str) -> list[str]:
+        """
+        If an OMIT line is purely a list of US states (abbreviations and/or
+        full names, e.g. "OMIT NJ AND DC" or "OMIT NEW JERSEY, DC"), return the
+        de-duplicated list of state abbreviations. If the line contains any
+        non-state content (cities, ZIPs, countries, "USA NAMES ONLY", etc.),
+        return an empty list so the caller keeps the line verbatim.
+        """
+        if not omit_line:
+            return []
+        body = re.sub(r"^\s*OMIT\s+", "", omit_line, flags=re.IGNORECASE).strip()
+        if not body:
+            return []
+        upper = body.upper()
+        # Replace full state names with abbreviations (longest first so
+        # "WEST VIRGINIA" wins over "VIRGINIA").
+        for name in sorted(self._STATE_NAME_TO_ABBR, key=len, reverse=True):
+            upper = re.sub(rf"\b{re.escape(name)}\b", self._STATE_NAME_TO_ABBR[name], upper)
+        codes: list[str] = []
+        for tok in re.split(r"[,\s&]+", upper):
+            tok = tok.strip(".").strip()
+            if tok in ("", "AND"):
+                continue
+            if tok in self._US_STATES:
+                if tok not in codes:
+                    codes.append(tok)
+            else:
+                return []  # non-state token → not a pure state-omit line
+        return codes
+
     def _detect_state_omits(self, omission_description: str) -> str:
         """
         If omission_description contains 6+ US states, zip codes, or SCFs,
