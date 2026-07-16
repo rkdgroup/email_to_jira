@@ -91,27 +91,16 @@ class KapParser(BaseBrokerParser):
             if len(vals) > offset + 2:
                 key_code = vals[offset + 2]
 
-        # --- Mailer PO = BROKER ORDER # (e.g., 129214), NOT the DL number ---
-        # DL number goes in manager_order_number and title only
+        # --- Mailer PO = BROKER ORDER # (e.g. 129214, E12316, or alphanumeric CJZ47),
+        # NOT the DL number (which goes in manager_order_number and the title only). ---
+        # In KAP's two-column layout the values for the Broker block appear together
+        # after the "MAIL DATE" label, in the order:
+        #   broker_name, [broker_sb], BROKER_ORDER#, wanted_by_date, mail_date
+        # The order # is the LAST digit-bearing token before the first date: this skips
+        # the broker name (no digits) and a leading S/B (which precedes the order #), and
+        # unlike a digits-only match it also captures alphanumeric order #s like CJZ47
+        # (DSLF-862, DL786) that would otherwise leave Mailer PO blank.
         mailer_po = ""
-
-        # --- BROKER ORDER # extraction ---
-        # Find BROKER:, BROKER ORDER #:, WANTED BY: label block
-        broker_order_idx = -1
-        for i, ln in enumerate(lines):
-            if ln.upper() in ("BROKER ORDER #:", "BROKER ORDER:", "BROKER ORDER#:"):
-                broker_order_idx = i
-                break
-
-        # Find WANTED BY: label
-        wanted_by_idx = -1
-        if broker_order_idx >= 0:
-            for i in range(broker_order_idx, min(broker_order_idx + 5, len(lines))):
-                if lines[i].upper().startswith("WANTED BY"):
-                    wanted_by_idx = i
-                    break
-
-        # Values for BROKER block appear later, anchored by MAIL DATE label
         mail_date = ""
         ship_by_date = ""
 
@@ -123,22 +112,21 @@ class KapParser(BaseBrokerParser):
                 break
 
         if mail_date_label_idx >= 0:
-            # Values after MAIL DATE: broker_name, broker_sb, BROKER_ORDER#, wanted_by_date, mail_date
             broker_vals = lines[mail_date_label_idx + 1:]
-            # Find broker order # (numeric value, e.g., 129214 or E12316)
-            for ln in broker_vals[:10]:
-                if re.match(r"^[A-Z]?\d{4,}$", ln):
-                    mailer_po = ln
-                    break
-            # Find dates in the broker values section
             dates_found = []
             for ln in broker_vals[:10]:
-                dm = re.match(r"^(\d{2}/\d{2}/\d{2,4})$", ln)
-                if dm:
-                    dates_found.append(dm.group(1))
+                if re.match(r"^(\d{2}/\d{2}/\d{2,4})$", ln):
+                    dates_found.append(ln)
+                    continue
+                if ln.endswith(":"):
+                    break  # reached the next label block — stop scanning
+                # Broker order #: a token carrying a digit that appears before the first
+                # date. Keep the last such token so a leading S/B is overwritten by the
+                # order # that follows it.
+                if not dates_found and re.search(r"\d", ln) and re.match(r"^[A-Za-z0-9-]+$", ln):
+                    mailer_po = ln.strip()
 
-            # First date after MAIL DATE label = WANTED BY (ship_by_date)
-            # Second date = MAIL DATE
+            # First date after MAIL DATE label = WANTED BY (ship_by_date), second = MAIL DATE
             if len(dates_found) >= 2:
                 ship_by_date = self._normalize_date(dates_found[0])
                 mail_date = self._normalize_date(dates_found[1])
