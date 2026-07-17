@@ -72,6 +72,11 @@ def _load_adstra_flag_omits() -> dict:
 _ADSTRA_FLAG_OMITS = _load_adstra_flag_omits()
 _PROFILE_MAP       = _load_profile_map()
 
+# db_codes for which ticket creation is intentionally suppressed. Any order that
+# resolves to one of these databases is extracted/validated as usual but no Jira
+# ticket is created. Add codes here to skip more databases going forward.
+SKIP_DB_CODES = {"A63D"}
+
 
 def _find_supplementary_files(pdf_path: str, order_number: str) -> list[Path]:
     """
@@ -248,6 +253,17 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
             adstra_list_code=getattr(result, "adstra_list_code", "") or "",
         )
     db_code_resolved = enriched.get("db_code", "")
+
+    # Configured skip: do not create Jira tickets for these databases (SKIP_DB_CODES).
+    # Applies to both live and dry-run so the skip is visible in previews too.
+    if db_code_resolved.upper() in SKIP_DB_CODES:
+        log.warning("Skipping ticket creation — database %s is in SKIP_DB_CODES (%s)",
+                    db_code_resolved,
+                    result.summary or result.list_name or result.mailer_name or "")
+        return {"success": True, "skipped": True, "source": result.source,
+                "db_code": db_code_resolved,
+                "reason": f"database {db_code_resolved} configured to skip",
+                "warnings": list(result.warnings)}
 
     # Step 5b: Resolve client profile path and extract SELECT BY
     _ADSTRA_PROFILE = _SCRIPT_DIR / "Client Profiles" / "ADSTRA" / "Adstra Sweeps Client Profile.xlsx"
@@ -560,10 +576,17 @@ def main():
             rows = r if isinstance(r, list) else [r]
             for idx, row in enumerate(rows):
                 label = f"{name} (p{idx+1})" if len(rows) > 1 else name
-                status = "OK" if row.get("success") else "FAIL"
+                if row.get("skipped"):
+                    status = "SKIP"
+                elif row.get("success"):
+                    status = "OK"
+                else:
+                    status = "FAIL"
                 source = row.get("source", "")
                 detail = row.get("ticket_key") or "; ".join(row.get("errors", []))[:40]
-                if args.dry_run and row.get("success"):
+                if row.get("skipped"):
+                    detail = row.get("reason", "skipped")
+                elif args.dry_run and row.get("success"):
                     detail = "(dry run)"
                 print(f"{label:<45} {status:<10} {source:<20} {detail}")
     elif target.is_file():
@@ -580,6 +603,8 @@ def main():
                 for f in failures:
                     print(f"Failed: {'; '.join(f.get('errors', ['unknown error']))}")
                 sys.exit(1)
+        elif r.get("skipped"):
+            print(f"\nSkipped: {r.get('reason', 'configured to skip')} — no ticket created.")
         elif r["success"]:
             if args.dry_run:
                 print("\nDry run complete. Fields shown above.")
