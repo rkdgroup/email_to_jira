@@ -98,19 +98,32 @@ def create_jira_ticket(
     other_fees: str = "",
     special_seed_instructions: str = "",
     db_code: str = "",
+    order_text: str = "",
 ) -> dict:
-    """Create a DSLF Jira ticket. Returns dict with 'key' on success or 'error' on failure."""
+    """Create a DSLF Jira ticket. Returns dict with 'key' on success or 'error' on failure.
 
-    # Saturn Corp rule: any ship-to routed to Saturn Corp — whether the
-    # CONVERT@SATURNCORP.COM address or a note like "PLACE ON SATURN'S FTP SITE" —
-    # is an FTP upload (never email) and the file is ALWAYS ASCII Fixed. Force both
-    # regardless of what the order/parser produced. Most common in ADSTRA orders.
-    if ship_to_email and "saturn" in ship_to_email.lower():
+    order_text is the raw extracted order text (optional). It lets the Saturn rule below
+    fire when Saturn is named only in the order body, not in the ship-to address.
+    """
+
+    # Saturn Corp rule: any order routed to Saturn Corp — the CONVERT@SATURNCORP.COM ship-to,
+    # a note like "PLACE ON SATURN'S FTP SITE", or an instruction in the order body to load the
+    # file to the Saturn FileShare — is an FTP upload (never email) and the file is ALWAYS ASCII
+    # Fixed. Force both regardless of what the order/parser produced. Most common in ADSTRA orders.
+    # When Saturn is named only in the order body (order_text) and the ship-to is a notify
+    # address, record the Saturn destination on the ship-to so QC and reviewers can see it.
+    if "saturn" in (ship_to_email or "").lower() or "saturn" in (order_text or "").lower():
         file_format = "ASCII Fixed"
         shipping_method = "FTP"
-        # Bare email destinations get an FTP NOTIFY prefix; free-text notes stay as-is.
-        if "@" in ship_to_email and not ship_to_email.upper().lstrip().startswith("FTP NOTIFY:"):
-            ship_to_email = f"FTP NOTIFY: {ship_to_email.strip()}"
+        if ship_to_email:
+            st = ship_to_email.strip()
+            if "@" in st and not st.upper().startswith("FTP NOTIFY:"):
+                st = f"FTP NOTIFY: {st}"
+            if "saturn" not in st.lower():
+                st = f"{st} (SATURN CORP)"
+            ship_to_email = st
+        else:
+            ship_to_email = "PLACE ON SATURN CORP FTP FILESHARE"
 
     # Data Axle rule: incoming.files@data-axle.com is Fixed Format delivered via FTP
     # (per List_Fulfillment_File_Format_and_Delivery_Guide_v2). It is NEVER emailed — the

@@ -212,6 +212,13 @@ class KapParser(BaseBrokerParser):
         elif re.search(r"\bE-?mail\b", text, re.IGNORECASE):
             shipping_method = "Email"
 
+        # Saturn Corp destination (order instructs loading to the Saturn FileShare) is always
+        # ASCII Fixed via FTP, even though the ship-to email here is only a notify address.
+        file_format = ""
+        if self._is_saturn_order(text):
+            file_format = "ASCII Fixed"
+            shipping_method = "FTP"
+
         # FTP orders: the ship-to is a notification address, not an email delivery.
         if shipping_method == "FTP" and ship_to_email and not ship_to_email.upper().startswith("FTP NOTIFY:"):
             ship_to_email = f"FTP NOTIFY: {ship_to_email}"
@@ -254,7 +261,7 @@ class KapParser(BaseBrokerParser):
             ship_to_email=ship_to_email,
             key_code=key_code,
             availability_rule=availability_rule,
-            file_format="",
+            file_format=file_format,
             shipping_method=shipping_method,
             shipping_instructions=shipping_instructions,
             omission_description=omission_description,

@@ -188,9 +188,18 @@ _ADSTRA_FLAG_OMITS = _load_adstra_flag_omits()
 
 
 def _is_saturn(select_data: dict, ticket_fields: dict) -> bool:
-    """Saturn Corp orders are always FTP + ASCII Fixed regardless of the order form."""
-    return ("saturn" in select_data.get("ship_to_email", "").lower()
-            or "saturn" in (ticket_fields.get("ship_to_email") or "").lower())
+    """Saturn Corp orders are always FTP + ASCII Fixed regardless of the order form.
+
+    Saturn may be named in the ship-to (CONVERT@SATURNCORP.COM, or the "(SATURN CORP)" marker
+    tools_jira records when the order body routes to the Saturn FileShare) or in the ticket
+    description.
+    """
+    blobs = (
+        select_data.get("ship_to_email", ""),
+        ticket_fields.get("ship_to_email") or "",
+        _extract_adf_text(ticket_fields.get("description_adf")) or "",
+    )
+    return any("saturn" in (b or "").lower() for b in blobs)
 
 
 # Fixed-format processing houses (CREAT 4300 TAPE, DON'T TOP LOAD): files sent to these

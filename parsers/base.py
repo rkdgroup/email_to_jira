@@ -126,6 +126,14 @@ class BaseBrokerParser(ABC):
             return "FTP"
         return "Other"
 
+    def _is_saturn_order(self, text: str) -> bool:
+        """True if the order routes to Saturn Corp (FileShare upload / Convert@saturncorp.com).
+
+        Saturn orders are ALWAYS ASCII Fixed delivered via FTP, even when the ship-to on the
+        order form is a notify email rather than the Saturn address itself.
+        """
+        return bool(text) and "saturn" in text.lower()
+
     def _detect_file_format(self, text: str) -> str:
         """Detect file format from PDF text."""
         lower = text.lower()

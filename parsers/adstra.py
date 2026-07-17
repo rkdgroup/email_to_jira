@@ -196,8 +196,12 @@ class AdstraParser(BaseBrokerParser):
         other_fees = self._detect_state_omits(omission_description)
         special_seed_instructions = self._extract_special_seed_instructions(text)
 
-        # --- File format ---
-        file_format = self._detect_file_format(text)
+        # --- File format (Saturn Corp = ASCII Fixed via FTP) ---
+        if self._is_saturn_order(text):
+            file_format = "ASCII Fixed"
+            shipping_method = "FTP"
+        else:
+            file_format = self._detect_file_format(text)
 
         return ParseResult(
             source=f"rule:{self.broker_key}",

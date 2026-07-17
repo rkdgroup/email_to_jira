@@ -332,7 +332,7 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
         return {"success": True, "source": result.source, "dry_run": True,
                 "fields": kwargs, "wo_number": wo_number, "warnings": list(result.warnings)}
 
-    ticket = create_jira_ticket(**kwargs)
+    ticket = create_jira_ticket(**kwargs, order_text=text)
 
     if "error" in ticket:
         log.error("Jira create failed: %s", ticket["error"])
