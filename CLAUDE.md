@@ -35,7 +35,7 @@ Credentials in `.env`: `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, `ANTHROP
 PDF → [tools_pdf.py] extract text (PyMuPDF primary, pdfminer fallback)
     → [parsers/__init__.py] detect_broker() from regex fingerprints (first 3000 chars)
     → Match: [parsers/<broker>.py] rule-based parse (confidence 0.92)
-      No match: [claude_fallback.py] Claude AI parse (confidence 0.75)
+      No match: flagged for review (no ticket created)
     → [parse_result.py] ParseResult frozen dataclass
     → [parse_result.py] validate_result() validates fields
     → [client_lookup.py] enrich from Excel (NEW LR CLIENT LIST 2026.xlsx)
@@ -135,7 +135,7 @@ From Excel lookup via db_code (e.g., F41D):
 
 adstra, data_axle, simiocloud, rmi_direct, celco, rkd_group, amlc, kap, washington_lists, conrad_direct, names_in_news, we_are_moore
 
-Note: ADSTRA now has a dedicated rule-based parser (`parsers/adstra.py`, `AdstraParser`, confidence 0.92), registered in `PARSER_REGISTRY` with detection regex (`adstradata.com`, `Adstra order#`) in `_RULES`. `claude_fallback.py` (Claude AI parse, `claude-sonnet-4-6`, confidence 0.75) now fires only for a broker matching none of the 12 fingerprints.
+Note: ADSTRA now has a dedicated rule-based parser (`parsers/adstra.py`, `AdstraParser`, confidence 0.92), registered in `PARSER_REGISTRY` with detection regex (`adstradata.com`, `Adstra order#`) in `_RULES`. A PDF whose broker matches none of the 12 fingerprints is flagged for review (no ticket created) — there is no Claude AI fallback parser.
 
 ## Adding a New Broker Parser
 

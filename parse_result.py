@@ -20,7 +20,7 @@ DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 @dataclass(frozen=True)
 class ParseResult:
     # Required identifiers
-    source: str                     # e.g. "rule:data_axle", "claude_fallback"
+    source: str                     # e.g. "rule:data_axle", "rule:adstra"
     confidence: float = 0.0         # 0.0–1.0
 
     # Core required fields

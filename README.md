@@ -70,7 +70,6 @@ ANTHROPIC_API_KEY=your_key  # Optional, for unknown broker fallback
 ├── parse_result.py         # ParseResult dataclass
 ├── result_validator.py     # Field validation
 ├── client_lookup.py        # Excel client enrichment
-├── claude_fallback.py      # Claude AI fallback parser
 ├── tools_jira.py           # Jira REST API integration
 ├── parsers/
 │   ├── base.py             # BaseBrokerParser (shared helpers)
