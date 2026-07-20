@@ -5,6 +5,14 @@ from parsers.base import BaseBrokerParser, CONFIDENCE_RULE_BASED
 from parse_result import ParseResult
 
 
+# Previous-order suppression: "PLEASE OMIT PREVIOUS ORDER NUMBERS J2174" names the
+# order number(s) of a prior rental to exclude. Captured as its own canonical
+# "OMIT PREVIOUS ORDER: ..." line so a stray trailing comma can't fuse it with the
+# next instruction (an address-omit line, or even FTP-posting info).
+_PREV_ORDER_RE = re.compile(r"\bPREV(?:IOUS)?\s+ORDER", re.IGNORECASE)
+_ORDER_NUM_RE  = re.compile(r"\b([A-Z]{1,4}\d{2,}[A-Z]?)\b")
+
+
 class AdstraParser(BaseBrokerParser):
     broker_key: str = "adstra"
 
@@ -122,6 +130,13 @@ class AdstraParser(BaseBrokerParser):
             i = 0
             while i < len(lines):
                 ln = lines[i].strip()
+                # Numbered previous-order lines ("...PREVIOUS ORDER NUMBERS J2174,")
+                # are captured separately as a canonical "OMIT PREVIOUS ORDER" line;
+                # skip them here so a stray trailing comma can't merge the next
+                # (unrelated) line into them.
+                if _PREV_ORDER_RE.search(ln) and _ORDER_NUM_RE.search(ln):
+                    i += 1
+                    continue
                 # Keep OMIT lines, plus household-dedupe instructions ("1 PER
                 # HOUSEHOLD", "1 PER HH") — the latter aren't OMIT lines but must
                 # still land in the omission description with the state/flag omits.
@@ -136,6 +151,30 @@ class AdstraParser(BaseBrokerParser):
                     out.append(ln)
                 i += 1
             return out
+
+        def _prev_order_numbers(block: str) -> list[str]:
+            """Order numbers from each 'OMIT PREVIOUS ORDER NUMBERS J####' line,
+            following wrapped number-list continuations but not unrelated lines."""
+            nums: list[str] = []
+            lines = block.splitlines()
+            for i, raw in enumerate(lines):
+                if not _PREV_ORDER_RE.search(raw):
+                    continue
+                seg = raw.strip()
+                j = i
+                while seg.rstrip().endswith(",") and j + 1 < len(lines):
+                    nxt = lines[j + 1].strip()
+                    if (nxt and re.fullmatch(r"[A-Za-z0-9,&/\s\-]+", nxt)
+                            and _ORDER_NUM_RE.search(nxt)
+                            and not re.search(r"\bOMIT\b", nxt, re.IGNORECASE)):
+                        seg += " " + nxt
+                        j += 1
+                    else:
+                        break
+                for m in _ORDER_NUM_RE.finditer(seg):
+                    if m.group(1) not in nums:
+                        nums.append(m.group(1))
+            return nums
 
         # Pull Description block (stop at the next field label / SPECIAL INSTRUCTIONS)
         pd_m = re.search(
@@ -171,9 +210,17 @@ class AdstraParser(BaseBrokerParser):
                     household_line = ln
             else:
                 other_omit_lines.append(ln)
+        prev_order_nums: list[str] = []
+        for _n in (_prev_order_numbers(pd_m.group(1) if pd_m else "")
+                   + _prev_order_numbers(si_m.group(1) if si_m else "")):
+            if _n not in prev_order_nums:
+                prev_order_nums.append(_n)
+
         order_omit_lines: list[str] = []
         if state_codes:
             order_omit_lines.append("STATE OMITS: " + ", ".join(state_codes))
+        if prev_order_nums:
+            order_omit_lines.append("OMIT PREVIOUS ORDER: " + ", ".join(prev_order_nums))
         if household_line:
             order_omit_lines.append(household_line)
         order_omit_lines.extend(other_omit_lines)
