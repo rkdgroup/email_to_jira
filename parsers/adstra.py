@@ -122,7 +122,12 @@ class AdstraParser(BaseBrokerParser):
             i = 0
             while i < len(lines):
                 ln = lines[i].strip()
-                if ln and re.search(r"\bOMIT\b", ln, re.IGNORECASE) and not re.search(r"DO\s+NOT\s+OMIT", ln, re.IGNORECASE):
+                # Keep OMIT lines, plus household-dedupe instructions ("1 PER
+                # HOUSEHOLD", "1 PER HH") — the latter aren't OMIT lines but must
+                # still land in the omission description with the state/flag omits.
+                if ln and not re.search(r"DO\s+NOT\s+OMIT", ln, re.IGNORECASE) and (
+                        re.search(r"\bOMIT\b", ln, re.IGNORECASE)
+                        or re.search(r"\bPER\s+H(?:OUSEHOLD|H)\b", ln, re.IGNORECASE)):
                     # Join continuation lines: if this line ends with a comma,
                     # the next line continues the same list (e.g. wrapped state codes).
                     while ln.endswith(",") and i + 1 < len(lines):
@@ -146,6 +151,7 @@ class AdstraParser(BaseBrokerParser):
         # canonical "STATE OMITS: NJ, DC" line (mirroring the FLAG OMITS line).
         # Any other omit line is kept verbatim.
         state_codes: list[str] = []
+        household_line: str = ""
         other_omit_lines: list[str] = []
         seen: set[str] = set()
         for ln in _collect_omit_lines(pd_m.group(1) if pd_m else "") + _collect_omit_lines(si_m.group(1) if si_m else ""):
@@ -158,11 +164,18 @@ class AdstraParser(BaseBrokerParser):
                 for c in codes:
                     if c not in state_codes:
                         state_codes.append(c)
+            elif re.search(r"\bPER\s+H(?:OUSEHOLD|H)\b", ln, re.IGNORECASE):
+                # Household de-dupe (e.g. "1 PER HOUSEHOLD") — kept verbatim so a
+                # count other than 1 isn't rewritten; first occurrence wins.
+                if not household_line:
+                    household_line = ln
             else:
                 other_omit_lines.append(ln)
         order_omit_lines: list[str] = []
         if state_codes:
             order_omit_lines.append("STATE OMITS: " + ", ".join(state_codes))
+        if household_line:
+            order_omit_lines.append(household_line)
         order_omit_lines.extend(other_omit_lines)
         if order_omit_lines:
             omission_description = _STANDARD_OMITS + "\n\n" + "\n".join(order_omit_lines)
