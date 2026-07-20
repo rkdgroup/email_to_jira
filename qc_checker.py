@@ -140,23 +140,44 @@ def _fuzzy_name_match(s_words: set, t_words: set) -> list[str]:
     return matches
 
 
-def _collect_criteria_block(text: str, criteria_keyword: str) -> list[str]:
+def _iter_criteria_blocks(text: str):
     """
-    Find the CRITERIA block whose header matches criteria_keyword and return its
-    non-empty value lines.  Stops when the next 'CRITERIA ...: N' line begins.
+    Yield (header, value_lines) for every 'CRITERIA ...: N <label>' block.
+
+    header      = the full criteria header line, e.g.
+                  "CRITERIA ...:  6  OMIT FLAG $   EXCLUDED . 15 RECORDS ..."
+    value_lines = the non-empty lines under it, up to the next CRITERIA header
+                  (or end of text).
+
+    Exposing every block (not just the first match) lets callers UNION an omit
+    type that ADSTRA splits across several criteria — e.g. a general
+    "OMIT FLAGS" block plus a dedicated "OMIT FLAG $" block on a later page.
     """
-    in_block = False
-    result: list[str] = []
+    header = None
+    body: list[str] = []
     for line in text.splitlines():
         stripped = line.strip()
         if _CRITERIA_LINE.match(stripped):
-            if in_block:
-                break          # next criteria started
-            if re.search(criteria_keyword, stripped, re.IGNORECASE):
-                in_block = True
-        elif in_block and stripped:
-            result.append(stripped)
-    return result
+            if header is not None:
+                yield header, body
+            header, body = stripped, []
+        elif header is not None and stripped:
+            body.append(stripped)
+    if header is not None:
+        yield header, body
+
+
+def _collect_criteria_blocks(text: str, criteria_keyword: str) -> list[str]:
+    """
+    Value lines from EVERY criteria block whose header matches criteria_keyword,
+    unioned in document order. Generalises the old first-match-only collector so
+    an omit type spread across multiple CRITERIA blocks is fully captured.
+    """
+    lines: list[str] = []
+    for header, body in _iter_criteria_blocks(text):
+        if re.search(criteria_keyword, header, re.IGNORECASE):
+            lines.extend(body)
+    return lines
 
 
 def _load_adstra_flag_omits() -> dict:
@@ -418,31 +439,43 @@ def parse_select_pdf(pdf_path: str) -> dict:
         result["seed_db"] = ""
         result["parse_errors"].append("SEED RECORDS INCLUDED FROM LIST line not found")
 
-    # Flag omits — collect every value line in the OMIT FLAGS criteria block,
-    # which ends when the next CRITERIA line begins.
-    flag_lines = _collect_criteria_block(text, r'OMIT\s+FLAGS\b')
-    if flag_lines:
-        result["flags"] = set()
-        for _fl in flag_lines:
-            # First flag line is "FLAGS  :  = !" (colon before =); the rest are "OR = X".
+    # Flag omits — ADSTRA can split flag omits across MULTIPLE criteria blocks and
+    # spell the header either way:
+    #   "CRITERIA ...: 1  OMIT FLAGS"    -> FLAGS = !, OR = D, OR = N, ...
+    #   "CRITERIA ...: 6  OMIT FLAG $"   -> FLAGS = $   (e.g. the DMA-pander $ suppress)
+    # Union every flag-omit block: the flag named in the header itself
+    # ("OMIT FLAG $") plus each "FLAGS/OR = X" value line inside it.
+    result["flags"] = set()
+    found_flag_block = False
+    for _hdr, _body in _iter_criteria_blocks(text):
+        if not re.search(r'OMIT\s+FLAGS?\b', _hdr, re.IGNORECASE):
+            continue
+        found_flag_block = True
+        # Flag named directly in the header, e.g. "OMIT FLAG $" (guard against
+        # swallowing the following word like "OMIT FLAGS  EXCLUDED").
+        _hm = re.search(r'OMIT\s+FLAGS?\s+([A-Z0-9!\$])(?![A-Z0-9])', _hdr, re.IGNORECASE)
+        if _hm:
+            result["flags"].add(_hm.group(1))
+        for _fl in _body:
+            # First value line is "FLAGS  :  = !" (colon before =); the rest are "OR = X".
             # Allow any non-'=' chars between the keyword and '=' so the leading flag is caught.
             _fm = re.match(r'(?:FLAGS|OR)\b[^=\n]*=\s*([A-Z0-9!\$])', _fl, re.IGNORECASE)
             if _fm:
                 result["flags"].add(_fm.group(1))
-    else:
-        result["flags"] = set()
+    if not found_flag_block:
         result["parse_errors"].append("OMIT FLAGS criteria block not found (flag omits check skipped)")
 
-    # State omits — OMIT STATES criteria block (order-specific, not standard territory block)
-    state_lines = _collect_criteria_block(text, r'OMIT\s+STATES?\b')
+    # State omits — every OMIT STATES criteria block (order-specific, not standard
+    # territory block); union in case it's split across criteria.
+    state_lines = _collect_criteria_blocks(text, r'OMIT\s+STATES?\b')
     result["omit_states"] = set()
     for _sl in state_lines:
         _sm = re.match(r'(?:STATE|OR)\s*=\s*([A-Z]{2})\b', _sl, re.IGNORECASE)
         if _sm:
             result["omit_states"].add(_sm.group(1).upper())
 
-    # Zip omits — OMIT ZIPS criteria block
-    zip_lines = _collect_criteria_block(text, r'OMIT\s+ZIPS?\b')
+    # Zip omits — every OMIT ZIPS criteria block; union in case it's split.
+    zip_lines = _collect_criteria_blocks(text, r'OMIT\s+ZIPS?\b')
     result["omit_zips"] = set()
     for _zl in zip_lines:
         _zm = re.match(r'(?:ZIP\s*CODE|OR)\s*=\s*(\d{5})', _zl, re.IGNORECASE)
