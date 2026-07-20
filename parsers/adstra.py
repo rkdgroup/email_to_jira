@@ -198,7 +198,13 @@ class AdstraParser(BaseBrokerParser):
             if key in seen:
                 continue
             seen.add(key)
-            codes = self._state_codes_from_omit(ln)
+            # A line that mixes a state omit with the previous-order phrase
+            # ("OMIT NJ AND PREV ORDER") — the previous order is captured
+            # separately, so probe for state codes with that phrase removed;
+            # otherwise the stray "PREV ORDER" tokens make it fail the pure
+            # state-omit check and NJ is lost.
+            probe = _PREV_ORDER_RE.sub("", ln) if _PREV_ORDER_RE.search(ln) else ln
+            codes = self._state_codes_from_omit(probe)
             if codes:
                 for c in codes:
                     if c not in state_codes:
