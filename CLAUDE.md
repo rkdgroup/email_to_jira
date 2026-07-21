@@ -150,3 +150,9 @@ Note: ADSTRA now has a dedicated rule-based parser (`parsers/adstra.py`, `Adstra
 - **CONFIDENCE_RULE_BASED** = 0.92 — never hardcode, import from base
 - **Broker detection** (`parsers/__init__.py`): Pre-compiled regex patterns in `_RULES`, called via `detect_broker()`
 - **Client lookup** (`client_lookup.py`): Reads `NEW LR CLIENT LIST 2026.xlsx`. Exact db_code match first, then fuzzy name match (≥50% word overlap).
+
+## Github Rules
+
+- When a change is made in any file always push it to github with proper message.
+- When i say commit to github - it means you need to commit and push the changes.
+- Make sure all push happens in main branch.
