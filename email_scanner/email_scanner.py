@@ -356,6 +356,15 @@ def process_message(token: str, message: dict, failed_folder_id: str, processed_
 
             new_keys = []
             for page_result in page_results:
+                # A63D / SKIP_DB_CODES orders create no ticket by design. Do NOT treat
+                # them as a success — that appended a None key, logged a bogus
+                # "Ticket created: None", poisoned thread_map, and moved the email to
+                # Processed. Instead leave the email in the "List Rental" folder for
+                # manual handling (no move fires when ticket_keys stays empty).
+                if page_result.get("skipped"):
+                    log.info("Skipped %r — database %s in SKIP_DB_CODES; leaving in List Rental for manual handling",
+                             att_name, page_result.get("db_code", ""))
+                    continue
                 if page_result.get("success"):
                     key = page_result.get("ticket_key")
                     order_num = page_result.get("manager_order_number", "")
