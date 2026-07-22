@@ -257,18 +257,22 @@ def create_jira_ticket(
         if seed_id:
             fields["customfield_12156"] = {"id": seed_id}
 
-    # Omission description — ADF format
+    # Omission description — ADF format. Accept a pre-built ADF dict, or split a
+    # plain string into one paragraph per line so the \n-separated omit criteria
+    # render on separate lines (a single text node collapses them to a run-on blob).
     if omission_description:
-        fields["customfield_12270"] = {
-            "type": "doc",
-            "version": 1,
-            "content": [
-                {
-                    "type": "paragraph",
-                    "content": [{"type": "text", "text": omission_description}],
-                }
-            ],
-        }
+        if isinstance(omission_description, dict):
+            fields["customfield_12270"] = omission_description
+        else:
+            _omit_lines = [ln.strip() for ln in omission_description.splitlines() if ln.strip()]
+            fields["customfield_12270"] = {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": ln}]}
+                    for ln in _omit_lines
+                ] or [{"type": "paragraph", "content": []}],
+            }
 
     payload = {"fields": fields}
     url = f"{_get_jira_base_url()}/rest/api/3/issue"
