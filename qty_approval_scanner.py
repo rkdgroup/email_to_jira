@@ -357,6 +357,47 @@ def _abbrev_mailer(name: str) -> str:
     return _MAILER_ABBREVS.get(name.strip().upper(), name)
 
 
+def _load_list_short_codes() -> tuple[dict[str, str], dict[str, str]]:
+    """Parse dslf_list_and_mailer_names.txt for list-name -> short-code resolution.
+
+    Returns two maps, both keyed by UPPERCASED name:
+      - short_map:   exact list name -> code, from 'NAME  [Short: CODE]' lines
+      - code_by_desc: description   -> code, from Section 1 'CODE  =>  DESCRIPTION' lines
+    Both patterns are distinctive enough to scan the whole file without section
+    bounds ('[Short:' only appears in the list section; '=>' only in Section 1).
+    """
+    path = Path(__file__).parent / "dslf_list_and_mailer_names.txt"
+    short_map: dict[str, str] = {}
+    code_by_desc: dict[str, str] = {}
+    try:
+        txt = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return short_map, code_by_desc
+    for m in re.finditer(r'^\s{2}(.+?)\s*\[Short:\s*([A-Z0-9]+)\]\s*$', txt, re.MULTILINE):
+        short_map[m.group(1).strip().upper()] = m.group(2)
+    for m in re.finditer(r'^\s{2}([A-Z0-9]{2,7})\s*=>\s*([^\n(]+?)\s*(?:\(|$)', txt, re.MULTILINE):
+        code_by_desc.setdefault(m.group(2).strip().upper(), m.group(1))
+    return short_map, code_by_desc
+
+_LIST_SHORT_CODES, _CODE_BY_DESC = _load_list_short_codes()
+
+
+def resolve_list_code(name: str) -> str:
+    """Resolve a list name to its short code for the subject prefix, or "" to omit.
+
+    Order: existing regex (3-CODE / CODE- / bare code) -> exact '[Short:]' map ->
+    Section 1 description->code reverse map -> "". Only ever returns a space-free code.
+    """
+    n = (name or "").strip()
+    if not n:
+        return ""
+    cand = _abbrev_list_name(n)
+    if cand and " " not in cand:
+        return cand
+    u = n.upper()
+    return _LIST_SHORT_CODES.get(u) or _CODE_BY_DESC.get(u) or ""
+
+
 
 def build_report(waiting: list[dict], processed: list[dict]) -> str:
     from datetime import date
@@ -516,9 +557,10 @@ def _subject_for(mailer: str, processed: list[dict], waiting: list[dict], defaul
         return default
 
     if len(tickets) == 1:
-        cand = _abbrev_list_name((tickets[0].get("list_name") or "").strip())
-        # A clean abbreviation has no spaces; a full/unrecognized name does -> omit.
-        prefix = cand if cand and " " not in cand else ""
+        # Individual order -> list-name short code (e.g. NLEOMF/QTY APPROVAL/J3126).
+        # resolve_list_code handles 3-CODE / CODE- / bare, then the names-file
+        # '[Short:]' and Section-1 maps; returns "" (omit prefix) when unresolved.
+        prefix = resolve_list_code(tickets[0].get("list_name") or "")
     else:
         cand = _abbrev_mailer(mailer) if mailer else ""
         # Only use it if the lookup actually abbreviated the mailer to a clean code.
