@@ -89,7 +89,16 @@ _US_STATES = {
     'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC',
 }
 
-_CRITERIA_LINE = re.compile(r'^\s*CRITERIA\s*\.+\s*:\s*\d+', re.IGNORECASE)
+# Block header, e.g. "CRITERIA ...:  1  FLAG OM." — also tolerate the number-before-
+# colon variant "CRITERIA 1:" (no dot filler). Requires CRITERIA then dots/colons/
+# spaces then a digit.
+_CRITERIA_LINE = re.compile(r'^\s*CRITERIA\b[\s.:]*\d', re.IGNORECASE)
+
+# Omit-type header keywords. ADSTRA spells them either "OMIT <TYPE>" or "<TYPE> OM."
+# and abbreviates FLAG as FLG — match both forms so a variant header is not skipped.
+_OMIT_FLAG_HDR  = r'(?:OMIT\s+FL(?:AG|G)S?|FL(?:AG|G)S?\s+OM)'
+_OMIT_STATE_HDR = r'(?:OMIT\s+STATES?|STATES?\s+OM)'
+_OMIT_ZIP_HDR   = r'(?:OMIT\s+ZIPS?|ZIPS?\s+OM)'
 
 
 _SELECT_FORMAT_MAP = {
@@ -448,12 +457,12 @@ def parse_select_pdf(pdf_path: str) -> dict:
     result["flags"] = set()
     found_flag_block = False
     for _hdr, _body in _iter_criteria_blocks(text):
-        if not re.search(r'OMIT\s+FLAGS?\b', _hdr, re.IGNORECASE):
+        if not re.search(_OMIT_FLAG_HDR, _hdr, re.IGNORECASE):
             continue
         found_flag_block = True
         # Flag named directly in the header, e.g. "OMIT FLAG $" (guard against
         # swallowing the following word like "OMIT FLAGS  EXCLUDED").
-        _hm = re.search(r'OMIT\s+FLAGS?\s+([A-Z0-9!\$])(?![A-Z0-9])', _hdr, re.IGNORECASE)
+        _hm = re.search(_OMIT_FLAG_HDR + r'\s+([A-Z0-9!\$])(?![A-Z0-9])', _hdr, re.IGNORECASE)
         if _hm:
             result["flags"].add(_hm.group(1))
         for _fl in _body:
@@ -467,7 +476,7 @@ def parse_select_pdf(pdf_path: str) -> dict:
 
     # State omits — every OMIT STATES criteria block (order-specific, not standard
     # territory block); union in case it's split across criteria.
-    state_lines = _collect_criteria_blocks(text, r'OMIT\s+STATES?\b')
+    state_lines = _collect_criteria_blocks(text, _OMIT_STATE_HDR)
     result["omit_states"] = set()
     for _sl in state_lines:
         _sm = re.match(r'(?:STATE|OR)\s*=\s*([A-Z]{2})\b', _sl, re.IGNORECASE)
@@ -475,7 +484,7 @@ def parse_select_pdf(pdf_path: str) -> dict:
             result["omit_states"].add(_sm.group(1).upper())
 
     # Zip omits — every OMIT ZIPS criteria block; union in case it's split.
-    zip_lines = _collect_criteria_blocks(text, r'OMIT\s+ZIPS?\b')
+    zip_lines = _collect_criteria_blocks(text, _OMIT_ZIP_HDR)
     result["omit_zips"] = set()
     for _zl in zip_lines:
         _zm = re.match(r'(?:ZIP\s*CODE|OR)\s*=\s*(\d{5})', _zl, re.IGNORECASE)
