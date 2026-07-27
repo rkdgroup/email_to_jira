@@ -269,9 +269,12 @@ class KapParser(BaseBrokerParser):
         if not segment_criteria:
             segment_criteria = self._find(text, r"(?:Selects?|Segment):[ \t]*([^\n]+)")
 
-        # Drop a bare 4-digit year mis-grabbed as the key from a wrapped offer line
-        # (e.g. offer "Lutheran Hour Ministries November 2026" leaves key_code="2026").
-        if re.fullmatch(r"(?:19|20)\d{2}", key_code or ""):
+        # Drop offer-date noise mis-grabbed as the key from a wrapped offer line, e.g.
+        # offer "Lutheran Hour Ministries November 2026" leaves key_code "2026" or
+        # "September 2026". A bare month name alone is left as-is (could be a real code).
+        _MONTH = (r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+                  r"jul(?:y)?|aug(?:ust)?|sep(?:t)?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)")
+        if re.fullmatch(rf"(?i)(?:{_MONTH}\s+)?(?:19|20)\d{{2}}", (key_code or "").strip()):
             key_code = ""
 
         # --- Summary: P.O. {DL_number} {list_name} ---
