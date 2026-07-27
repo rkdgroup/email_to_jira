@@ -193,13 +193,22 @@ class KapParser(BaseBrokerParser):
                 if not addr.lower().startswith("no-reply") and not addr.lower().startswith("noreply"):
                     requestor_email = addr
                     break
+        # KAP house requestor when the order names no KAP contact (all recent KAP tickets
+        # use Jenny Gomez; DSLF-936/DL870 had only Data Axle addresses and came out blank).
+        # Never accept a non-KAP address (e.g. @data-axle.com) as the requestor.
+        if not requestor_email:
+            requestor_name = "Jenny Gomez"
+            requestor_email = "jgomez@keyacquisition.com"
 
         # --- Ship to email ---
-        # The Ship To block states delivery as "Email to: <addr>"; prefer that over the
-        # first "Email:" match, which is the mailer/broker contact (e.g. DSLF-802).
-        # The address may be preceded by a name ("Email to: Ted Borie at ted@x.com").
+        # Data Axle FTP orders: the file-notification target is incoming.files@data-axle.com
+        # (the order states this explicitly), NOT the account rep's "Email:" address.
+        # Otherwise the Ship To block states delivery as "Email to: <addr>"; prefer that
+        # over the first "Email:" match, which is the mailer/broker contact (e.g. DSLF-802).
         ship_to_email = ""
-        m = re.search(r"Email\s+to:[^\n@]*?([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
+        m = re.search(r"(incoming\.files@data-axle\.com)", text, re.IGNORECASE)
+        if not m:
+            m = re.search(r"Email\s+to:[^\n@]*?([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
         if not m:
             m = re.search(r"Email:\s*([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
         if m:
@@ -226,20 +235,44 @@ class KapParser(BaseBrokerParser):
         shipping_instructions = f"CC: {requestor_email}" if requestor_email else ""
 
         # --- Omission ---
-        omission_description = self._collect_continuation_block(
-            text, r"Omit[ \t:]+\S"
-        )
-        # Strip the "Omit:" label prefix from the first line
-        if omission_description:
-            omission_description = re.sub(r"(?i)^Omit[ \t:]+", "", omission_description, count=1)
+        # Collect the real omit/suppress directives (deduped, in order). The old
+        # single-anchor approach grabbed whatever line first contained "Omit" — which on
+        # DL870 was the SELECTION line ("12mo ... WITH Omit States - SEE BELOW") and on
+        # other orders left a stray "executed." paragraph prefix. Capture instead:
+        #   1. Starred instruction lines: "*** Omit States AK, AL, ..." (drives State Omits)
+        #   2. Standalone "Omit ...:" / "Omit ..." directive lines (e.g. "Omit: ALL RECORDS ..."),
+        #      excluding the pointer "Omit States - SEE BELOW"
+        #   3. The embedded boilerplate directive, captured from "Omit all" so the wrapped
+        #      paragraph prefix (e.g. "executed.") is dropped.
+        omit_lines: list[str] = []
 
-        # --- Other fees: auto-detect State Omits ---
+        def _add_omit(s: str) -> None:
+            s = re.sub(r"(?i)^omit[ \t]*:[ \t]*", "", s.strip().lstrip("*").strip()).strip()
+            if s and s not in omit_lines:
+                omit_lines.append(s)
+
+        for m in re.finditer(r"(?m)^[ \t]*\*+[ \t]*(Omit\b.+?)[ \t]*$", text):
+            _add_omit(m.group(1))
+        for ln in lines:
+            if re.match(r"(?i)^omit[ \t:]+\S", ln) and not re.search(r"(?i)\bsee below\b", ln):
+                _add_omit(ln)
+        m = re.search(r"(Omit\s+all\s+APO\b[^\n.]*)", text, re.IGNORECASE)
+        if m:
+            _add_omit(m.group(1))
+        omission_description = "\n".join(omit_lines)
+
+        # --- Other fees: auto-detect State Omits (6+ states/zips/SCFs) ---
         other_fees = self._detect_state_omits(omission_description)
 
         # --- Segment criteria ---
         # Fall back to explicit Selects: label if unlabeled line wasn't found
         if not segment_criteria:
             segment_criteria = self._find(text, r"(?:Selects?|Segment):[ \t]*([^\n]+)")
+
+        # Drop a bare 4-digit year mis-grabbed as the key from a wrapped offer line
+        # (e.g. offer "Lutheran Hour Ministries November 2026" leaves key_code="2026").
+        if re.fullmatch(r"(?:19|20)\d{2}", key_code or ""):
+            key_code = ""
 
         # --- Summary: P.O. {DL_number} {list_name} ---
         summary = f"P.O. {manager_order_number} {list_name}" if manager_order_number and list_name else ""
