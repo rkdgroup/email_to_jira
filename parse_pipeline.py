@@ -1,19 +1,19 @@
 """
-Main entry point for hybrid PDF order processing.
+Main entry point for rule-based PDF order processing.
 
 Flow:
   1. Extract PDF text
   2. Detect broker → run rule-based parser (free, instant)
-  3. No match → Claude fallback (paid, flexible)
-  4. Validate extracted fields
-  5. Duplicate check in Jira
-  6. Create Jira ticket (or dry-run report)
+  3. No match → flag for review; no ticket is created (there is no LLM fallback)
+  4. Validate extracted fields (advisory — only confidence 0.0 blocks creation)
+  5. Duplicate check in Jira (live runs only)
+  6. Enrich from config/*.yaml, then create the Jira ticket (or dry-run report)
 
 Usage (run from project root):
-    python JIRA_auto/parse_pipeline.py path/to/order.pdf
-    python JIRA_auto/parse_pipeline.py path/to/order.pdf --dry-run
-    python JIRA_auto/parse_pipeline.py path/to/order.pdf --dry-run --verbose
-    python JIRA_auto/parse_pipeline.py folder/                 # process all PDFs in folder
+    python parse_pipeline.py path/to/order.pdf
+    python parse_pipeline.py path/to/order.pdf --dry-run
+    python parse_pipeline.py path/to/order.pdf --dry-run --verbose
+    python parse_pipeline.py folder/                 # process all PDFs in folder
 """
 
 import os

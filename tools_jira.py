@@ -292,7 +292,13 @@ def create_jira_ticket(
 
 
 def search_jira_tickets(jql: str, max_results: int = 10) -> dict:
-    """Search Jira tickets using JQL. Returns list of matching issues."""
+    """Search Jira tickets using JQL. Returns {"total": n, "issues": [...]} for ONE page.
+
+    /rest/api/3/search/jql is token-paginated and returns no "total", so "total" here is
+    just len(issues) for the first max_results (default 10) hits — enough for the
+    duplicate check (total > 0), NOT a real match count. Use search_issues_paged() when
+    you need every match.
+    """
     url = f"{_get_jira_base_url()}/rest/api/3/search/jql"
     params = {"jql": jql, "maxResults": max_results, "fields": "summary,status,customfield_12193,customfield_12194"}
 

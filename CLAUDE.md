@@ -20,14 +20,31 @@ python parse_pipeline.py /path/to/folder/
 python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 ```
 
-`--dry-run` and `--verbose` are the **only** two CLI flags. `broker_hint` is a function argument (used by the email scanner), not a flag. There is **no test framework, linter, or CI test suite** — testing is manual, via `--dry-run --verbose` against PDFs in `broker_pdf/` and `Test_pdf/`.
+`--dry-run` and `--verbose` are the **only** two CLI flags. `broker_hint` is a function argument (used by the email scanner), not a flag.
+
+**Testing**: there is no linter and no CI test stage. The single automated test is
+`WO#/test_work_order_allocation.py` (7 branch-coverage tests for the WO collision loop,
+fake cursor, **no DB access**) — run it after touching `WO#/work_order.py`:
+
+```bash
+python "WO#/test_work_order_allocation.py"      # standalone runner, prints PASS/ALL PASSED
+pytest "WO#/test_work_order_allocation.py"      # also works under pytest
+```
+
+Everything else is tested manually via `--dry-run --verbose` against real broker PDFs.
+The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
+in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
+those paths exist.
+
+**Windows console**: `--verbose` prints ligature-normalized PDF text that cp1252 cannot
+encode (`UnicodeEncodeError`). Prefix runs with `PYTHONIOENCODING=utf-8`.
 
 ```bash
 # Scheduled automation (see "Scheduled Automation")
 python email_scanner/email_scanner.py                 # one poll of the shared mailbox
 python qc_checker.py [DSLF-123] [--dry-run] [--watch [MIN]]
-python qty_approval_scanner.py [--no-email-scan] [--combined] [--output f]
-python ticket_scanner/ticket_scanner.py [--loop N] [--reset]
+python qty_approval_scanner.py [--no-email-scan] [--combined] [--output f] [--email a] [--cc b] [--subject s]
+python ticket_scanner/ticket_scanner.py [--loop N] [--reset] [--learn] [--reporter NAME]
 
 # Config tooling (see "Config System")
 python config_guard.py        # fast syntax gate over config/*.yaml (exit 1 on parse error)
@@ -86,6 +103,7 @@ Load-bearing behaviors that are easy to get wrong:
 - **Multi-page PDFs**: every broker **except ADSTRA** splits into one ticket per page, and `process_pdf` then returns a **list** of per-page result dicts. ADSTRA multi-page is merged into one order. Callers must handle the list case.
 - **Duplicate check** (live only): JQL on `cf[12193]` Mailer PO — **except AMLC**, which keys on `cf[12192]` Manager Order #. Skipped entirely in dry-run or when neither key is populated.
 - **Description is NOT raw PDF text** — see Field Rules. The PDF is preserved by **attaching the file**.
+- **`search_jira_tickets()` does not return a real total.** `/rest/api/3/search/jql` is token-paginated and omits `total`, so the helper reports `total = len(issues)` from a single page (`max_results=10` by default). Fine for the duplicate check (`total > 0`), wrong for counting. Use `search_issues_paged()` when you need every match.
 - The work-order step and all attach steps **swallow exceptions** (log + continue): a ticket can succeed with its WO#, PDF, or profile attachment silently failed.
 
 ## Scheduled Automation
@@ -100,6 +118,34 @@ Four independent entry points share the pipeline and `.env`. **Only `email_scann
 | `ticket_scanner/ticket_scanner.py` | New DSLF tickets (issue# > saved state) | **Read-only** audit → report under `ticket_scanner/reports/`. `--learn` mines List Name→db_code patterns into `learned_patterns.json` (enrich tier 5). |
 
 Notes: `email_scanner.main()` has **no argparse** — `run_email_scanner.bat --loop` is a silent no-op (single scan). SKIP_DB_CODES emails are deliberately **left in `List Rental`** for manual handling (not moved). `email_scanner.py` and `qc_checker.py` call `config_guard.validate_configs_or_exit()` before doing work.
+
+### Email scanner specifics
+
+- **Runtime state lives in two gitignored JSON files** next to the script:
+  `processed_ids.json` (message IDs already handled) and `thread_map.json`
+  (`conversationId` → ticket key). Deleting them is not harmless — the scanner will
+  re-process the whole folder and follow-up emails will spawn **new tickets** instead of
+  becoming comments on the existing one.
+- **Scan window**: the top **50** messages in `List Rental`, ordered `receivedDateTime asc`
+  (oldest first), minus anything in `processed_ids.json`. A backlog larger than 50 drains
+  over successive runs.
+- **Non-PDF attachments** are routed by a service-bureau range in the filename:
+  `AMLC #668769-668774 ZipOmits.xls` attaches only to tickets whose
+  `manager_order_number` falls in 668769–668774 (`_resolve_attachment_targets`). With no
+  range in the name it attaches to **every** ticket created from that email.
+- **No PDF attached** → the scanner synthesizes one from the plain-text email body
+  (`_generate_pdf_from_text`, `Prefer: outlook.body-content-type="text"` so HTML `<style>`
+  bloat cannot push the fingerprint past the 3000-char detection window).
+
+### ⚠ Jenkins credential gap
+
+`Jenkinsfile` injects only `MS_CLIENT_ID`, `MS_TENANT_ID`, and `IMAP_EMAIL`. But
+`email_scanner.get_access_token()` also hard-requires **`MS_CLIENT_SECRET`,
+`MS_SERVICE_ACCOUNT`, `MS_SERVICE_PASSWORD`** and calls `sys.exit(1)` if any is missing —
+so scheduled runs authenticate only because a `.env` file exists in the Jenkins agent
+workspace, not because Jenkins supplies those three. Do not assume the Jenkinsfile is the
+complete credential picture. (It also injects `ANTHROPIC_API_KEY`, which no scheduled tool
+uses — only the offline AI tools do.)
 
 ## Config System
 

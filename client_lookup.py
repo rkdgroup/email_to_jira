@@ -3,10 +3,11 @@ Client lookup from YAML config files (config/*.yaml).
 
 Enriches billable_account, db_code, list_manager from the client database.
 
-Lookup order:
-  1. Broker-specific YAML (e.g. config/rmi.yaml) — match rental_name against
-     list_name then mailer_name (higher precision)
-  2. Full client YAML (config/full_client_list.yaml) — fuzzy name match (fallback)
+Lookup order (see enrich_fields for the full tier list and thresholds):
+  exact db_code → abbreviation token → broker-specific YAML (e.g. config/rmi.yaml,
+  matching rental_name/db_name against list_name then mailer_name) → cross-broker
+  YAMLs → full client YAML (config/full_client_list.yaml) → learned patterns.
+Fuzzy threshold is 0.6 everywhere except learned patterns (0.5).
 """
 
 import re
@@ -230,10 +231,14 @@ def enrich_fields(
     Look up db_code, billable_account, and list_manager from YAML config.
 
     Priority:
+      0. ADSTRA 5-digit list code exact match (ADSTRA orders only)
       1. Exact db_code match in broker YAML or full YAML
-      2. Broker-specific YAML: fuzzy match on list_name, then mailer_name (threshold 0.4)
-      3. Cross-broker YAMLs: fuzzy match (threshold 0.5)  [skipped if broker_only=True]
-      4. Full client YAML: fuzzy match on list_name (threshold 0.5)  [skipped if broker_only=True]
+      1.5. Abbreviation exact-token match (broker rows first, then full list)
+      2. Broker-specific YAML: fuzzy match on list_name, then mailer_name (threshold 0.6)
+      3. Cross-broker YAMLs: fuzzy match (threshold 0.6)  [skipped if broker_only=True]
+      4. Full client YAML: fuzzy match on list_name (threshold 0.6)  [skipped if broker_only=True]
+      5. learned_patterns.json from ticket_scanner --learn (threshold 0.5)
+         [skipped if broker_only=True]
 
     broker_only=True: stop after step 2 — never fall through to other brokers or full list.
     row_manager_filter: if set, only match rows whose list_manager contains this string
