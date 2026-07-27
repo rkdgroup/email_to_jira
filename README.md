@@ -35,7 +35,7 @@ python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 python parse_pipeline.py /path/to/folder/
 ```
 
-> `anthropic` is no longer a runtime dependency — the Claude AI fallback parser was removed, so unrecognized PDFs are flagged for review rather than parsed by an LLM.
+> The live pipeline has no LLM step — the Claude AI fallback parser was removed, so unrecognized PDFs are flagged for review rather than parsed by an LLM. `anthropic` is still required by the offline AI tools (`ai_extract.py`, `compare_extraction.py`, `hybrid_create.py`), which is why it remains in the install list.
 
 ## Configuration
 
