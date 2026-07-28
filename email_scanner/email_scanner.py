@@ -284,6 +284,7 @@ def _resolve_attachment_targets(
 def process_message(token: str, message: dict, failed_folder_id: str, processed_folder_id: str) -> None:
     from parse_pipeline import process_pdf
     from tools_jira import attach_file_to_ticket
+    from tools_zip_omit import attach_zip_splits
 
     msg_id          = message["id"]
     subject         = message.get("subject", "(no subject)")
@@ -411,6 +412,10 @@ def process_message(token: str, message: dict, failed_folder_id: str, processed_
                     log.info("Extra file %r attached to %s", other_name, tkey)
                 except Exception as e:
                     log.warning("Could not attach %r to %s: %s", other_name, tkey, e)
+            # A zip-omit list longer than ZIP_CHUNK_SIZE also gets attached as zip-only
+            # files of that size. The original above is still attached untouched.
+            # display_name is the real attachment name — other_path is a temp file.
+            attach_zip_splits(targets, other_path, display_name=other_name)
         finally:
             try:
                 Path(other_path).unlink()

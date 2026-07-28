@@ -112,6 +112,7 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
     from tools_jira import create_jira_ticket, search_jira_tickets, flag_for_review, attach_file_to_ticket
     from client_lookup import enrich_fields
     from client_profiles import find_profile
+    from tools_zip_omit import attach_zip_splits
 
     from tools_pdf import get_pdf_page_count, split_pdf_into_pages
 
@@ -356,7 +357,9 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
     except Exception as _e:
         log.warning("Could not attach PDF: %s", _e)
 
-    # Step 8: Attach supplementary files (e.g. zip omit xlsx) matched by order number
+    # Step 8: Attach supplementary files (e.g. zip omit xlsx) matched by order number.
+    # Large zip lists are additionally split into zip-only files of ZIP_CHUNK_SIZE each;
+    # the original file is still attached as-is.
     for order_num in filter(None, [result.manager_order_number, result.mailer_po]):
         for supp in _find_supplementary_files(pdf_path, order_num):
             try:
@@ -364,6 +367,7 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
                 log.info("Supplementary file attached to %s: %s", ticket["key"], supp.name)
             except Exception as _e:
                 log.warning("Could not attach supplementary file %s: %s", supp.name, _e)
+            attach_zip_splits(ticket["key"], str(supp), display_name=supp.name)
 
     # Step 9: Attach client profile document (profile_path resolved in Step 5b)
     try:

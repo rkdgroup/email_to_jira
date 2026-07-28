@@ -60,10 +60,10 @@ python hybrid_create.py order.pdf [--dry-run] [--no-claude]           # --dry-ru
 
 ```bash
 pip install anthropic requests pymupdf pdfminer.six pymupdf4llm python-dotenv msal pyyaml \
-            jaydebeapi JPype1 python-docx openpyxl
+            openpyxl xlrd jaydebeapi JPype1 python-docx
 ```
 
-- `requirements.txt` is the base list but is **missing `python-docx` and `openpyxl`** (needed by `client_profiles.py`, `build_profile_yaml.py`, `verify_configs.py`).
+- `requirements.txt` is the base list but is still **missing `python-docx`** (needed by `client_profiles.py`, `build_profile_yaml.py`, `verify_configs.py`). `openpyxl` and `xlrd` **are** in it — the zip-omit splitter runs on the Jenkins email path, which installs from that file only.
 - `anthropic` is used **only** by the offline AI tools (`ai_extract.py` is the sole importer), not by the live pipeline or scanners.
 - `jaydebeapi` + `JPype1` (+ `jt400.jar`) power the IBM i work-order step.
 
@@ -105,6 +105,7 @@ Load-bearing behaviors that are easy to get wrong:
 - **Description is NOT raw PDF text** — see Field Rules. The PDF is preserved by **attaching the file**.
 - **`search_jira_tickets()` does not return a real total.** `/rest/api/3/search/jql` is token-paginated and omits `total`, so the helper reports `total = len(issues)` from a single page (`max_results=10` by default). Fine for the duplicate check (`total > 0`), wrong for counting. Use `search_issues_paged()` when you need every match.
 - The work-order step and all attach steps **swallow exceptions** (log + continue): a ticket can succeed with its WO#, PDF, or profile attachment silently failed.
+- **Zip-omit attachments are split** (`tools_zip_omit.py`): a supplementary `.xlsx/.xls/.csv/.txt` holding **more than `ZIP_CHUNK_SIZE` (9500)** zips also gets attached as zip-only `.xlsx` files of 9500 each, named `{original stem}_zips_{i}of{n}.xlsx` (45,000 zips → 5 files). The original attachment is still attached untouched, source order and duplicates are preserved, and a file at or under 9500 produces nothing extra. Runs in both attach paths — `parse_pipeline` Step 8 and the email scanner's `other_atts` loop.
 
 ## Scheduled Automation
 

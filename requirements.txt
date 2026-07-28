@@ -6,5 +6,7 @@ pymupdf4llm
 python-dotenv
 msal
 pyyaml
+openpyxl
+xlrd
 jaydebeapi
 JPype1
