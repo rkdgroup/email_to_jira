@@ -44,7 +44,7 @@ GRAPH_BASE     = "https://graph.microsoft.com/v1.0"
 STATUS         = "Waiting on Qty Approval"
 PROJECT        = "DSLF"
 
-DEFAULT_EMAIL_TO = "ADoyle@data-management.com"
+DEFAULT_EMAIL_TO = "aagarwal@teamheller.com"
 #DEFAULT_EMAIL_TO = "smondal@data-management.com"
 DEFAULT_EMAIL_CC = "smondal@data-management.com"
 
@@ -90,7 +90,7 @@ def send_email(to: str, subject: str, body: str, cc: str = "") -> None:
         "body": {"contentType": "Text", "content": body},
         "toRecipients": [{"emailAddress": {"address": a.strip()}}
                          for a in to.split(",")],
-        "replyTo": [{"emailAddress": {"address": "ADoyle@data-management.com"}}],
+        "replyTo": [{"emailAddress": {"address": "aagarwal@teamheller.com"}}],
     }
     if cc:
         msg["ccRecipients"] = [{"emailAddress": {"address": a.strip()}}
