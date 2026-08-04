@@ -490,11 +490,23 @@ def _build_adf_description(result, profile_data: dict = None, select_by: str = "
     content = []
     profile_data = profile_data or {}
 
-    # Segment criteria from the PDF (polished text when the caller supplies it)
+    # Segment criteria from the PDF (polished text when the caller supplies it). An indented
+    # run belongs to the heading above it — tools_polish marks the priced selects that way —
+    # and renders as a bullet list, the same shape used for the profile blocks below. Jira's
+    # renderer collapses leading whitespace, so the indent has to become real ADF structure.
     criteria = result.segment_criteria if segment_criteria is None else segment_criteria
     if criteria:
-        lines = [ln.strip() for ln in criteria.splitlines() if ln.strip()]
-        content.extend(para(ln) for ln in lines)
+        lines = [ln.rstrip() for ln in criteria.splitlines() if ln.strip()]
+        i = 0
+        while i < len(lines):
+            content.append(para(lines[i].strip()))
+            group = []
+            i += 1
+            while i < len(lines) and lines[i][:1].isspace():
+                group.append(lines[i].strip())
+                i += 1
+            if group:
+                content.append(bullet_list(group))
 
     # Select By from profile
     resolved_select_by = select_by or profile_data.get("select_by", "")

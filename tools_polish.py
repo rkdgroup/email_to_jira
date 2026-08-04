@@ -48,6 +48,14 @@ _TOKEN_RE = re.compile(r"[$A-Za-z0-9][A-Za-z0-9$#/.\-+]*")
 # output may exceed the input line count by at most one per such line.
 _OMIT_HINT_RE = re.compile(r"\bOMIT\b|\bEXCLUDE\b|PER\s+HOUSEHOLD", re.IGNORECASE)
 
+# The ONLY words the model may introduce. Broker PDFs list the priced selects as bare
+# fragments under a "Selects:" header that never reaches this module (the parser keeps the
+# values and drops the header), so DSLF-967's description read "$10+ / 12 MOS HOTLINE /
+# GENDER" with nothing saying what they were. The model may restore that one label; the
+# token gate still rejects every other invented word, so the worst case is a mislabelled
+# group, never a fabricated criterion.
+_ALLOWED_NEW_TOKENS = {"SELECTS"}
+
 _POLISH_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -62,7 +70,7 @@ _SYSTEM = """You clean up two text fields extracted from broker list-rental purc
 PDFs for the DSLF pipeline (Data Management Inc.). The text was copied verbatim out of a PDF, \
 so it carries the PDF's line wrapping and column layout.
 
-You may perform ONLY these four operations:
+You may perform ONLY these five operations:
 
 1. JOIN a line that the PDF wrapped mid-phrase back onto the previous line. A wrap is
    recognisable because the first line ends mid-thought and the next continues it — e.g.
@@ -78,19 +86,28 @@ You may perform ONLY these four operations:
    appears twice: once cleanly, and once fused with words that belong to the description.
    Keep the clean copy and drop the fused one — do not leave both.
 4. DROP a line that is empty or pure punctuation.
+5. LABEL a run of bare select criteria in the DESCRIPTION with the single heading
+   "Selects:", and indent each line of that run by exactly two spaces. Broker PDFs list the
+   priced selects under a "Selects:" header that was lost in extraction, leaving fragments
+   like "$10+", "12 MOS HOTLINE", "GENDER" floating with nothing to identify them. Apply
+   this ONLY when TWO OR MORE consecutive description lines are bare criteria fragments of
+   that kind — short, no verb, naming a select dimension or its value. Do NOT label a single
+   stray line, a full sentence, a pull description, or anything in the omission field.
+   "Selects:" is the ONLY heading you may ever write; it is also the only word in your
+   entire output that is allowed not to appear in the input.
 
 When joining or splitting at a comma, the comma was only separating the two fragments: drop
 it rather than leaving it stranded at the end of a line.
 
 You may NOT:
 - Reword, rephrase, translate, expand, abbreviate, or re-order anything.
-- Add any word, label, heading, number, or punctuation that was not in the input.
+- Add any word, label, heading, number, or punctuation that was not in the input, with the
+  single exception of the "Selects:" heading described in operation 5.
 - Drop any criterion, state code, number, zip, date, dollar amount, or flag.
 - Change capitalisation or spacing inside a line, except for the single space added where
   you join two wrapped lines, and trimming leading/trailing whitespace.
 
-Every word in your output must have come from the input. The combined set of words across
-both of your output fields must equal the combined set across both input fields — you are
+Apart from that one heading, every word in your output must have come from the input. You are
 re-arranging text between and within two fields, nothing more. When in doubt, leave the line
 exactly as it is: an unchanged line is always acceptable, a reworded one never is.
 
@@ -100,13 +117,18 @@ Input description:
   12MOS 7/25-6/26 $10+ MALE
   DONORS, OMIT NJ,MN, AND ZIPS
   $10+
+  12 MOS HOTLINE
+  GENDER
 Input omission:
   APO, FPO
   DONORS, OMIT NJ,MN, AND ZIPS
 
 Correct output description:
   12MOS 7/25-6/26 $10+ MALE DONORS
-  $10+
+  Selects:
+    $10+
+    12 MOS HOTLINE
+    GENDER
 Correct output omission:
   APO, FPO
   OMIT NJ,MN, AND ZIPS
@@ -115,6 +137,9 @@ Why: the first two description lines are one wrapped sentence, so they join, and
 that separated them is dropped. "OMIT NJ,MN, AND ZIPS" is an omission, so it moves. The
 omission list already held that criterion fused with the stray word "DONORS" — that fused
 copy is redundant once the clean copy is there, so it is dropped rather than kept alongside.
+The last three description lines are bare select fragments, so they take the "Selects:"
+heading and a two-space indent; "$10+" is kept even though it repeats a value from the pull
+description, because it is a distinct priced select and dropping it would lose a criterion.
 """
 
 _USER_TEMPLATE = """DESCRIPTION LINES:
@@ -146,6 +171,21 @@ def _lines(text: str) -> list:
     return [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
 
 
+def _clean_out(raw: list) -> list:
+    """
+    Trim the model's lines while keeping the one thing indentation encodes: membership in
+    the group under the heading above. Any leading whitespace collapses to exactly two
+    spaces, which _build_adf_description reads as "render me as a bullet".
+    """
+    out = []
+    for item in raw:
+        text = str(item)
+        if not text.strip():
+            continue
+        out.append(("  " if text[:1].isspace() else "") + text.strip())
+    return out
+
+
 def _validate(desc_in: str, omit_in: str, desc_out: list, omit_out: list) -> bool:
     """
     True when the model only re-arranged text.
@@ -158,19 +198,37 @@ def _validate(desc_in: str, omit_in: str, desc_out: list, omit_out: list) -> boo
     before = _tokens(desc_in, omit_in)
     after = _tokens("\n".join(desc_out), "\n".join(omit_out))
 
-    invented = after - before
+    invented = after - before - _ALLOWED_NEW_TOKENS
     dropped = before - after
     if invented or dropped:
         log.warning("Polish rejected — invented=%s dropped=%s",
                     sorted(invented)[:8] or "none", sorted(dropped)[:8] or "none")
         return False
 
+    # A permitted heading labels one group, so it may appear at most once, and only in the
+    # description — the omission field is a flat list of criteria with nothing to head.
+    # Without this the token gate alone would let the model paper the field with headings,
+    # since a repeat introduces no new token.
+    def _heading(line: str) -> str:
+        key = line.strip().rstrip(":").upper()
+        return key if key in _ALLOWED_NEW_TOKENS else ""
+
+    if any(_heading(l) for l in omit_out):
+        log.warning("Polish rejected — heading written into the omission field")
+        return False
+
+    headings = [h for h in (_heading(l) for l in desc_out) if h]
+    if len(headings) != len(set(headings)):
+        log.warning("Polish rejected — heading repeated: %s", sorted(set(headings)))
+        return False
+
     in_lines = _lines(desc_in) + _lines(omit_in)
     n_in = len(in_lines)
     n_out = len([l for l in desc_out if l.strip()]) + len([l for l in omit_out if l.strip()])
     # Each line that mixes selection and omission criteria may split into two, so allow
-    # one extra output line per such input line — but no more.
-    ceiling = n_in + sum(1 for l in in_lines if _OMIT_HINT_RE.search(l))
+    # one extra output line per such input line — but no more. A heading is a whole line of
+    # its own, so it earns one more, and only when it is actually present.
+    ceiling = n_in + sum(1 for l in in_lines if _OMIT_HINT_RE.search(l)) + len(headings)
     if n_out > ceiling:
         log.warning("Polish rejected — line count grew beyond the split allowance (%d -> %d, max %d)",
                     n_in, n_out, ceiling)
@@ -252,8 +310,8 @@ def polish_fields(segment_criteria: str, omission_description: str,
             return desc_in, omit_in
 
         data = json.loads(text)
-        desc_out = [str(l).strip() for l in data.get("description_lines", []) if str(l).strip()]
-        omit_out = [str(l).strip() for l in data.get("omission_lines", []) if str(l).strip()]
+        desc_out = _clean_out(data.get("description_lines", []))
+        omit_out = _clean_out(data.get("omission_lines", []))
 
         if not _validate(desc_in, omit_in, desc_out, omit_out):
             return desc_in, omit_in
