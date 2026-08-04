@@ -33,10 +33,7 @@ import ai_extract
 from compare_extraction import adf_to_lines
 
 
-def _text_to_adf(lines: list) -> dict:
-    content = [{"type": "paragraph", "content": [{"type": "text", "text": ln}]}
-               for ln in lines if str(ln).strip()]
-    return {"type": "doc", "version": 1, "content": content or [{"type": "paragraph", "content": []}]}
+from tools_polish import text_to_adf as _text_to_adf
 
 
 def build_hybrid_kwargs(pdf_path: str, model: str = "claude-opus-4-8", use_claude: bool = True) -> dict:

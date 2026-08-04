@@ -113,6 +113,7 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
     from client_lookup import enrich_fields
     from client_profiles import find_profile
     from tools_zip_omit import attach_zip_splits
+    from tools_polish import polish_fields
 
     from tools_pdf import get_pdf_page_count, split_pdf_into_pages
 
@@ -292,7 +293,18 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
 
     # Step 6: Build ticket kwargs (shared by dry-run preview and live creation)
     kwargs = result.to_jira_kwargs()
-    kwargs["description"] = _build_adf_description(result, profile_data=profile_data)
+
+    # Step 6a: Structural polish of the two PDF-derived prose values. Runs BEFORE the
+    # description is assembled and before FLAG OMITS is appended, so the profile-sourced
+    # content is re-attached around the cleaned text and never leaves the process.
+    # Returns the inputs unchanged on any failure — see tools_polish.
+    polished_criteria, polished_omission = polish_fields(
+        result.segment_criteria, kwargs.get("omission_description", ""))
+    if polished_omission:
+        kwargs["omission_description"] = polished_omission
+
+    kwargs["description"] = _build_adf_description(
+        result, profile_data=profile_data, segment_criteria=polished_criteria)
     if enriched.get("billable_account") and not kwargs.get("billable_account"):
         kwargs["billable_account"] = enriched["billable_account"]
     if enriched.get("list_manager") and not kwargs.get("list_manager"):
@@ -318,7 +330,8 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
 
     if verbose or dry_run:
         _print_result(result, select_by=profile_data.get("select_by", ""),
-                      omission_description=kwargs.get("omission_description", ""))
+                      omission_description=kwargs.get("omission_description", ""),
+                      segment_criteria=polished_criteria)
 
     if dry_run:
         log.info("[DRY RUN] Would create ticket: %s", result.summary)
@@ -454,8 +467,13 @@ def _create_and_link_work_order(
         return None
 
 
-def _build_adf_description(result, profile_data: dict = None, select_by: str = "") -> dict:
-    """Build ADF description: segment criteria from PDF, plus profile suppressions/instructions as bullet lists."""
+def _build_adf_description(result, profile_data: dict = None, select_by: str = "",
+                           segment_criteria: str = None) -> dict:
+    """Build ADF description: segment criteria from PDF, plus profile suppressions/instructions as bullet lists.
+
+    segment_criteria overrides result.segment_criteria when supplied (the polished text
+    from tools_polish); pass None to use the parser's own value.
+    """
 
     def para(text: str) -> dict:
         return {"type": "paragraph", "content": [{"type": "text", "text": text}]}
@@ -472,9 +490,10 @@ def _build_adf_description(result, profile_data: dict = None, select_by: str = "
     content = []
     profile_data = profile_data or {}
 
-    # Segment criteria from the PDF
-    if result.segment_criteria:
-        lines = [ln.strip() for ln in result.segment_criteria.splitlines() if ln.strip()]
+    # Segment criteria from the PDF (polished text when the caller supplies it)
+    criteria = result.segment_criteria if segment_criteria is None else segment_criteria
+    if criteria:
+        lines = [ln.strip() for ln in criteria.splitlines() if ln.strip()]
         content.extend(para(ln) for ln in lines)
 
     # Select By from profile
@@ -500,7 +519,8 @@ def _build_adf_description(result, profile_data: dict = None, select_by: str = "
     return {"type": "doc", "version": 1, "content": content}
 
 
-def _print_result(result, select_by: str = "", omission_description: str = "") -> None:
+def _print_result(result, select_by: str = "", omission_description: str = "",
+                  segment_criteria: str = None) -> None:
     """Pretty-print all extracted Jira fields."""
     W = 22  # label column width
     print("\n" + "=" * 65)
@@ -540,7 +560,7 @@ def _print_result(result, select_by: str = "", omission_description: str = "") -
 
     print("-" * 65)
     print(f"  {'Description':<{W}}:")
-    adf = _build_adf_description(result, select_by=select_by)
+    adf = _build_adf_description(result, select_by=select_by, segment_criteria=segment_criteria)
     for node in adf.get("content", []):
         if node["type"] == "paragraph":
             text = "".join(c.get("text", "") for c in node.get("content", []))

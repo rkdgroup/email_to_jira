@@ -35,7 +35,7 @@ python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 python parse_pipeline.py /path/to/folder/
 ```
 
-> The live pipeline has no LLM step — the Claude AI fallback parser was removed, so unrecognized PDFs are flagged for review rather than parsed by an LLM. `anthropic` is still required by the offline AI tools (`ai_extract.py`, `compare_extraction.py`, `hybrid_create.py`), which is why it remains in the install list.
+> **Every structured field is rule-based.** There is no Claude fallback *parser* — unrecognized PDFs are flagged for review, not parsed by an LLM. The one LLM step in the live pipeline is `tools_polish.py`, which structurally cleans the Description and Omission Description after parsing (joining lines the PDF wrapped, moving omit criteria to the right field); it never rewords, and falls back to the parser's own text on any failure. `anthropic` is also required by the offline AI tools (`ai_extract.py`, `compare_extraction.py`, `hybrid_create.py`).
 
 ## Configuration
 

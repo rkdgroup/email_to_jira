@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-DSLF List Rental Pipeline — processes purchase order PDFs from brokers, extracts structured fields via **rule-based** parsing (one parser per broker), enriches from generated YAML lookups, and creates DSLF tickets in Jira (rkdgroup.atlassian.net, project DSLF, issue type 11806). There is **no** LLM step in the live pipeline — a PDF matching none of the 12 broker fingerprints is flagged for review (no ticket, no Claude fallback). Claude is used only by the offline auxiliary tools (see "AI-Assisted Offline Tools").
+DSLF List Rental Pipeline — processes purchase order PDFs from brokers, extracts structured fields via **rule-based** parsing (one parser per broker), enriches from generated YAML lookups, and creates DSLF tickets in Jira (rkdgroup.atlassian.net, project DSLF, issue type 11806).
+
+**Every structured field is rule-based.** The one LLM step in the live pipeline is `tools_polish.py`, which structurally cleans the two prose fields (Description, Omission Description) after parsing — see "Prose Polish". A PDF matching none of the 12 broker fingerprints is still flagged for review (no ticket, no Claude fallback parser). Claude is otherwise used only by the offline auxiliary tools (see "AI-Assisted Offline Tools").
 
 ## Commands
 
@@ -64,7 +66,7 @@ pip install anthropic requests pymupdf pdfminer.six pymupdf4llm python-dotenv ms
 ```
 
 - `requirements.txt` is the base list but is still **missing `python-docx`** (needed by `client_profiles.py`, `build_profile_yaml.py`, `verify_configs.py`). `openpyxl` and `xlrd` **are** in it — the zip-omit splitter runs on the Jenkins email path, which installs from that file only.
-- `anthropic` is used **only** by the offline AI tools (`ai_extract.py` is the sole importer), not by the live pipeline or scanners.
+- `anthropic` is imported by the offline AI tools (`ai_extract.py`) **and by `tools_polish.py`, which runs in the live pipeline** — so `ANTHROPIC_API_KEY` is now load-bearing for scheduled runs (a missing key degrades prose quality, it does not break ticket creation).
 - `jaydebeapi` + `JPype1` (+ `jt400.jar`) power the IBM i work-order step.
 
 `.env` credentials by consumer:
@@ -74,7 +76,7 @@ pip install anthropic requests pymupdf pdfminer.six pymupdf4llm python-dotenv ms
 | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` | Everything (Jira REST) |
 | `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_SERVICE_ACCOUNT`, `MS_SERVICE_PASSWORD`, `MS_TENANT_ID`, `IMAP_EMAIL` | email + qty scanners (MSAL ROPC auth) |
 | `IBMI_HOST`, `IBMI_USER`, `IBMI_PASSWORD` | work-order creation |
-| `ANTHROPIC_API_KEY` | offline AI tools only |
+| `ANTHROPIC_API_KEY` | `tools_polish` (live pipeline) + offline AI tools |
 
 The `JIRA_API_TOKEN` in `.env` **can create and edit tickets** — `tools_jira` uses it to create issues (POST), update fields (`update_ticket_fields`, PUT → 204), comment, and attach. (Verified 2026-07-27: created DSLF-919, updated DSLF-936.) The Atlassian MCP connector is an optional alternative for interactive edits under the user's own account, not a requirement.
 
@@ -92,6 +94,8 @@ PDF → [tools_pdf] extract text (PyMuPDF primary; pdfminer fallback only if PyM
     → duplicate check (skipped in dry-run)
     → [client_lookup] enrich db_code/billable/list_manager from config/*.yaml
     → [client_profiles] resolve profile file (attached) + profile_data (select_by/flags/…)
+    → [tools_polish] structural polish of segment_criteria + omission (LLM; falls back
+      to the parser's text on any failure)
     → build kwargs + ADF description + FLAG omits
     → dry-run: return {"fields": kwargs}    |    live: create ticket + WO# + attach PDF/profile
 ```
@@ -145,8 +149,8 @@ Notes: `email_scanner.main()` has **no argparse** — `run_email_scanner.bat --l
 `MS_SERVICE_ACCOUNT`, `MS_SERVICE_PASSWORD`** and calls `sys.exit(1)` if any is missing —
 so scheduled runs authenticate only because a `.env` file exists in the Jenkins agent
 workspace, not because Jenkins supplies those three. Do not assume the Jenkinsfile is the
-complete credential picture. (It also injects `ANTHROPIC_API_KEY`, which no scheduled tool
-uses — only the offline AI tools do.)
+complete credential picture. (`ANTHROPIC_API_KEY` **is** now used by scheduled runs — the
+`tools_polish` step in the live pipeline — so that one is load-bearing rather than spare.)
 
 ## Config System
 
@@ -161,6 +165,33 @@ uses — only the offline AI tools do.)
 ## IBM i Work Orders
 
 On every **live** create, `_create_and_link_work_order()` imports `WO#/work_order.py` (jt400 JDBC via `jaydebeapi`+`JPype1`) to INSERT into `DMIJOBS.ARWRKSCH`, then writes the WO# to `customfield_12089`. It re-reads the billable account from the just-created ticket. Requires `IBMI_*` env + `jt400.jar`. **Failures are non-fatal** (logged, ticket still succeeds); skipped entirely if billable_account is empty.
+
+## Prose Polish (`tools_polish.py`) — the live LLM step
+
+Runs on every ticket inside `process_pdf`, between kwargs assembly and the FLAG OMITS append.
+Cleans the two PDF-derived prose values structurally, because parsers copy PDF text verbatim
+and inherit its line wrapping (DSLF-967: one sentence wrapped across two lines, with an omit
+criterion stranded in the Description and duplicated into Omission).
+
+- **Four permitted operations only**: join a wrapped line, move/split an omit criterion into
+  the omission field, drop a redundant line, drop an empty one. **No rewording, ever.**
+- **Only PDF-derived prose is sent.** `Select By`, `Standard Suppressions`, `Special
+  Instructions`, and `FLAG OMITS:` are config-sourced and never leave the process — the
+  existing code re-attaches them around the cleaned text.
+- **The gate, not the model, is the guarantee** (`_validate`): the fact-token set across
+  *both* fields must be identical before and after — moving a criterion between fields is
+  allowed, inventing or dropping one is not. Output lines may exceed input lines by at most
+  one per line containing an omit keyword (a mixed line legitimately splits in two).
+- **Every failure returns the parser's text unchanged** — no API key, budget exhausted,
+  timeout, API error, refusal, or failed validation. A ticket is never worse than before, and
+  an Anthropic outage cannot block creation.
+- **Model is `claude-haiku-4-5`**, not Opus. Measured on DSLF-967, all three tiers scored 5/5
+  after the prompt was tightened; Haiku did it at ~2.5s vs 6.0s (Opus 5) and 7.9s (Sonnet 5).
+  The work is mechanical re-arrangement — the cheapest tier is also the fastest.
+- **Jenkins guards**: 20s per-call timeout, `POLISH_BUDGET_S` (120s) per-process wall clock
+  after which remaining tickets skip the pass, and an in-process cache so repeated text in a
+  multi-page or batched order costs one call. A 7-page AMLC PDF is ~18s of polish.
+- Inputs under two lines total skip the API entirely.
 
 ## AI-Assisted Offline Tools
 
