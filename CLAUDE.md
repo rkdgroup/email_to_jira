@@ -173,15 +173,27 @@ Cleans the two PDF-derived prose values structurally, because parsers copy PDF t
 and inherit its line wrapping (DSLF-967: one sentence wrapped across two lines, with an omit
 criterion stranded in the Description and duplicated into Omission).
 
-- **Four permitted operations only**: join a wrapped line, move/split an omit criterion into
-  the omission field, drop a redundant line, drop an empty one. **No rewording, ever.**
+There are 2 parts in Jira - Description and ommision description. So the pull descriptions and all that are not to be ommited are to be places in description and everything that are to be ommited goes to ommision decription part. 
+
+- **Five permitted operations only**: join a wrapped line, move/split an omit criterion into
+  the omission field, drop a redundant line, drop an empty one, and label a run of bare
+  select criteria (see below). **No rewording, ever.**
+- **The `Selects:` heading is the one exception to "add nothing".** Broker PDFs list the
+  priced selects under a `Selects:` header that the parsers drop, keeping only the values —
+  DSLF-967's Description read `$10+` / `12 MOS HOTLINE` / `GENDER` as three bare lines with
+  nothing saying what they were. The model may restore that heading over a run of **two or
+  more** consecutive bare fragments and indent them by two spaces. `_ALLOWED_NEW_TOKENS =
+  {"SELECTS"}` is the complete list of words it may introduce.
 - **Only PDF-derived prose is sent.** `Select By`, `Standard Suppressions`, `Special
   Instructions`, and `FLAG OMITS:` are config-sourced and never leave the process — the
   existing code re-attaches them around the cleaned text.
 - **The gate, not the model, is the guarantee** (`_validate`): the fact-token set across
-  *both* fields must be identical before and after — moving a criterion between fields is
-  allowed, inventing or dropping one is not. Output lines may exceed input lines by at most
-  one per line containing an omit keyword (a mixed line legitimately splits in two).
+  *both* fields must be identical before and after, apart from `_ALLOWED_NEW_TOKENS` —
+  moving a criterion between fields is allowed, inventing or dropping one is not. Output
+  lines may exceed input lines by at most one per line containing an omit keyword (a mixed
+  line legitimately splits in two) plus one per heading actually emitted. Two rules the
+  token set alone cannot enforce, because a repeated heading introduces no new token: a
+  heading may appear **at most once**, and **never in the omission field**.
 - **Every failure returns the parser's text unchanged** — no API key, budget exhausted,
   timeout, API error, refusal, or failed validation. A ticket is never worse than before, and
   an Anthropic outage cannot block creation.
@@ -195,7 +207,7 @@ criterion stranded in the Description and duplicated into Omission).
 
 ## AI-Assisted Offline Tools
 
-Auxiliary, **not part of the live pipeline**. All use Claude `claude-opus-4-8` and require `ANTHROPIC_API_KEY`.
+Auxiliary, **not part of the live pipeline**. All require `ANTHROPIC_API_KEY` and are pinned to `claude-opus-4-8` (`ai_extract.py:34`, `compare_extraction.py:275`, `hybrid_create.py:39/56/106`). That pin predates the Claude 5 family and has not been re-evaluated — it is inertia, not a measured choice, unlike the live-pipeline `claude-haiku-4-5` pin which was benchmarked. `compare_extraction` and `hybrid_create` both take `--model`, so a newer model can be tried without editing anything.
 
 | Tool | Purpose |
 |------|---------|
@@ -209,9 +221,11 @@ Auxiliary, **not part of the live pipeline**. All use Claude `claude-opus-4-8` a
 
 - **Title**: `{LIST NAME} - {MAILER NAME} - {MANAGER ORDER NUMBER}` (never Mailer PO). e.g. `JUDICIAL WATCH DONORS - HERITAGE FOUNDATION - W74926JW`
 - **Description**: an **ADF document** of `segment_criteria` (selection/select portion of the PDF) plus the client profile's `Select By`, `Standard Suppressions`, and `Special Instructions`. It is **not** the raw PDF text — the raw order text is passed separately as `create_jira_ticket(order_text=…)` and used only for the Saturn ship-to rule; the PDF itself is attached.
+  - **Indentation in `segment_criteria` is structural, not cosmetic.** In `_build_adf_description` a run of indented lines becomes an ADF `bulletList` under the paragraph above it — the same shape the profile blocks use. This is the contract `tools_polish` writes to when it labels a `Selects:` group. Jira's renderer collapses leading whitespace, so an indent that stays a plain string is invisible in the UI; it has to become real ADF structure.
 - **Omission Description** (`cf[12270]`, ADF): what is omitted/suppressed — flags, states, zips/SCFs, "OMIT PREVIOUS ORDER", "1 PER HOUSEHOLD", plus profile `FLAG OMITS:`. Accepts a pre-built ADF dict **or** a plain string; a plain string is split into **one paragraph per line** so criteria don't render as a run-on blob.
 - **List Manager** = one of these exact values: ADSTRA, AALC, AMLC, CELCO, CONRAD, DATA-AXLE, KAP, MARY E GRANGER, NEGEV, NAMES IN THE NEWS, RKD, RMI, WASHINGTON LISTS, WE ARE MOORE
-- **Mailer Name** = organization sending the mail. **List Name** = donor list being rented. Never swap.
+- **Mailer Name** = organization sending the mail. **List Name** = donor list being rented. Never swap. On the order forms themselves the "Mailer" and "Broker" labels are used interchangeably (per Lee Ann Hazelwood) — read the value, not the label.
+- **List Name** is stored as the abbreviation, e.g. FAIR = Federation for American Immigration Reform.
 - **Availability Rule**: "Full Run" = "All Available", "NTH NAME" = "Nth"
 - **Other Fees**: "STATE OMITS" when the omission has 6+ states/zips/SCFs (state count + 3-5-digit-number count summed ≥ 6 — automatic, expected)
 - **File Format**: `create_jira_ticket` defaults to **ASCII Delimited** when unspecified (after the ASCII-Fixed forcing rules), so new tickets are never blank on this field.
@@ -239,6 +253,8 @@ Run at the top of `create_jira_ticket` and **override** whatever the parser prod
 | CONRAD DIRECT | BROK/MAIL PO: field | PURCHASE ORDER NO |
 | Names in News | 6-7 digit number | LR # |
 | CELCO | ORDER # | ORDER # |
+| SimioCloud | Ship Label `PO#`, else first 4+ digit run in the label, else falls back to Order# | Order# (inherits `DataAxleParser.parse`) |
+| RKD / AMLC | `Client P.O.:` — in AMLC's columnar layout the value can sit up to 25 lines *below* its label | first 5-6 digit number in the first 10 lines (Service Bureau No. / Purchase Order No.) |
 
 ## Requestor by Broker
 
@@ -293,12 +309,6 @@ From db_code (e.g., F41D): Billable Account = db_code without suffix (F41); Clie
 | Data Axle | "Key Code:" field or Order# suffix |
 | Others | Extracted from order if present |
 
-## Additional Field Rules (from Lee Ann Hazelwood)
-
-- **Mailer / Broker fields**: interchangeable on list-rental order forms.
-- **Availability Rule**: "Full Run" = "All Available". Confirmed.
-- **List Name abbreviations**: FAIR = Federation for American Immigration Reform.
-
 ## Supported Brokers (12) & Detection
 
 12 brokers in 10 files; two files host two parsers each via inheritance:
@@ -327,3 +337,13 @@ From db_code (e.g., F41D): Billable Account = db_code without suffix (F41); Clie
 - When a change is made in any file always push it to github with proper message.
 - When i say commit to github - it means you need to commit and push the changes.
 - Make sure all push happens in main branch.
+- **"Always push" means the code you changed, not everything in the working tree.** Stage
+  named paths; never `git add -A` / `git add .`. Anything already modified when you started
+  is someone else's change — surface it, don't sweep it into your commit.
+- **Never commit, even if it appears staged or someone asks:** `.env` / `*.env` (Jira token,
+  MS service password, IBM i credentials), `email_scanner/thread_map.json` and
+  `processed_ids.json` and `token_cache.bin` (runtime state — see "Email scanner specifics"
+  for why losing them spawns duplicate tickets), the source Excel workbooks and
+  `Client Profiles/` (client data), and `.claude/settings.local.json` (per-machine
+  permissions). `.gitignore` covers these today; that is a safety net, not a reason to skip
+  checking `git status` before committing.
