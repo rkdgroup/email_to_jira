@@ -8,5 +8,6 @@ msal
 pyyaml
 openpyxl
 xlrd
+python-docx
 jaydebeapi
 JPype1
