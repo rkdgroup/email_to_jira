@@ -3,7 +3,7 @@ Qty Approval Queue Scanner
 1. Scans service-account inbox for unread "NPA/QTY APPROVAL/<order#>" emails.
    - Parses approved qty from body (format: "<order#> = <qty>")
    - Updates Requested Quantity on the matching Jira ticket
-   - Never transitions the ticket — it stays in "Waiting on Qty Approval"
+   - Never transitions the ticket — it stays in "Ready to Send for Qty Approval"
    - Marks the email as read so it is not reprocessed
 2. For tickets still waiting (no approval email found), downloads the SELECT PDF
    and reads TOTAL RECORDS SELECTED as a fallback qty.
@@ -41,7 +41,7 @@ MS_CLIENT_SECRET    = os.getenv("MS_CLIENT_SECRET", "")
 MS_SERVICE_ACCOUNT  = os.getenv("MS_SERVICE_ACCOUNT", "")
 MS_SERVICE_PASSWORD = os.getenv("MS_SERVICE_PASSWORD", "")
 GRAPH_BASE     = "https://graph.microsoft.com/v1.0"
-STATUS         = "Waiting on Qty Approval"
+STATUS         = "Ready to Send for Qty Approval"
 PROJECT        = "DSLF"
 
 DEFAULT_EMAIL_TO = "aagarwal@teamheller.com"
@@ -206,7 +206,7 @@ def apply_qty_approval(ticket: dict, qty: int) -> str:
     """
     Update Requested Quantity (customfield_12271) only.
 
-    The ticket is NEVER transitioned — it stays in 'Waiting on Qty Approval'
+    The ticket is NEVER transitioned — it stays in 'Ready to Send for Qty Approval'
     regardless of the result. Returns one of: "updated", "failed".
     """
     key = ticket["key"]
