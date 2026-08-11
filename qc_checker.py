@@ -129,6 +129,14 @@ def _criteria_tokens(s: str) -> tuple[list[str], list[str]]:
 
     A BARE range must have decimals on the high side. Without that guard a
     SUPPRESS title like "4-6 LINE ADDRESSES" parses as the money range "$4-6".
+
+    Thresholds have two traps, both seen on live selects:
+      * "05+ L03 60+" — the trailing "60+" is the 60 PLUS ASSOCIATION mailer code,
+        not $60. The dollar criterion is stated first, so when nothing in the
+        string carries a '$' only the FIRST bare threshold is taken; when any
+        threshold IS '$'-prefixed the bare ones are mailer shorthand and dropped.
+      * "0.01+" — decimals were being truncated to "$1+". A floor of a cent is
+        "no minimum" rather than a criterion, so it is not emitted at all.
     """
     def _dnum(x: str) -> str:
         return str(int(float(x))) if float(x) == int(float(x)) else x
@@ -137,7 +145,11 @@ def _criteria_tokens(s: str) -> tuple[list[str], list[str]]:
               for lo, hi in re.findall(r'\$\s*(\d+(?:\.\d+)?)\s*-\s*\$?\s*(\d+(?:\.\d+)?)', s)]
     dollar += [f"${_dnum(lo)}-{_dnum(hi)}"
                for lo, hi in re.findall(r'(?<![\d.$])(\d+)\s*-\s*(\d+\.\d+)(?![\d.])', s)]
-    dollar += [f"${int(t)}+" for t in re.findall(r'\$?(\d+)\+', s)]
+
+    thresholds = re.findall(r'(\$)?\s*(\d+(?:\.\d+)?)\s*\+', s)
+    explicit   = [v for sign, v in thresholds if sign]
+    chosen     = explicit if explicit else [v for _s, v in thresholds][:1]
+    dollar    += [f"${_dnum(v)}+" for v in chosen if float(v) > 0.01]
 
     period = [f"L{int(n)}M" for n in re.findall(r'(?<![A-Za-z])L(\d+)M?', s, re.IGNORECASE)]
 
