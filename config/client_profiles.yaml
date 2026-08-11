@@ -1941,7 +1941,7 @@ N22D:
   - '***L3M OMISSION SET IS PULLED BY RECENT DATE AND DOLLAR PER LUCY'
 N35:
   select_by: MOST RECENT $ AND DATE
-  flags: C,
+  flags: C, D, N, R, X,$, 1, 2
   dollar_cap: $99.99
   standard_suppressions:
   - FED BLDGS, PRSN, LIBR., SCHL, INST.
@@ -1957,7 +1957,7 @@ N35:
   - IF ORDER COMES FROM COLLEEN THEN SEE LUCY
 N41:
   select_by: MOST RECENT $ AND DATE
-  flags: A,B,
+  flags: A, B, D, E, H, Q, X, Z, $, 4, 6, !
   dollar_cap: $99.99
   standard_suppressions: []
   special_instructions:
@@ -1972,7 +1972,7 @@ N44D:
   special_instructions: []
 N45D:
   select_by: TRANSACTION & LIST CODE
-  flags: D,P,X,
+  flags: D,P,X
   dollar_cap: No transaction $ available
   standard_suppressions:
   - NONE
