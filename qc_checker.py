@@ -101,6 +101,50 @@ _OMIT_STATE_HDR = r'(?:OMIT\s+STATES?|STATES?\s+OM)'
 _OMIT_ZIP_HDR   = r'(?:OMIT\s+ZIPS?|ZIPS?\s+OM)'
 
 
+# Include-set line from the account-history table at the top of the SELECT, e.g.
+#   "  INCLUDE BY ACCOUNT #:    30,311   S00N11DIH1   009999   10-99.99 L3M   07'01  19:14:52 07/07/2026"
+# Groups: count, member, job id#, then TITLE + run-time tail (split by _RUNTIME_TAIL).
+# The TITLE carries the universe the select was drawn from ("10-99.99 L3M") — the
+# second, independent statement of the order's criteria alongside the REPORT line.
+# The bare "DE BY ACCOUNT" alternative catches a truncated INCLUDE (seen in extracted
+# text); the lookbehind keeps it from firing on the tail of the full word, and neither
+# form matches the "SUPPRESS BY ACCOUNT #:" lines that share this table.
+_INCLUDE_LINE = re.compile(
+    r'(?:INCLUDE|(?<![A-Z])DE)\s+BY\s+ACCOUNT\s*#?\s*:\s*([\d,]+)\s+(\S+)\s+(\S+)\s+(.+?)\s*$',
+    re.IGNORECASE)
+
+# Trailing "07'01   19:14:52 07/07/2026" (the leading MM'DD stamp is not always present).
+_RUNTIME_TAIL = re.compile(
+    r"\s*(?:\d{1,2}'\d{2}\s+)?\d{1,2}:\d{2}:\d{2}\s+\d{1,2}/\d{1,2}/\d{2,4}\s*$")
+
+
+def _criteria_tokens(s: str) -> tuple[list[str], list[str]]:
+    """
+    Pull ($-amount, L#M) criteria tokens out of a criteria string.
+
+    Handles all three forms seen in the wild:
+      "$10-99.99"  (KAP range, $ present)   -> ["$10-99.99"]
+      "10-99.99"   (INCLUDE title, bare)    -> ["$10-99.99"]
+      "$5+" / "05+"                          -> ["$5+"]
+
+    A BARE range must have decimals on the high side. Without that guard a
+    SUPPRESS title like "4-6 LINE ADDRESSES" parses as the money range "$4-6".
+    """
+    def _dnum(x: str) -> str:
+        return str(int(float(x))) if float(x) == int(float(x)) else x
+
+    dollar = [f"${_dnum(lo)}-{_dnum(hi)}"
+              for lo, hi in re.findall(r'\$\s*(\d+(?:\.\d+)?)\s*-\s*\$?\s*(\d+(?:\.\d+)?)', s)]
+    dollar += [f"${_dnum(lo)}-{_dnum(hi)}"
+               for lo, hi in re.findall(r'(?<![\d.$])(\d+)\s*-\s*(\d+\.\d+)(?![\d.])', s)]
+    dollar += [f"${int(t)}+" for t in re.findall(r'\$?(\d+)\+', s)]
+
+    period = [f"L{int(n)}M" for n in re.findall(r'(?<![A-Za-z])L(\d+)M?', s, re.IGNORECASE)]
+
+    # de-dupe, preserve order
+    return list(dict.fromkeys(dollar)), list(dict.fromkeys(period))
+
+
 _SELECT_FORMAT_MAP = {
     'ASCII COMMA DELIMITED': 'ASCII Delimited',
     'ASCII FIXED LENGTH':    'ASCII Fixed',
@@ -147,6 +191,87 @@ def _fuzzy_name_match(s_words: set, t_words: set) -> list[str]:
                     used_t.add(tw)
                     break
     return matches
+
+
+def _token_bounds(token: str) -> tuple[float | None, float | None]:
+    """'$5-49.99' -> (5.0, 49.99);  '$5+' -> (5.0, None);  unparseable -> (None, None)."""
+    body = (token or "").lstrip('$')
+    try:
+        if '-' in body:
+            lo, hi = body.split('-', 1)
+            return float(lo), float(hi)
+        return float(body.rstrip('+')), None
+    except ValueError:
+        return None, None
+
+
+def _period_months(token: str) -> int | None:
+    """'L12M' -> 12."""
+    m = re.match(r'L(\d+)M', token or '')
+    return int(m.group(1)) if m else None
+
+
+# The order's ask as written in the ticket description: "3M $5+", "6 Month ... $10+".
+_DESC_PERIOD_RE = re.compile(r'(?<!\d)(\d{1,2})\s*(?:MOS|MONTHS|MONTH|MO|M)\b', re.IGNORECASE)
+_DESC_DOLLAR_RE = re.compile(r'\$\s*(\d+(?:\.\d+)?)\s*\+')
+
+
+# The Description is the pull/segment criteria followed by the client-profile blocks
+# (Select By / Standard Suppressions / Special Instructions). Only the leading segment
+# states what this order asks for; the profile blocks are boilerplate that mentions
+# other numbers entirely — "ACTIVE DONORS ARE CONSIDERED L12M ... THEN IT IS CONSIDERED
+# L36M" and "OMIT $100.00+ TRANS FROM COUNTS" both parse as an ask if read whole.
+_DESC_ASK_STOP = re.compile(
+    r'\bSELECTS?\s+BY\s*:|\bSTANDARD\s+SUPPRESSIONS?\s*:|'
+    r'\bSPECIAL\s+INSTRUCTIONS?\s*:|\bFLAGS?\s+OMITS?\s*:',
+    re.IGNORECASE)
+
+
+def _desc_ask(desc_text: str) -> tuple[float | None, int | None]:
+    """
+    (lowest $ threshold, longest recency window) the description asks for.
+
+    Read from the segment-criteria head only (see _DESC_ASK_STOP), capped as a
+    backstop for descriptions that carry no profile headers at all. Longest window
+    wins because a head can name several ("4M $5+ ... 3 MONTH HOTLINE") and the
+    include set has to cover the widest; lowest $ wins for the same reason.
+    """
+    head = _DESC_ASK_STOP.split(desc_text, 1)[0][:400]
+    dollars = [float(d) for d in _DESC_DOLLAR_RE.findall(head)]
+    periods = [int(p) for p in _DESC_PERIOD_RE.findall(head)]
+    return (min(dollars) if dollars else None,
+            max(periods) if periods else None)
+
+
+def _desc_has_dollar(desc_text: str, token: str) -> bool:
+    """
+    True when the ticket description states this $ criterion.
+
+    A RANGE from the include set ("$5-49.99") is satisfied by the full range OR by
+    its lower bound written as a threshold: the include universe is "$5 through
+    $49.99" while the order itself is written "$5+". Comparing the range literally
+    would fail every correct order.
+    """
+    body = token.lstrip('$')
+    if '-' in body:
+        lo, hi = body.split('-', 1)
+        rng = rf'(?<![\d.]){re.escape(lo)}(?:\.0+)?\s*-\s*\$?\s*{re.escape(hi)}'
+        thr = (rf'(?<![\d.,])\$?\s*{re.escape(lo)}(?:\.0+)?\s*\+'
+               rf'|\$\s*{re.escape(lo)}(?:\.0+)?(?![\d.])')
+        return bool(re.search(rng, desc_text) or re.search(thr, desc_text))
+    amount = re.escape(body.rstrip('+'))
+    # digit boundaries so "$5+" is not satisfied by "$15+" or "$50+"
+    return bool(re.search(rf'(?<![\d.,])\$?\s*{amount}(?:\.0+)?\s*\+'
+                          rf'|\$\s*{amount}(?:\.0+)?(?![\d.])', desc_text))
+
+
+def _desc_has_period(desc_text: str, token: str) -> bool:
+    """True when the description states this L#M recency window ("3M"/"3 MOS"/"3MONTHS")."""
+    m = re.match(r'L(\d+)M', token)
+    if not m:
+        return False
+    n = m.group(1)
+    return bool(re.search(rf'(?<!\d){n}\s*M(?:ONTHS?|OS?)?\b', desc_text))
 
 
 def _iter_criteria_blocks(text: str):
@@ -254,16 +379,80 @@ def _is_data_axle_ftp(select_data: dict, ticket_fields: dict) -> bool:
     return "data-axle.com" in s or "data-axle.com" in t
 
 
-def _extract_ticket_flags(omission_adf) -> set:
-    """Parse 'FLAG OMITS: D, N, R, $, A, X, !' from omission description ADF."""
+# "FLAG OMITS:" and its variants (singular/plural, colon or dash separator).
+_FLAG_LABEL_RE = re.compile(r'FLAGS?\s*OMITS?\s*[:\-–]\s*', re.IGNORECASE)
+
+# ADSTRA/BFF write a POINTER instead of a list: "FLAG OMITS: FLAGS LISTED BELOW IN
+# SPECIAL INST." The real flags are prose in the Description ("OMIT MAJOR DONORS BY
+# FLAG M"), which cannot be turned into a reliable flag set.
+_FLAG_POINTER_RE = re.compile(r'FLAGS?\s+LISTED\s+(?:ABOVE|BELOW)', re.IGNORECASE)
+
+
+def _flag_tokens(segment: str) -> set:
+    """
+    Single-character flag codes from the head of a flag list.
+
+    The omission ADF is flattened to one space-joined string, so a segment captured
+    after "FLAG OMITS:" runs on into the next section. Consume tokens while they
+    still look like flag codes and stop at the first real word — that bounds the
+    list without relying on newlines that no longer exist.
+
+    '$' is never part of a word, so it is split out of a token rather than being
+    rejected by a character-boundary lookaround ("$D" yields both '$' and 'D').
+    """
+    out: set = set()
+    for tok in re.split(r'[,\s/&]+', segment.strip()):
+        # Flags are sometimes quoted or bracketed — '"!" , "$"' (DSLF-867).
+        tok = tok.strip('.\'"()[]<>').strip()
+        if not tok:
+            continue
+        if re.fullmatch(r'[A-Z0-9!$]', tok, re.IGNORECASE):
+            out.add(tok.upper())
+            continue
+        if '$' in tok and re.fullmatch(r'[$]?[A-Z0-9!]?[$]?', tok, re.IGNORECASE):
+            out.add('$')
+            rest = tok.replace('$', '')
+            if len(rest) == 1:
+                out.add(rest.upper())
+            continue
+        break  # a real word — the flag list has ended
+    return out
+
+
+def _ticket_flags_are_pointer(omission_adf) -> bool:
+    """True when the omission defers flags to prose ('FLAGS LISTED BELOW IN SPECIAL INST.')."""
     text = _extract_adf_text(omission_adf)
     if not text:
-        return set()
-    m = re.search(r'FLAG\s+OMITS\s*:\s*([^\n]+)', text, re.IGNORECASE)
-    if not m:
-        return set()
-    flag_str = m.group(1).strip()
-    return set(re.findall(r'(?<![A-Z0-9])([A-Z0-9!\$])(?![A-Z0-9])', flag_str))
+        return False
+    for m in _FLAG_LABEL_RE.finditer(text):
+        if _FLAG_POINTER_RE.match(text[m.end():m.end() + 60].strip()):
+            return True
+    return False
+
+
+def _extract_ticket_flags(omission_adf, description_adf=None) -> set:
+    """
+    Flag-omit codes the ticket requires, e.g. {'D','N','R','$','A','X','!'}.
+
+    Reads the omission description's "FLAG OMITS:" line, falling back to the
+    Description when the omission carries only a pointer. Every occurrence is
+    unioned — a ticket can restate the list in both fields.
+    """
+    flags: set = set()
+    for adf in (omission_adf, description_adf):
+        if adf is None:
+            continue
+        text = _extract_adf_text(adf)
+        if not text:
+            continue
+        for m in _FLAG_LABEL_RE.finditer(text):
+            seg = text[m.end():m.end() + 200]
+            if _FLAG_POINTER_RE.match(seg.strip()):
+                continue  # pointer, not a list — try the next source
+            flags |= _flag_tokens(seg)
+        if flags:
+            break
+    return flags
 
 
 def _extract_ticket_states(omission_adf) -> set:
@@ -401,19 +590,9 @@ def parse_select_pdf(pdf_path: str) -> dict:
         result["manager_order"]  = m.group(1).strip()
         suffix                   = m.group(2).strip()
         result["criteria_suffix"] = suffix
-        # Dollar criteria: RANGES "$10-99.99" (KAP style) AND thresholds "$5+" / "05+".
-        def _dnum(x):
-            return str(int(x)) if '.' not in x else x
-        dollar = [f"${_dnum(lo)}-{_dnum(hi)}"
-                  for lo, hi in re.findall(r'\$\s*(\d+(?:\.\d+)?)\s*-\s*\$?\s*(\d+(?:\.\d+)?)', suffix)]
-        dollar += [f"${int(t)}+" for t in re.findall(r'\$?(\d+)\+', suffix)]
-        result["dollar_criteria"] = dollar
-        # Time periods: "L12M"/"L3M"/"L03" (trailing M optional). The 'L' can abut a digit
-        # in KAP's range suffix ("99.99L12M"), so use a letter-only lookbehind, not \b.
-        result["period_criteria"] = [
-            f"L{int(n)}M"
-            for n in re.findall(r'(?<![A-Za-z])L(\d+)M?', suffix, re.IGNORECASE)
-        ]
+        # Dollar ranges ("$10-99.99", KAP style) and thresholds ("$5+" / "05+"), plus
+        # time periods "L12M"/"L3M"/"L03" — see _criteria_tokens.
+        result["dollar_criteria"], result["period_criteria"] = _criteria_tokens(suffix)
     else:
         result["manager_order"]    = ""
         result["criteria_suffix"]  = ""
@@ -421,13 +600,39 @@ def parse_select_pdf(pdf_path: str) -> dict:
         result["period_criteria"]  = []
         result["parse_errors"].append("REPORT/P.O.# line not found (manager_order, criteria)")
 
-    # Total records selected
+    # Total records selected. Track "found" separately from the value: a missing line
+    # and a genuine 0 both used to collapse to 0, and the caller must tell them apart
+    # (both fail, but for different reasons).
     m = re.search(r'TOTAL\s+RECORDS\s+SELECTED[\s.]*\s*([\d,]+)', text, re.IGNORECASE)
     if m:
-        result["total_records"] = int(m.group(1).replace(',', ''))
+        result["total_records"]       = int(m.group(1).replace(',', ''))
+        result["total_records_found"] = True
     else:
-        result["total_records"] = 0
+        result["total_records"]       = 0
+        result["total_records_found"] = False
         result["parse_errors"].append("TOTAL RECORDS SELECTED line not found")
+
+    # Include set(s) — the universe the select was drawn from, from the account-history
+    # table: "INCLUDE BY ACCOUNT #: 30,311  S00N11DIH1  009999  10-99.99 L3M  07'01 ...".
+    # The TITLE ("10-99.99 L3M") states the order's criteria independently of the
+    # REPORT line, so a mismatch against the ticket is a real QC finding.
+    result["include_sets"] = []
+    for line in text.splitlines():
+        im = _INCLUDE_LINE.search(line.strip())
+        if not im:
+            continue
+        title = _RUNTIME_TAIL.sub('', im.group(4)).strip()
+        i_dollar, i_period = _criteria_tokens(title)
+        result["include_sets"].append({
+            "count":  int(im.group(1).replace(',', '')),
+            "member": im.group(2).strip().upper(),
+            "job_id": im.group(3).strip(),
+            "title":  title,
+            "dollar": i_dollar,
+            "period": i_period,
+        })
+    if not result["include_sets"]:
+        result["parse_errors"].append("INCLUDE BY ACCOUNT # line not found (include-set check skipped)")
 
     # Mailing date: Mailing Date...: 3/05/2026
     m = re.search(r'Mailing\s+Date[\s.]*:\s*(\d{1,2}/\d{1,2}/\d{2,4})', text, re.IGNORECASE)
@@ -468,7 +673,7 @@ def parse_select_pdf(pdf_path: str) -> dict:
         for _fl in _body:
             # First value line is "FLAGS  :  = !" (colon before =); the rest are "OR = X".
             # Allow any non-'=' chars between the keyword and '=' so the leading flag is caught.
-            _fm = re.match(r'(?:FLAGS|OR)\b[^=\n]*=\s*([A-Z0-9!\$])', _fl, re.IGNORECASE)
+            _fm = re.match(r'(?:FLAGS?|OR)\b[^=\n]*=\s*([A-Z0-9!\$])', _fl, re.IGNORECASE)
             if _fm:
                 result["flags"].add(_fm.group(1))
     if not found_flag_block:
@@ -603,13 +808,23 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
     avail_rule = (ticket_fields.get("availability_rule") or "").strip().lower()
     is_all_avail = "all" in avail_rule  # matches "All Available"
 
-    if is_all_avail:
-        # All Available: no quantity check — report the count for information only.
-        msg = f"{total_sel:,} records (All Available — quantity not checked)" if total_sel \
-              else "All Available — quantity not checked"
-        _check("PASS", "Records Selected", msg)
-    elif total_sel == 0:
+    # A finished SELECT can never legitimately have selected 0 records — an empty
+    # output file is always a failure. This is tested BEFORE the availability rule
+    # because "All Available" otherwise skips the quantity check and a 0-record
+    # SELECT passed. Zero is a hard fail: no number of other passing checks makes
+    # an empty file shippable.
+    if not select_data.get("total_records_found", False):
         _check("FAIL", "Records Selected", "Could not parse total records from SELECT PDF")
+        hard_fails.append("Records Selected")
+    elif total_sel == 0:
+        _check("FAIL", "Records Selected",
+               "SELECT returned 0 records — a completed SELECT can never be 0 "
+               "(empty output file; re-run the select)")
+        hard_fails.append("Records Selected")
+    elif is_all_avail:
+        # All Available: no quantity check — report the count for information only.
+        _check("PASS", "Records Selected",
+               f"{total_sel:,} records (All Available — quantity not checked)")
     elif req_qty == 0:
         _check("WARN", "Records Selected",
                f"SELECT has {total_sel:,} records — ticket has no Requested Qty set")
@@ -674,6 +889,73 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
                    f"{'; '.join(details)} "
                    f"(SELECT: {select_data.get('criteria_suffix', '')})")
 
+    # 5b. Include set — the account-history "INCLUDE BY ACCOUNT #:" line names the
+    # universe the select was drawn from ("10-99.99 L3M"), stated independently of the
+    # REPORT line. Comparing it against the description catches a select run off the
+    # wrong include set — wrong dollar band or wrong recency window — which the REPORT
+    # line alone cannot reveal because it only echoes what was typed on the job.
+    inc_sets = select_data.get("include_sets", [])
+    if inc_sets:
+        inc        = inc_sets[0]
+        inc_dollar = inc["dollar"]
+        inc_period = inc["period"]
+        label      = (f"{inc['title']} ({inc['count']:,} records, member {inc['member']})"
+                      if inc["title"] else f"{inc['count']:,} records, member {inc['member']}")
+
+        # The include set is a STANDING universe and is routinely wider than any one
+        # order — "0-49.99 L3M" backing a "$5+" order, "L6M" backing a 4-month ask.
+        # Equality would fail every correct select. What matters is that the universe
+        # is never NARROWER than the ask: a higher floor or a shorter window means
+        # qualifying donors were never in the pool to begin with.
+        inc_lo = min((lo for lo, _ in map(_token_bounds, inc_dollar) if lo is not None),
+                     default=None)
+        inc_m  = max((m for m in map(_period_months, inc_period) if m), default=None)
+
+        # Ask: the ticket description is the requirement; the SELECT's own REPORT line
+        # is the fallback when the description states neither in a parseable form.
+        ask_lo, ask_m = _desc_ask(desc_text)
+        ask_src = "description"
+        if ask_lo is None:
+            ask_lo = min((lo for lo, _ in map(_token_bounds, select_data.get("dollar_criteria", []))
+                          if lo is not None), default=None)
+            ask_src = "SELECT REPORT line"
+        if ask_m is None:
+            ask_m = max((m for m in map(_period_months, select_data.get("period_criteria", []))
+                         if m), default=None)
+
+        problems, covered = [], []
+        if inc_lo is not None and ask_lo is not None:
+            if inc_lo > ask_lo:
+                problems.append(
+                    f"include set starts at ${inc_lo:g} but the order asks for ${ask_lo:g}+ "
+                    f"— donors giving ${ask_lo:g}–${inc_lo:g} were never in the pool")
+            else:
+                covered.append(f"${inc_lo:g} floor covers ${ask_lo:g}+")
+        if inc_m is not None and ask_m is not None:
+            if inc_m < ask_m:
+                problems.append(
+                    f"include set covers only {inc_m} month(s) but the order asks for "
+                    f"{ask_m} — the universe is too narrow")
+            else:
+                covered.append(f"{inc_m}M window covers {ask_m}M")
+
+        if problems:
+            _check("FAIL", "Include Set",
+                   f"{'; '.join(problems)} (ask read from {ask_src}) — include set: {label}")
+        elif covered:
+            _check("PASS", "Include Set", f"{'; '.join(covered)} — {label}")
+        elif inc_lo is None and inc_m is None:
+            _check("WARN", "Include Set",
+                   f"No $ or L#M criteria in include title {inc['title']!r}")
+        else:
+            _check("WARN", "Include Set",
+                   f"Nothing to compare against — {label}")
+
+        if len(inc_sets) > 1:
+            others = "; ".join(f"{i['title']} ({i['count']:,})" for i in inc_sets[1:])
+            _check("WARN", "Include Set",
+                   f"{len(inc_sets)} include sets on this select — also: {others}")
+
     # 6. Seed database
     s_seed = select_data.get("seed_db", "")
     t_seed = ticket_fields.get("seed_db", "")
@@ -723,12 +1005,22 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
 
     # 8. Flag omits
     s_flags = select_data.get("flags", set())
-    t_flags = _extract_ticket_flags(ticket_fields.get("omission_adf"))
+    t_flags = _extract_ticket_flags(ticket_fields.get("omission_adf"),
+                                    ticket_fields.get("description_adf"))
 
     if not s_flags and not t_flags:
         _check("WARN", "Flag Omits", "Neither SELECT PDF nor ticket has flag omit data")
     elif not s_flags:
         _check("WARN", "Flag Omits", "Could not parse flags from SELECT PDF")
+    elif not t_flags and _ticket_flags_are_pointer(ticket_fields.get("omission_adf")):
+        # "FLAG OMITS: FLAGS LISTED BELOW IN SPECIAL INST." — the real flags are prose
+        # in the Description and cannot be resolved into a set. This used to land in the
+        # WARN branch below, and WARN rows are dropped, so the flags (including the
+        # DMA-pander '$') were never compared and the ticket looked clean.
+        _check("FAIL", "Flag Omits",
+               f"SELECT omits {sorted(s_flags)} but the ticket defers flags to prose "
+               f"(\"FLAGS LISTED ... IN SPECIAL INST.\") — cannot verify. "
+               f"List them explicitly as 'FLAG OMITS: <codes>' in the omission description.")
     elif not t_flags:
         _check("WARN", "Flag Omits",
                f"SELECT has {sorted(s_flags)} — ticket omission has no FLAG OMITS line")
