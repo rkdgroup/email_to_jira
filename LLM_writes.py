@@ -162,6 +162,25 @@ emit a "Selects:" line followed by each criterion indented by two spaces:
       12 MOS HOTLINE
 Unindented lines render as bare fragments with nothing saying what they are.
 
+SHIPPING INSTRUCTIONS IS ROUTING ONLY — how and where the file is delivered: the address,
+FTP vs email, the CC list, the required subject-line format. An order-level note that is
+not about delivery does NOT belong there. The most common one is "please provide the all
+available quantity before shipping for approval" — that is a quantity-approval note, not a
+shipping instruction. Put notes like that in the description under an "Order Notes:"
+line, and leave them out of shipping_instructions entirely.
+
+ORDER TERMS — when the order states whether it is an Exchange or a Rental, a net
+arrangement percentage, a price per thousand, or a category/offer, record them on ONE
+line, comma separated:
+    Order Terms: Exchange, Net Arrangement 100%, $0.00/M, Category FUNDRAISING
+    Order Notes: Please provide the all available quantity before shipping for approval.
+Exchange vs Rental is the one that matters most — never drop it when the order says which
+it is, because it changes how the order is billed.
+
+"Selects:" is the ONLY heading that takes an indented block. Every other label you emit
+must be a single self-contained line — a downstream cleanup step flattens indentation
+under any other heading, which would leave a bare label with loose lines under it.
+
 DO NOT return the client's standard suppressions, "Select By" line, or standing flag
 omits even if the order restates them — those come from the client profile on file and
 are added downstream. Return only what THIS order says.
