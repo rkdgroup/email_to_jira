@@ -41,6 +41,16 @@ those paths exist.
 **Windows console**: `--verbose` prints ligature-normalized PDF text that cp1252 cannot
 encode (`UnicodeEncodeError`). Prefix runs with `PYTHONIOENCODING=utf-8`.
 
+**Dev is Windows, Jenkins is POSIX.** Development happens on Windows/PowerShell, but the
+`Jenkinsfile` uses `sh` steps and calls `python3` / `pip3`. Anything shell-shaped you add to
+the build must be POSIX, and a path or command that only works in PowerShell will pass locally
+and fail on the agent.
+
+**`README.md` is a lighter, partially-stale duplicate of this file** — its Quick Start `pip`
+line omits `anthropic`/`jaydebeapi`/`JPype1`/`xlrd`, and its flow diagram and project tree
+predate `tools_polish.py`, `tools_zip_omit.py`, and the `WO#/` step. Treat CLAUDE.md as
+authoritative and update README only when a change is user-facing.
+
 ```bash
 # Scheduled automation (see "Scheduled Automation")
 python email_scanner/email_scanner.py                 # one poll of the shared mailbox
@@ -55,7 +65,7 @@ python build_profile_yaml.py  # regenerate config/client_profiles.yaml from Clie
 
 # Offline AI tools (see "AI-Assisted Offline Tools")
 python compare_extraction.py DSLF-916 [--pdf f] [--md f] [--json f]   # read-only diff
-python hybrid_create.py order.pdf [--dry-run] [--no-claude]           # --dry-run first!
+python hybrid_create.py order.pdf [--dry-run] [--no-claude] [--no-attach]  # --dry-run first!
 ```
 
 ## Dependencies & Credentials
@@ -65,7 +75,7 @@ pip install anthropic requests pymupdf pdfminer.six pymupdf4llm python-dotenv ms
             openpyxl xlrd jaydebeapi JPype1 python-docx
 ```
 
-- `requirements.txt` is the base list but is still **missing `python-docx`** (needed by `client_profiles.py`, `build_profile_yaml.py`, `verify_configs.py`). `openpyxl` and `xlrd` **are** in it — the zip-omit splitter runs on the Jenkins email path, which installs from that file only.
+- `requirements.txt` now covers **every** runtime import, including `python-docx` (added in `86d03d0`; needed by `client_profiles.py`, `build_profile_yaml.py`, `verify_configs.py`) and `openpyxl`/`xlrd` for the zip-omit splitter. Jenkins installs from this file *only* (`pip3 install -q -r requirements.txt`), so a new runtime import that isn't added here breaks the scheduled run, not the local one.
 - `anthropic` is imported by the offline AI tools (`ai_extract.py`) **and by `tools_polish.py`, which runs in the live pipeline** — so `ANTHROPIC_API_KEY` is now load-bearing for scheduled runs (a missing key degrades prose quality, it does not break ticket creation).
 - `jaydebeapi` + `JPype1` (+ `jt400.jar`) power the IBM i work-order step.
 
