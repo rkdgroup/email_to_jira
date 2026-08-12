@@ -156,6 +156,19 @@ several other forms it sits in the List / Price block, e.g.
 
 On an ADSTRA form the select is the "Pull Description:" value, e.g. "3MOS $10+ DONORS".
 
+EVERY priced select goes under ONE "Selects:" heading — the base band FIRST, then any named
+add-on charges the price block lists on their own priced lines (DOLLAR, NRF, HOTLINE,
+GENDER and the like). Never leave the base band stranded on a bare line above the heading:
+
+    Price:    12 MONTH $10-$99.99   $95.00 /M
+    DOLLAR    $11.00 /M
+    NRF       $25.00 /M
+  becomes
+    Selects:
+      12 MONTH $10-$99.99
+      DOLLAR
+      NRF
+
 Take the select line VERBATIM. Never append words lifted from an omit line to it: a line
 like "ADDR. USA NAMES ONLY, OMIT CAN., P.R., FOREIGN, APO, FPO & MIL." is one omit
 criterion and belongs whole in omission_description — do not split its first clause off
