@@ -141,6 +141,19 @@ LIST NAME is the abbreviation as printed (FAIR, JW, WWP), not the expanded name.
 ADSTRA LIST CODE: if the order shows a 5-digit ADSTRA list code, return it in
 adstra_list_code. Otherwise "". This is the most reliable database lookup key there is.
 
+FINDING THE SELECT CRITERIA — this is the most-missed field, so read carefully. The priced
+select is the segment description printed alongside the list name and the price: a recency
+window, a dollar band, "HOTLINE", "MULTI", an Nth, a gender or state select. On KAP and
+several other forms it sits in the List / Price block, e.g.
+
+    List:                 AID FOR STARVING CHILDREN
+    Price:                12 MONTH (8/25-7/26) $10-$49.99
+
+and the form's own literal "Selects:" label is a SEPARATE, OFTEN EMPTY field. An empty
+"Selects:" label does not mean the order has no selects — look at the List / Price block
+before concluding that. Never emit a "Selects:" heading with nothing under it: if you truly
+find no priced select criteria anywhere, return an empty description array instead.
+
 DESCRIPTION FORMATTING — the priced selects are rendered as a bulleted list downstream,
 and that rendering keys off indentation. When the order lists priced select criteria,
 emit a "Selects:" line followed by each criterion indented by two spaces:
