@@ -131,12 +131,15 @@ _USER_TEXT = (
 
 
 def extract_fields_from_pdf(pdf_path: str, model: str = DEFAULT_MODEL,
-                            effort: str = "high") -> dict:
+                            effort: str = "high", system: str = None,
+                            schema: dict = None) -> dict:
     """Send the PDF to Claude and return {"fields": {...}, "usage": {...}, "model": ...}.
 
-    effort is the output_config reasoning level (low|medium|high|xhigh|max). It defaults
-    to "high" so compare_extraction.py and hybrid_create.py keep the behaviour they were
-    written against; LLM_writes.py passes its own.
+    effort is the output_config reasoning level (low|medium|high|xhigh|max).
+    system and schema override the module's _SYSTEM / DSLF_SCHEMA.
+
+    All three default to the values compare_extraction.py and hybrid_create.py were written
+    against, so those tools are unaffected; LLM_writes.py passes its own.
 
     Raises RuntimeError on missing key/oversize; propagates anthropic API errors.
     """
@@ -158,9 +161,9 @@ def extract_fields_from_pdf(pdf_path: str, model: str = DEFAULT_MODEL,
         thinking={"type": "adaptive"},
         output_config={
             "effort": effort,
-            "format": {"type": "json_schema", "schema": DSLF_SCHEMA},
+            "format": {"type": "json_schema", "schema": schema or DSLF_SCHEMA},
         },
-        system=_SYSTEM,
+        system=system or _SYSTEM,
         messages=[{
             "role": "user",
             "content": [

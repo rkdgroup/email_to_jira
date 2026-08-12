@@ -108,12 +108,7 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
     """
     from tools_pdf import extract_pdf_text
     from parsers import detect_broker, PARSER_REGISTRY
-    from parse_result import validate_result
-    from tools_jira import create_jira_ticket, search_jira_tickets, flag_for_review, attach_file_to_ticket
-    from client_lookup import enrich_fields
-    from client_profiles import find_profile
-    from tools_zip_omit import attach_zip_splits
-    from tools_polish import polish_fields
+    from tools_jira import flag_for_review
 
     from tools_pdf import get_pdf_page_count, split_pdf_into_pages
 
@@ -185,6 +180,30 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
         log.warning("No broker match — cannot parse without Claude fallback, flagging for review")
         flag_for_review("Unknown broker", "No rule-based parser matched this PDF")
         return {"success": False, "errors": ["Unknown broker format"]}
+
+    return finalize_and_create(result, pdf_path, text, dry_run=dry_run, verbose=verbose)
+
+
+def finalize_and_create(result, pdf_path: str, text: str,
+                        dry_run: bool = False, verbose: bool = False) -> dict:
+    """
+    Everything after a ParseResult exists: validate → duplicate check → enrich →
+    client profile → prose polish → build kwargs → create → work order → attachments.
+
+    This half of the pipeline never looks at the parser or the broker registry — it only
+    reads the ParseResult — so any producer of a ParseResult can use it. process_pdf()
+    supplies one from the rule-based parsers; LLM_writes.py supplies one from Claude.
+
+    text is the raw order text, passed to create_jira_ticket as order_text so the Saturn
+    ship-to rule can fire on a body-only mention.
+    """
+    from parse_result import validate_result
+    from tools_jira import (create_jira_ticket, search_jira_tickets, flag_for_review,
+                            attach_file_to_ticket)
+    from client_lookup import enrich_fields
+    from client_profiles import find_profile
+    from tools_zip_omit import attach_zip_splits
+    from tools_polish import polish_fields
 
     # Step 3: Validate
     validation = validate_result(result)

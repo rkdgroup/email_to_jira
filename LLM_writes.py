@@ -1,42 +1,41 @@
 """
-Pure-LLM DSLF ticket creation: Claude extracts every field from the order PDF and
-the result is written straight to Jira. No broker parser is involved.
+Pure-LLM DSLF ticket creation: Claude extracts every field from the order PDF, and the
+result is handed to the same post-parse pipeline the rule-based path uses.
 
-This exists for orders the rule-based path cannot handle at all. A PDF matching none
-of the 12 fingerprints in parsers/_RULES is flagged for review and produces no ticket,
-and hybrid_create.py cannot help either — it starts from process_pdf() and raises when
-the rule-based parse fails. This path only needs the PDF to be readable by Claude.
+This exists for orders the rule-based path cannot handle at all. A PDF matching none of
+the 12 fingerprints in parsers/_RULES is flagged for review and produces no ticket, and
+hybrid_create.py cannot help either — it starts from process_pdf() and raises when the
+rule-based parse fails. This path only needs the PDF to be readable by Claude.
 
     python LLM_writes.py order.pdf                 # dry run — print fields, create nothing
     python LLM_writes.py order.pdf --live          # create the ticket
     python LLM_writes.py /path/to/folder/          # every *.pdf in the folder (dry run)
-    python LLM_writes.py order.pdf --enrich        # fill a blank db_code from config/*.yaml
-    python LLM_writes.py order.pdf --json out.json # dump the built kwargs
-    python LLM_writes.py order.pdf --live --no-attach
+    python LLM_writes.py order.pdf --json out.json # dump the built fields
     python LLM_writes.py order.pdf --model claude-opus-5 --effort high
 
-Nothing validates a Claude extraction the way the parsers do, so the values are checked
-against the pipeline's own vocabularies before anything is sent: the List Manager must be
-one of the 14 known values, the three select fields must map to a real Jira option, and
-dates must be YYYY-MM-DD. A value that fails is blanked and reported rather than silently
-written wrong or rejected by Jira as an opaque HTTP 400.
+HOW IT STAYS ACCURATE
+Claude only supplies what is actually printed on the order. Everything else comes from the
+same code the rule-based path runs, via parse_pipeline.finalize_and_create():
 
-WHAT THIS PATH GIVES UP (by design — it is the cost of skipping the parsers):
-  * No client_lookup enrichment unless --enrich is passed, so db_code is Claude's best
-    guess and is often "". Billable Account / Client Database / Seed Database follow it.
-  * No client-profile injection — the profile's Select By, Standard Suppressions,
-    Special Instructions and FLAG OMITS: blocks are NOT added to the two prose fields.
-  * No per-broker requestor table; the requestor is whatever the PDF states.
-  * No IBM i work order is created or linked (that step needs a billable account).
-  * No multi-page split. process_pdf() makes one ticket per page for every broker except
-    ADSTRA; here Claude reads the whole document as ONE order, so a 7-page AMLC PDF
-    collapses into a single ticket.
+  * db_code / Billable / Client DB / Seed DB from client_lookup, including the AMLC
+    rental-vs-exchange branch and the ADSTRA list-code tier. Claude's own db_code guess is
+    reported but never sent — config is authoritative (a config billable_account can
+    legitimately differ from the db_code prefix, e.g. A52D -> A68).
+  * The client profile's Select By / Standard Suppressions / Special Instructions blocks
+    in the Description, and its FLAG OMITS: line in the Omission Description.
+  * The tools_polish structural clean of both prose fields.
+  * Duplicate check, SKIP_DB_CODES, the IBM i work order, and all four attachment steps
+    (source PDF, supplementary zip-omit files, their 9500-row splits, client profile).
 
-Prefer parse_pipeline.py for any broker that IS recognized — it is more accurate.
+Multi-page PDFs split into one ticket per page, except ADSTRA, matching process_pdf().
+
+Prefer parse_pipeline.py for any broker that IS recognized — a parser reads a known layout
+exactly, where this path is reading it for the first time every run.
 """
 
 import re
 import sys
+import copy
 import json
 import argparse
 import logging
@@ -50,19 +49,16 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger("LLM_writes")
 
 import ai_extract
-from parse_pipeline import SKIP_DB_CODES, _build_adf_description
-from client_lookup import enrich_fields, _MANAGER_TO_FILE
+from parse_result import ParseResult
+from parse_pipeline import finalize_and_create
+from client_lookup import _MANAGER_TO_FILE
 from tools_jira import (
-    create_jira_ticket,
-    attach_file_to_ticket,
-    search_jira_tickets,
     get_ticket_qc_fields,
-    _get_jira_base_url,
     AVAILABILITY_RULE_OPTIONS,
     FILE_FORMAT_OPTIONS,
     SHIPPING_METHOD_OPTIONS,
 )
-from tools_pdf import extract_pdf_text
+from tools_pdf import extract_pdf_text, get_pdf_page_count, split_pdf_into_pages
 from compare_extraction import adf_to_lines
 
 # Sonnet at medium effort: this extraction is structured transcription against a fixed
@@ -73,25 +69,90 @@ DEFAULT_MODEL  = "claude-sonnet-5"
 DEFAULT_EFFORT = "medium"
 _EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
 
-# Database codes are one letter + two digits, optionally with a suffix letter (F41D).
+# Only its being non-zero matters: validate_result() blocks creation at exactly 0.0, and
+# rule-based parsers report 0.92. A lower number records that nothing verified this read.
+CONFIDENCE_LLM_BASED = 0.85
+
 _DB_CODE_RE = re.compile(r"^([A-Z]\d{2})[A-Z]?$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
-# The 14 exact List Manager values, taken from the lookup that already keys on them
-# rather than re-typed here — a value outside this set skips the broker-sheet lookup
-# entirely, which is what produced the wrong C69 database codes on DSLF-130..134.
+# The 14 exact List Manager values, taken from the lookup that already keys on them rather
+# than re-typed here — a value outside this set skips the broker-sheet lookup entirely,
+# which is what produced the wrong C69 database codes on DSLF-130..134.
 _VALID_LIST_MANAGERS = frozenset(_MANAGER_TO_FILE)
 
-# Blank values here are worth seeing before a live create — none of them are fatal,
-# but each one is something the rule-based path would normally have filled in.
-_WATCH_FIELDS = ("db_code", "list_manager", "mailer_po", "manager_order_number",
-                 "requested_quantity")
+# ADSTRA's 5-digit list code is enrich_fields' most reliable lookup (tier 0), so it is
+# worth asking for. Extend a copy — DSLF_SCHEMA is shared with compare_extraction.py.
+_SCHEMA = copy.deepcopy(ai_extract.DSLF_SCHEMA)
+_SCHEMA["properties"]["adstra_list_code"] = {"type": "string"}
+_SCHEMA["required"] = list(_SCHEMA["required"]) + ["adstra_list_code"]
 
-# create_jira_ticket rewrites these from the ship-to house rules (Saturn, data-axle,
-# the fixed-format email houses), so the stored value legitimately differs from what
-# was sent. Post-create verification reports them without calling them a mismatch.
-_HOUSE_RULE_FIELDS = {"file_format", "shipping_method", "ship_to_email",
-                      "shipping_instructions"}
+# Layered on top of ai_extract._SYSTEM rather than replacing it. Everything here is
+# transcribed from CLAUDE.md and the parsers — per-broker field sources the base prompt
+# does not mention, and the layout traps that have caused real mis-parses.
+_SYSTEM = ai_extract._SYSTEM + """
+
+════════════════════════════════════════════════════════════════════════
+BROKER-SPECIFIC RULES — the order's own layout decides which apply.
+════════════════════════════════════════════════════════════════════════
+
+MAILER PO vs MANAGER ORDER NUMBER — these are different fields on every order.
+  ADSTRA            mailer_po = 6-digit or BRK-prefixed | manager_order = J- or I-prefix
+  RMI               mailer_po = "Broker PO#" field      | manager_order = MGT#
+  WE ARE MOORE      mailer_po = Ship Label number       | manager_order = Order#
+  DATA-AXLE         mailer_po = Ship Label "PO:" with suffix (58364-RN) | manager_order = Order# (2316747)
+  WASHINGTON LISTS  mailer_po = Client Reference w/ suffix | manager_order = Order Number
+  KAP               mailer_po = Broker order # value    | manager_order = KAP ORDER, DL-prefix
+  CONRAD            mailer_po = "BROK/MAIL PO:" field   | manager_order = PURCHASE ORDER NO
+  NAMES IN THE NEWS mailer_po = 6-7 digit number        | manager_order = LR #
+  CELCO             both come from ORDER #
+  SimioCloud        mailer_po = Ship Label "PO#", else the first 4+ digit run in the label
+  RKD / AMLC        mailer_po = "Client P.O.:"          | manager_order = first 5-6 digit
+                    number in the first 10 lines (Service Bureau No. / Purchase Order No.)
+
+AMLC LAYOUT TRAP: AMLC orders are columnar. The value for "Client P.O.:" can sit up to 25
+lines BELOW its own label, with unrelated text in between. Do not pair a label with the
+text that happens to follow it on the same visual row — track the column.
+
+LIST MANAGER TRAPS:
+  * A SimioCloud order's list_manager is WE ARE MOORE (SimioCloud is their ordering
+    platform). It is never DATA-AXLE, even though the layout resembles Data Axle's.
+  * An AMLC order serviced by RKD contains the words "RKD GROUP". If it says "American
+    Mailing Lists Corporation Management", it is AMLC, not RKD.
+
+REQUESTOR — when the order is from one of these brokers and names no other requestor:
+  ADSTRA        BOBBI DURRETT     BOBBI.DURRETT@ADSTRADATA.COM
+  RMI           ALICIA GALLAGHER  AGALLAGHER@RMIDIRECT.COM
+  WE ARE MOORE  MICHELLE NAY      MNAY@WEAREMOORE.COM
+  KAP           Jenny Gomez       jgomez@keyacquisition.com
+  CONRAD        Brenda Gundlah    bgundlah@conraddirect.com
+
+SHIP TO EMAIL — KAP orders print two addresses. Use the "Email to:" line inside the Ship
+To block. The first "Email:" on the page is the mailer's own contact, not the destination.
+
+KEY CODE:
+  * Conrad: the text after "And" or "&" on the MATERIAL line, e.g.
+    "...PO# L50278HF & HF Thirteen Star Flag #2215A" -> "HF Thirteen Star Flag #2215A".
+    Not always present; leave "" when absent.
+  * Data Axle: the "Key Code:" field, or the suffix on the Order#.
+
+LIST NAME is the abbreviation as printed (FAIR, JW, WWP), not the expanded name.
+
+ADSTRA LIST CODE: if the order shows a 5-digit ADSTRA list code, return it in
+adstra_list_code. Otherwise "". This is the most reliable database lookup key there is.
+
+DESCRIPTION FORMATTING — the priced selects are rendered as a bulleted list downstream,
+and that rendering keys off indentation. When the order lists priced select criteria,
+emit a "Selects:" line followed by each criterion indented by two spaces:
+    Selects:
+      $10+
+      12 MOS HOTLINE
+Unindented lines render as bare fragments with nothing saying what they are.
+
+DO NOT return the client's standard suppressions, "Select By" line, or standing flag
+omits even if the order restates them — those come from the client profile on file and
+are added downstream. Return only what THIS order says.
+"""
 
 
 def _build_summary(fields: dict) -> str:
@@ -101,177 +162,113 @@ def _build_summary(fields: dict) -> str:
     return " - ".join(p for p in parts if p)
 
 
-def _billable_from_db_code(db_code: str) -> str:
-    """F41D -> F41. Returns "" for a blank or unrecognized code rather than guessing."""
-    code = (db_code or "").strip().upper()
-    if not code:
-        return ""
-    m = _DB_CODE_RE.match(code)
-    if not m:
-        return ""
-    return m.group(1)
+def _validate_and_fix(f: dict) -> list:
+    """Blank any extracted value Jira would reject or store wrong. Returns warning lines.
 
-
-def _validate_and_fix(kwargs: dict) -> list:
-    """Blank any value Jira would reject or store wrong. Returns warning lines."""
+    Runs before the ParseResult is built, because that dataclass is frozen. The tail's
+    own validate_result() is the advisory second pass.
+    """
     warnings = []
 
-    lm = (kwargs.get("list_manager") or "").strip().upper()
+    lm = (f.get("list_manager") or "").strip().upper()
     if lm and lm not in _VALID_LIST_MANAGERS:
-        warnings.append(f"list_manager {kwargs['list_manager']!r} is not one of the 14 known "
-                        f"values — blanked (a wrong value here is what mis-set C69 on DSLF-130)")
-        kwargs["list_manager"] = ""
+        warnings.append(f"list_manager {f['list_manager']!r} is not one of the 14 known values "
+                        f"— blanked (a wrong value here is what mis-set C69 on DSLF-130)")
+        f["list_manager"] = ""
     else:
-        kwargs["list_manager"] = lm
+        f["list_manager"] = lm
 
     for field, options in (("availability_rule", AVAILABILITY_RULE_OPTIONS),
                            ("file_format", FILE_FORMAT_OPTIONS),
                            ("shipping_method", SHIPPING_METHOD_OPTIONS)):
-        value = (kwargs.get(field) or "").strip()
+        value = (f.get(field) or "").strip()
         if value and value not in options:
             warnings.append(f"{field} {value!r} has no Jira option "
                             f"({'/'.join(options)}) — blanked, it would be dropped anyway")
-            kwargs[field] = ""
+            f[field] = ""
 
-    for field in ("mail_date", "ship_by_date"):
-        value = (kwargs.get(field) or "").strip()
+    for field, label in (("mail_date", "mail_date"), ("due_date", "ship_by_date")):
+        value = (f.get(field) or "").strip()
         if value and not _DATE_RE.match(value):
-            warnings.append(f"{field} {value!r} is not YYYY-MM-DD — blanked "
+            warnings.append(f"{label} {value!r} is not YYYY-MM-DD — blanked "
                             f"(Jira rejects the whole create on a bad date)")
-            kwargs[field] = ""
-
-    db_code = kwargs.get("db_code") or ""
-    if db_code and not _DB_CODE_RE.match(db_code):
-        warnings.append(f"db_code {db_code!r} is not the expected letter+2-digit shape — "
-                        f"blanked, so Client/Seed/Billable are left empty")
-        kwargs["db_code"] = ""
-        kwargs["billable_account"] = ""
+            f[field] = ""
 
     return warnings
 
 
-def _maybe_enrich(kwargs: dict) -> list:
-    """--enrich: fill a blank db_code from config/*.yaml. Returns note lines."""
-    if kwargs.get("db_code"):
-        return []
-    found = enrich_fields(
-        list_name=kwargs.get("list_name", ""),
-        mailer_name=kwargs.get("mailer_name", ""),
-        list_manager=kwargs.get("list_manager", ""),
-    )
-    if not found:
-        return ["--enrich: no config match on list/mailer name — db_code stays blank"]
+def build_result(pdf_path: str, model: str = DEFAULT_MODEL,
+                 effort: str = DEFAULT_EFFORT) -> tuple:
+    """Claude-extract the PDF and return (ParseResult, meta).
 
-    notes = []
-    for key in ("db_code", "billable_account", "list_manager"):
-        value = found.get(key)
-        if value and not kwargs.get(key):
-            kwargs[key] = value
-            notes.append(f"--enrich: {key} = {value}")
-    # billable_account is authoritative in config and can differ from the db_code prefix
-    # by design (A52D -> A68), so only derive it when the lookup did not supply one.
-    if kwargs.get("db_code") and not kwargs.get("billable_account"):
-        kwargs["billable_account"] = _billable_from_db_code(kwargs["db_code"])
-        notes.append(f"--enrich: billable_account = {kwargs['billable_account']} (derived)")
-    return notes
-
-
-def build_kwargs(pdf_path: str, model: str = DEFAULT_MODEL,
-                 effort: str = DEFAULT_EFFORT, enrich: bool = False) -> tuple:
-    """Claude-extract the PDF and map DSLF_SCHEMA onto create_jira_ticket kwargs.
-
-    Returns (kwargs, meta) where meta carries usage, warnings and enrichment notes.
+    db_code and billable_account are deliberately left empty on the ParseResult: the tail
+    resolves both from config, which is authoritative. Claude's guess rides in meta so it
+    can be reported without being sent.
     """
-    result = ai_extract.extract_fields_from_pdf(pdf_path, model=model, effort=effort)
-    f = result["fields"]
+    extracted = ai_extract.extract_fields_from_pdf(
+        pdf_path, model=model, effort=effort, system=_SYSTEM, schema=_SCHEMA)
+    f = extracted["fields"]
+    warnings = _validate_and_fix(f)
 
-    db_code = (f.get("db_code") or "").strip().upper()
-    kwargs = {
-        "summary":                   _build_summary(f),
-        "list_name":                 f.get("list_name", ""),
-        "mailer_name":               f.get("mailer_name", ""),
-        "mailer_po":                 f.get("mailer_po", ""),
-        "manager_order_number":      f.get("manager_order_number", ""),
-        "list_manager":              f.get("list_manager", ""),
-        "requestor_name":            f.get("requestor_name", ""),
-        "requestor_email":           f.get("requestor_email", ""),
-        "mail_date":                 f.get("mail_date", ""),
-        # DSLF_SCHEMA calls the Ship By date due_date; create_jira_ticket calls it ship_by_date.
-        "ship_by_date":              f.get("due_date", ""),
-        "requested_quantity":        f.get("requested_quantity", 0) or 0,
-        "availability_rule":         f.get("availability_rule", ""),
-        "file_format":               f.get("file_format", ""),
-        "ship_to_email":             f.get("ship_to_email", ""),
-        "shipping_method":           f.get("shipping_method", ""),
-        "shipping_instructions":     f.get("shipping_instructions", ""),
-        "other_fees":                f.get("other_fees", ""),
-        "key_code":                  f.get("key_code", ""),
-        "db_code":                   db_code,
-        "billable_account":          _billable_from_db_code(db_code),
-        # Prose comes back as per-line arrays. Description goes through the same ADF builder
-        # the rule-based path uses, so an indented run under a heading ("Selects:") becomes a
-        # real bulletList — Jira's renderer collapses leading whitespace, so the indent has to
-        # become structure or it is invisible. result is unused when segment_criteria is given.
-        # Omission and seed instructions are accepted as plain strings and split per line.
-        "description":               _build_adf_description(
-                                         None, segment_criteria="\n".join(f.get("description") or [])),
-        "omission_description":      "\n".join(f.get("omission_description") or []),
-        "special_seed_instructions": "\n".join(f.get("special_seed_instructions") or []),
+    result = ParseResult(
+        source=f"llm:{model}",
+        confidence=CONFIDENCE_LLM_BASED,
+        summary=_build_summary(f),
+        mailer_name=f.get("mailer_name", ""),
+        mailer_po=f.get("mailer_po", ""),
+        list_name=f.get("list_name", ""),
+        list_manager=f.get("list_manager", ""),
+        requested_quantity=int(f.get("requested_quantity") or 0),
+        manager_order_number=f.get("manager_order_number", ""),
+        mail_date=f.get("mail_date", ""),
+        # DSLF_SCHEMA calls the Ship By date due_date; ParseResult calls it ship_by_date.
+        ship_by_date=f.get("due_date", ""),
+        requestor_name=f.get("requestor_name", ""),
+        requestor_email=f.get("requestor_email", ""),
+        ship_to_email=f.get("ship_to_email", ""),
+        key_code=f.get("key_code", ""),
+        availability_rule=f.get("availability_rule", ""),
+        file_format=f.get("file_format", ""),
+        shipping_method=f.get("shipping_method", ""),
+        shipping_instructions=f.get("shipping_instructions", ""),
+        # Plain text, not ADF: the tail polishes it and then builds the ADF with the
+        # client profile's blocks wrapped around it.
+        segment_criteria="\n".join(f.get("description") or []),
+        omission_description="\n".join(f.get("omission_description") or []),
+        other_fees=f.get("other_fees", ""),
+        special_seed_instructions="\n".join(f.get("special_seed_instructions") or []),
+        adstra_list_code=f.get("adstra_list_code", ""),
+        warnings=tuple(warnings),
+    )
+    meta = {
+        "usage": extracted.get("usage", {}),
+        "model": extracted.get("model", model),
+        "effort": effort,
+        "warnings": warnings,
+        "claude_db_code": (f.get("db_code") or "").strip().upper(),
     }
-
-    notes = _maybe_enrich(kwargs) if enrich else []
-    warnings = _validate_and_fix(kwargs)
-
-    meta = {"usage": result.get("usage", {}), "model": result.get("model", model),
-            "effort": effort, "warnings": warnings, "notes": notes}
-    return kwargs, meta
+    return result, meta
 
 
-def _duplicate_query(kwargs: dict) -> tuple:
-    """Same keys parse_pipeline uses: AMLC on Manager Order #, everything else on Mailer PO."""
-    if kwargs.get("list_manager") == "AMLC" and kwargs.get("manager_order_number"):
-        return (f'project = DSLF AND cf[12192] = "{kwargs["manager_order_number"]}"',
-                f'Manager Order # {kwargs["manager_order_number"]}')
-    if kwargs.get("mailer_po"):
-        return (f'project = DSLF AND cf[12193] = "{kwargs["mailer_po"]}"',
-                f'PO {kwargs["mailer_po"]}')
-    return None, None
-
-
-def _report(kwargs: dict, meta: dict) -> None:
-    print("\n== Claude-extracted ticket fields ==")
-    print(f"Title: {kwargs['summary'] or '(EMPTY)'}")
-    print(f"List Manager: {kwargs['list_manager']}   Mailer PO: {kwargs['mailer_po']}   "
-          f"Mgr#: {kwargs['manager_order_number']}")
-    print(f"Client DB/Billable: {kwargs['db_code'] or '(none)'} / "
-          f"{kwargs['billable_account'] or '(none)'}")
-    print(f"Requestor: {kwargs['requestor_name']} <{kwargs['requestor_email']}>")
-    print(f"Qty: {kwargs['requested_quantity']}   Availability: {kwargs['availability_rule']}   "
-          f"Format: {kwargs['file_format']}   Ship: {kwargs['shipping_method']}")
-
-    print("Description:")
-    for ln in adf_to_lines(kwargs["description"]):
-        print(f"    {ln}")
-    print("Omission Description:")
-    for ln in kwargs["omission_description"].splitlines():
-        if ln.strip():
-            print(f"    {ln.strip()}")
-
-    for note in meta.get("notes", []):
-        print(f"  + {note}")
-    for warning in meta.get("warnings", []):
-        print(f"  ! {warning}")
-
-    blanks = [k for k in _WATCH_FIELDS if not kwargs.get(k)]
+def _report_extraction(result: ParseResult, meta: dict) -> None:
+    """Short pre-flight. The tail's own _print_result dumps the final field set."""
+    print(f"\n== Claude extraction ({meta['model']} @ {meta['effort']} effort) ==")
+    if meta["claude_db_code"]:
+        shape = "" if _DB_CODE_RE.match(meta["claude_db_code"]) else " (unexpected shape)"
+        print(f"  db_code guess: {meta['claude_db_code']}{shape} "
+              f"— not sent; config decides")
+    for w in meta["warnings"]:
+        print(f"  ! {w}")
+    blanks = [k for k in ("list_manager", "mailer_po", "manager_order_number",
+                          "requested_quantity") if not getattr(result, k)]
     if blanks:
-        print(f"  ! blank: {', '.join(blanks)} — nothing validated this extraction, "
+        print(f"  ! blank: {', '.join(blanks)} — nothing verified this read, "
               f"check against the PDF before creating.")
     usage = meta.get("usage", {})
-    print(f"  ({meta.get('model')} @ {meta.get('effort')} effort: "
-          f"{usage.get('input_tokens')} in / {usage.get('output_tokens')} out tokens)")
+    print(f"  ({usage.get('input_tokens')} in / {usage.get('output_tokens')} out tokens)")
 
 
-def _verify_created(ticket_key: str, kwargs: dict) -> list:
+def _verify_created(ticket_key: str, result: ParseResult) -> list:
     """Re-read the ticket and report what actually landed. Never raises.
 
     A create writes no changelog entries — the changelog only records later changes — so
@@ -283,20 +280,20 @@ def _verify_created(ticket_key: str, kwargs: dict) -> list:
         return [f"verify skipped: {stored['error']}"]
 
     expected = {
-        "summary":           kwargs["summary"],
-        "list_name":         kwargs["list_name"],
-        "mailer_name":       kwargs["mailer_name"],
-        "manager_order":     kwargs["manager_order_number"],
-        "list_manager":      kwargs["list_manager"],
-        "client_db":         kwargs["db_code"],
-        "seed_db":           (kwargs["db_code"][:-1] + "S") if kwargs["db_code"] else "",
-        "requested_qty":     int(kwargs["requested_quantity"] or 0),
-        "availability_rule": kwargs["availability_rule"],
-        # blank file_format defaults to ASCII Delimited inside create_jira_ticket
-        "file_format":       kwargs["file_format"] or "ASCII Delimited",
-        "shipping_method":   kwargs["shipping_method"],
-        "ship_to_email":     kwargs["ship_to_email"],
+        "summary":           result.summary,
+        "list_name":         result.list_name,
+        "mailer_name":       result.mailer_name,
+        "manager_order":     result.manager_order_number,
+        "list_manager":      result.list_manager,
+        "requested_qty":     int(result.requested_quantity or 0),
+        "availability_rule": result.availability_rule,
+        # a blank file_format defaults to ASCII Delimited inside create_jira_ticket
+        "file_format":       result.file_format or "ASCII Delimited",
+        "shipping_method":   result.shipping_method,
+        "ship_to_email":     result.ship_to_email,
     }
+    # create_jira_ticket rewrites these from the ship-to house rules (Saturn, data-axle,
+    # the fixed-format email houses), so a difference here is expected, not a mismatch.
     house = {"file_format", "shipping_method", "ship_to_email"}
 
     lines = []
@@ -315,66 +312,58 @@ def _verify_created(ticket_key: str, kwargs: dict) -> list:
         else:
             lines.append(f"  ! {field}: sent {want!r}, stored {got!r}")
 
-    desc = adf_to_lines(stored.get("description_adf"))
-    omit = adf_to_lines(stored.get("omission_adf"))
-    lines.append(f"  description: {len(desc)} line(s) stored, "
-                 f"omission: {len(omit)} line(s) stored")
+    lines.append(f"  Client DB: {stored.get('client_db') or '(empty)'}   "
+                 f"Seed DB: {stored.get('seed_db') or '(empty)'}")
+    lines.append(f"  description: {len(adf_to_lines(stored.get('description_adf')))} line(s), "
+                 f"omission: {len(adf_to_lines(stored.get('omission_adf')))} line(s)")
     return lines
 
 
 def llm_create(pdf_path: str, model: str = DEFAULT_MODEL, effort: str = DEFAULT_EFFORT,
-               live: bool = False, attach: bool = True, enrich: bool = False) -> dict:
+               live: bool = False) -> dict:
+    """Extract one PDF and run it through the shared pipeline tail.
+
+    Returns the tail's result dict, or a list of them for a split multi-page order.
+    """
     print(f"\n--- {Path(pdf_path).name} ---")
-    kwargs, meta = build_kwargs(pdf_path, model=model, effort=effort, enrich=enrich)
-    _report(kwargs, meta)
+    result, meta = build_result(pdf_path, model=model, effort=effort)
+    _report_extraction(result, meta)
 
-    if not kwargs["summary"]:
-        raise RuntimeError("Claude returned no list name, mailer name or manager order number "
-                           "— refusing to create an untitled ticket")
-
-    if kwargs["db_code"] in SKIP_DB_CODES:
-        print(f"\n[SKIPPED] db_code {kwargs['db_code']} is in SKIP_DB_CODES — no ticket.")
-        return {"pdf": pdf_path, "skipped": True, "db_code": kwargs["db_code"], "kwargs": kwargs}
-
-    if not live:
-        print("\n[DRY RUN] nothing created. Re-run with --live to create the ticket.")
-        return {"pdf": pdf_path, "dry_run": True, "kwargs": kwargs}
-
-    dup_jql, dup_label = _duplicate_query(kwargs)
-    if dup_jql:
-        existing = search_jira_tickets(dup_jql)
-        if existing.get("error"):
-            raise RuntimeError(f"duplicate check failed: {existing['error']}")
-        if existing.get("total", 0) > 0:
-            keys = ", ".join(i["key"] for i in existing["issues"])
-            print(f"\n[DUPLICATE] {dup_label} already exists on {keys} — no ticket created.")
-            return {"pdf": pdf_path, "duplicate": True, "existing": keys, "kwargs": kwargs}
-    else:
-        log.warning("No Mailer PO or Manager Order # — duplicate check skipped")
-
-    ticket = create_jira_ticket(**kwargs, order_text=extract_pdf_text(pdf_path))
-    if "error" in ticket:
-        raise RuntimeError(f"create failed: {ticket['error']}")
-
-    key = ticket["key"]
-    url = f"{_get_jira_base_url()}/browse/{key}"
-    print(f"\nCREATED: {key}  {url}")
-    print("  (no work order linked — this path does not run the IBM i step)")
-
-    if attach:
+    # Multi-page: one ticket per page, except ADSTRA, matching process_pdf(). The list
+    # manager is only known after extraction, so the whole-document read above decides.
+    page_count = get_pdf_page_count(pdf_path)
+    if page_count > 1 and result.list_manager != "ADSTRA":
+        log.info("Multi-page PDF (%d pages) — one ticket per page", page_count)
+        tmp_dir, page_paths = split_pdf_into_pages(pdf_path)
+        results = []
         try:
-            attach_file_to_ticket(key, pdf_path)
-            print(f"Attached source PDF to {key}")
-        except Exception as e:
-            print(f"attach warning: {e}")
+            for i, page_path in enumerate(page_paths):
+                log.info("--- Page %d/%d ---", i + 1, page_count)
+                results.append(llm_create(page_path, model=model, effort=effort, live=live))
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        return results
+    if page_count > 1:
+        log.info("ADSTRA multi-page PDF (%d pages) — one order", page_count)
 
-    print("Verifying what landed on the ticket:")
-    verification = _verify_created(key, kwargs)
-    for line in verification:
-        print(line)
+    if not result.summary:
+        raise RuntimeError("Claude returned no list name, mailer name or manager order "
+                           "number — refusing to create an untitled ticket")
 
-    return {"pdf": pdf_path, "ticket_key": key, "url": url,
-            "verification": verification, "kwargs": kwargs}
+    out = finalize_and_create(result, pdf_path, extract_pdf_text(pdf_path),
+                              dry_run=not live, verbose=True)
+    out["pdf"] = pdf_path
+    out["extraction"] = meta
+
+    if out.get("dry_run"):
+        print("\n[DRY RUN] nothing created. Re-run with --live to create the ticket.")
+    elif out.get("ticket_key"):
+        print("\nVerifying what landed on the ticket:")
+        out["verification"] = _verify_created(out["ticket_key"], result)
+        for line in out["verification"]:
+            print(line)
+    return out
 
 
 def _iter_pdfs(path: str) -> list:
@@ -409,12 +398,8 @@ def main() -> int:
                     help=f"reasoning effort (default {DEFAULT_EFFORT})")
     ap.add_argument("--live", action="store_true",
                     help="actually create the ticket (default is a dry run)")
-    ap.add_argument("--no-attach", action="store_true",
-                    help="skip attaching the source PDF to the created ticket")
-    ap.add_argument("--enrich", action="store_true",
-                    help="fill a blank db_code from config/*.yaml via client_lookup")
     ap.add_argument("--json", metavar="FILE",
-                    help="write the built kwargs and results to FILE as JSON")
+                    help="write the built fields and results to FILE as JSON")
     args = ap.parse_args()
 
     pdfs = _iter_pdfs(args.path)
@@ -426,16 +411,16 @@ def main() -> int:
     for pdf in pdfs:
         try:
             results.append(llm_create(str(pdf), model=args.model, effort=args.effort,
-                                      live=args.live, attach=not args.no_attach,
-                                      enrich=args.enrich))
+                                      live=args.live))
         except Exception as e:
             log.error("%s: %s", pdf.name, e)
             results.append({"pdf": str(pdf), "error": str(e)})
             failed += 1
 
-    if len(pdfs) > 1:
-        created = sum(1 for r in results if r.get("ticket_key"))
-        print(f"\n== {len(pdfs)} PDF(s): {created} created, {failed} failed ==")
+    flat = [r for item in results for r in (item if isinstance(item, list) else [item])]
+    if len(flat) > 1:
+        created = sum(1 for r in flat if r.get("ticket_key"))
+        print(f"\n== {len(flat)} order(s): {created} created, {failed} failed ==")
 
     if args.json:
         Path(args.json).write_text(json.dumps(results, indent=2, default=str), encoding="utf-8")
