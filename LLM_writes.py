@@ -40,7 +40,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 log = logging.getLogger("LLM_writes")
 
 import ai_extract
-from parse_pipeline import SKIP_DB_CODES
+from parse_pipeline import SKIP_DB_CODES, _build_adf_description
 from tools_jira import (
     create_jira_ticket,
     attach_file_to_ticket,
@@ -48,7 +48,7 @@ from tools_jira import (
     _get_jira_base_url,
 )
 from tools_pdf import extract_pdf_text
-from tools_polish import text_to_adf
+from compare_extraction import adf_to_lines
 
 # Database codes are one letter + two digits, optionally with a suffix letter (F41D).
 _DB_CODE_RE = re.compile(r"^([A-Z]\d{2})[A-Z]?$")
@@ -110,9 +110,13 @@ def build_kwargs(pdf_path: str, model: str = ai_extract.DEFAULT_MODEL) -> tuple:
         "key_code":                  f.get("key_code", ""),
         "db_code":                   db_code,
         "billable_account":          _billable_from_db_code(db_code),
-        # Prose comes back as per-line arrays. Description must be ADF; omission and seed
-        # instructions are accepted as plain strings and split one paragraph per line.
-        "description":               text_to_adf(f.get("description") or []),
+        # Prose comes back as per-line arrays. Description goes through the same ADF builder
+        # the rule-based path uses, so an indented run under a heading ("Selects:") becomes a
+        # real bulletList — Jira's renderer collapses leading whitespace, so the indent has to
+        # become structure or it is invisible. result is unused when segment_criteria is given.
+        # Omission and seed instructions are accepted as plain strings and split per line.
+        "description":               _build_adf_description(
+                                         None, segment_criteria="\n".join(f.get("description") or [])),
         "omission_description":      "\n".join(f.get("omission_description") or []),
         "special_seed_instructions": "\n".join(f.get("special_seed_instructions") or []),
     }
@@ -144,10 +148,8 @@ def _report(kwargs: dict, meta: dict) -> None:
           f"Format: {kwargs['file_format']}   Ship: {kwargs['shipping_method']}")
 
     print("Description:")
-    for block in kwargs["description"].get("content", []):
-        for node in block.get("content", []):
-            if node.get("text", "").strip():
-                print(f"    {node['text']}")
+    for ln in adf_to_lines(kwargs["description"]):
+        print(f"    {ln}")
     print("Omission Description:")
     for ln in kwargs["omission_description"].splitlines():
         if ln.strip():
