@@ -162,20 +162,16 @@ emit a "Selects:" line followed by each criterion indented by two spaces:
       12 MOS HOTLINE
 Unindented lines render as bare fragments with nothing saying what they are.
 
-SHIPPING INSTRUCTIONS IS ROUTING ONLY — how and where the file is delivered: the address,
-FTP vs email, the CC list, the required subject-line format. An order-level note that is
-not about delivery does NOT belong there. The most common one is "please provide the all
-available quantity before shipping for approval" — that is a quantity-approval note, not a
-shipping instruction. Put notes like that in the description under an "Order Notes:"
-line, and leave them out of shipping_instructions entirely.
+SHIPPING INSTRUCTIONS — the cc list and nothing else:
+    CC: CRAGUSA@ESTEEMARKETING.COM, DSNYDER@ESTEEMARKETING.COM
+Do not repeat the destination address there — it is already the ship_to_email field — and
+do not carry subject-line rules, file-naming rules, or quantity-approval notes. When the
+order names no cc addresses, return "".
 
-ORDER TERMS — when the order states whether it is an Exchange or a Rental, a net
-arrangement percentage, a price per thousand, or a category/offer, record them on ONE
-line, comma separated:
-    Order Terms: Exchange, Net Arrangement 100%, $0.00/M, Category FUNDRAISING
-    Order Notes: Please provide the all available quantity before shipping for approval.
-Exchange vs Rental is the one that matters most — never drop it when the order says which
-it is, because it changes how the order is billed.
+DESCRIPTION SCOPE — the description is the SELECT criteria and nothing else. Do not add
+order terms, exchange/rental status, pricing, net arrangement, category, delivery notes,
+or quantity-approval notes. Anything that is an omit or a suppression goes in
+omission_description, never here.
 
 "Selects:" is the ONLY heading that takes an indented block. Every other label you emit
 must be a single self-contained line — a downstream cleanup step flattens indentation
@@ -384,7 +380,8 @@ def llm_create(pdf_path: str, model: str = DEFAULT_MODEL, effort: str = DEFAULT_
                            "number — refusing to create an untitled ticket")
 
     out = finalize_and_create(result, pdf_path, extract_pdf_text(pdf_path),
-                              dry_run=not live, verbose=True)
+                              dry_run=not live, verbose=True,
+                              profile_blocks_to_omission=True)
     out["pdf"] = pdf_path
     out["extraction"] = meta
 

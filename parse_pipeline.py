@@ -185,7 +185,8 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
 
 
 def finalize_and_create(result, pdf_path: str, text: str,
-                        dry_run: bool = False, verbose: bool = False) -> dict:
+                        dry_run: bool = False, verbose: bool = False,
+                        profile_blocks_to_omission: bool = False) -> dict:
     """
     Everything after a ParseResult exists: validate → duplicate check → enrich →
     client profile → prose polish → build kwargs → create → work order → attachments.
@@ -322,8 +323,15 @@ def finalize_and_create(result, pdf_path: str, text: str,
     if polished_omission:
         kwargs["omission_description"] = polished_omission
 
+    # profile_blocks_to_omission: the caller wants the profile's suppression and
+    # instruction blocks filed as omission criteria rather than description body. Default
+    # False keeps the rule-based path byte-for-byte as it was.
+    desc_profile = profile_data
+    if profile_blocks_to_omission:
+        desc_profile = {k: v for k, v in profile_data.items()
+                        if k not in ("standard_suppressions", "special_instructions")}
     kwargs["description"] = _build_adf_description(
-        result, profile_data=profile_data, segment_criteria=polished_criteria)
+        result, profile_data=desc_profile, segment_criteria=polished_criteria)
     if enriched.get("billable_account") and not kwargs.get("billable_account"):
         kwargs["billable_account"] = enriched["billable_account"]
     if enriched.get("list_manager") and not kwargs.get("list_manager"):
@@ -351,6 +359,13 @@ def finalize_and_create(result, pdf_path: str, text: str,
         _print_result(result, select_by=profile_data.get("select_by", ""),
                       omission_description=kwargs.get("omission_description", ""),
                       segment_criteria=polished_criteria)
+
+    # Render the omission as ADF last — after _print_result, which expects a plain string.
+    # The profile blocks lead; the order's own omit lines (FLAG OMITS already appended
+    # above) follow, matching the layout on DSLF-1027.
+    if profile_blocks_to_omission:
+        kwargs["omission_description"] = _build_adf_omission(
+            kwargs.get("omission_description", ""), profile_data)
 
     if dry_run:
         log.info("[DRY RUN] Would create ticket: %s", result.summary)
@@ -486,6 +501,41 @@ def _create_and_link_work_order(
         return None
 
 
+def _adf_para(text: str) -> dict:
+    return {"type": "paragraph", "content": [{"type": "text", "text": text}]}
+
+
+def _adf_bullet_list(items: list) -> dict:
+    return {
+        "type": "bulletList",
+        "content": [
+            {"type": "listItem", "content": [_adf_para(str(item))]}
+            for item in items if item
+        ],
+    }
+
+
+def _build_adf_omission(omission_text: str, profile_data: dict = None) -> dict:
+    """Omission as ADF: the profile's suppression and instruction blocks as bullet lists,
+    then the order's own omit lines (which already carry FLAG OMITS on the end).
+
+    Used only when a caller asks for the profile blocks to live in the Omission field
+    instead of the Description — see finalize_and_create(profile_blocks_to_omission=True).
+    """
+    profile_data = profile_data or {}
+    content = []
+    for heading, key in (("Standard Suppressions:", "standard_suppressions"),
+                         ("Special Instructions:", "special_instructions")):
+        items = profile_data.get(key) or []
+        if items:
+            content.append(_adf_para(heading))
+            content.append(_adf_bullet_list(items))
+    for line in (omission_text or "").splitlines():
+        if line.strip():
+            content.append(_adf_para(line.strip()))
+    return {"type": "doc", "version": 1, "content": content or [_adf_para("")]}
+
+
 def _build_adf_description(result, profile_data: dict = None, select_by: str = "",
                            segment_criteria: str = None) -> dict:
     """Build ADF description: segment criteria from PDF, plus profile suppressions/instructions as bullet lists.
@@ -494,17 +544,8 @@ def _build_adf_description(result, profile_data: dict = None, select_by: str = "
     from tools_polish); pass None to use the parser's own value.
     """
 
-    def para(text: str) -> dict:
-        return {"type": "paragraph", "content": [{"type": "text", "text": text}]}
-
-    def bullet_list(items: list) -> dict:
-        return {
-            "type": "bulletList",
-            "content": [
-                {"type": "listItem", "content": [para(str(item))]}
-                for item in items if item
-            ],
-        }
+    para = _adf_para
+    bullet_list = _adf_bullet_list
 
     content = []
     profile_data = profile_data or {}
