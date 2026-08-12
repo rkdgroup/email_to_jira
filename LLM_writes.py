@@ -13,7 +13,7 @@ the rule-based parse fails. This path only needs the PDF to be readable by Claud
     python LLM_writes.py order.pdf --enrich        # fill a blank db_code from config/*.yaml
     python LLM_writes.py order.pdf --json out.json # dump the built kwargs
     python LLM_writes.py order.pdf --live --no-attach
-    python LLM_writes.py order.pdf --model claude-opus-4-8
+    python LLM_writes.py order.pdf --model claude-opus-5 --effort high
 
 Nothing validates a Claude extraction the way the parsers do, so the values are checked
 against the pipeline's own vocabularies before anything is sent: the List Manager must be
@@ -64,6 +64,14 @@ from tools_jira import (
 )
 from tools_pdf import extract_pdf_text
 from compare_extraction import adf_to_lines
+
+# Sonnet at medium effort: this extraction is structured transcription against a fixed
+# schema, not open-ended reasoning, so the deeper tiers buy little. ai_extract's own
+# defaults (Opus at high effort) are deliberately left alone — compare_extraction.py and
+# hybrid_create.py still use them. Override per run with --model / --effort.
+DEFAULT_MODEL  = "claude-sonnet-5"
+DEFAULT_EFFORT = "medium"
+_EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
 
 # Database codes are one letter + two digits, optionally with a suffix letter (F41D).
 _DB_CODE_RE = re.compile(r"^([A-Z]\d{2})[A-Z]?$")
@@ -168,13 +176,13 @@ def _maybe_enrich(kwargs: dict) -> list:
     return notes
 
 
-def build_kwargs(pdf_path: str, model: str = ai_extract.DEFAULT_MODEL,
-                 enrich: bool = False) -> tuple:
+def build_kwargs(pdf_path: str, model: str = DEFAULT_MODEL,
+                 effort: str = DEFAULT_EFFORT, enrich: bool = False) -> tuple:
     """Claude-extract the PDF and map DSLF_SCHEMA onto create_jira_ticket kwargs.
 
     Returns (kwargs, meta) where meta carries usage, warnings and enrichment notes.
     """
-    result = ai_extract.extract_fields_from_pdf(pdf_path, model=model)
+    result = ai_extract.extract_fields_from_pdf(pdf_path, model=model, effort=effort)
     f = result["fields"]
 
     db_code = (f.get("db_code") or "").strip().upper()
@@ -215,7 +223,7 @@ def build_kwargs(pdf_path: str, model: str = ai_extract.DEFAULT_MODEL,
     warnings = _validate_and_fix(kwargs)
 
     meta = {"usage": result.get("usage", {}), "model": result.get("model", model),
-            "warnings": warnings, "notes": notes}
+            "effort": effort, "warnings": warnings, "notes": notes}
     return kwargs, meta
 
 
@@ -259,8 +267,8 @@ def _report(kwargs: dict, meta: dict) -> None:
         print(f"  ! blank: {', '.join(blanks)} — nothing validated this extraction, "
               f"check against the PDF before creating.")
     usage = meta.get("usage", {})
-    print(f"  ({meta.get('model')}: {usage.get('input_tokens')} in / "
-          f"{usage.get('output_tokens')} out tokens)")
+    print(f"  ({meta.get('model')} @ {meta.get('effort')} effort: "
+          f"{usage.get('input_tokens')} in / {usage.get('output_tokens')} out tokens)")
 
 
 def _verify_created(ticket_key: str, kwargs: dict) -> list:
@@ -314,10 +322,10 @@ def _verify_created(ticket_key: str, kwargs: dict) -> list:
     return lines
 
 
-def llm_create(pdf_path: str, model: str = ai_extract.DEFAULT_MODEL,
+def llm_create(pdf_path: str, model: str = DEFAULT_MODEL, effort: str = DEFAULT_EFFORT,
                live: bool = False, attach: bool = True, enrich: bool = False) -> dict:
     print(f"\n--- {Path(pdf_path).name} ---")
-    kwargs, meta = build_kwargs(pdf_path, model=model, enrich=enrich)
+    kwargs, meta = build_kwargs(pdf_path, model=model, effort=effort, enrich=enrich)
     _report(kwargs, meta)
 
     if not kwargs["summary"]:
@@ -395,7 +403,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description="Create a DSLF ticket from a PDF using Claude for all field extraction.")
     ap.add_argument("path", help="order PDF, or a folder of them")
-    ap.add_argument("--model", default=ai_extract.DEFAULT_MODEL)
+    ap.add_argument("--model", default=DEFAULT_MODEL,
+                    help=f"Claude model to extract with (default {DEFAULT_MODEL})")
+    ap.add_argument("--effort", default=DEFAULT_EFFORT, choices=_EFFORT_LEVELS,
+                    help=f"reasoning effort (default {DEFAULT_EFFORT})")
     ap.add_argument("--live", action="store_true",
                     help="actually create the ticket (default is a dry run)")
     ap.add_argument("--no-attach", action="store_true",
@@ -414,8 +425,9 @@ def main() -> int:
     results, failed = [], 0
     for pdf in pdfs:
         try:
-            results.append(llm_create(str(pdf), model=args.model, live=args.live,
-                                      attach=not args.no_attach, enrich=args.enrich))
+            results.append(llm_create(str(pdf), model=args.model, effort=args.effort,
+                                      live=args.live, attach=not args.no_attach,
+                                      enrich=args.enrich))
         except Exception as e:
             log.error("%s: %s", pdf.name, e)
             results.append({"pdf": str(pdf), "error": str(e)})

@@ -130,8 +130,13 @@ _USER_TEXT = (
 )
 
 
-def extract_fields_from_pdf(pdf_path: str, model: str = DEFAULT_MODEL) -> dict:
+def extract_fields_from_pdf(pdf_path: str, model: str = DEFAULT_MODEL,
+                            effort: str = "high") -> dict:
     """Send the PDF to Claude and return {"fields": {...}, "usage": {...}, "model": ...}.
+
+    effort is the output_config reasoning level (low|medium|high|xhigh|max). It defaults
+    to "high" so compare_extraction.py and hybrid_create.py keep the behaviour they were
+    written against; LLM_writes.py passes its own.
 
     Raises RuntimeError on missing key/oversize; propagates anthropic API errors.
     """
@@ -152,7 +157,7 @@ def extract_fields_from_pdf(pdf_path: str, model: str = DEFAULT_MODEL) -> dict:
         max_tokens=8000,
         thinking={"type": "adaptive"},
         output_config={
-            "effort": "high",
+            "effort": effort,
             "format": {"type": "json_schema", "schema": DSLF_SCHEMA},
         },
         system=_SYSTEM,
