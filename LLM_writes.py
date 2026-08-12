@@ -120,6 +120,11 @@ LIST MANAGER TRAPS:
   * An AMLC order serviced by RKD contains the words "RKD GROUP". If it says "American
     Mailing Lists Corporation Management", it is AMLC, not RKD.
 
+REQUESTOR is the LIST MANAGER's own contact, never the broker's rep. On an ADSTRA form
+that means the "Contact:" name together with the @adstradata.com address — a person named
+under "Broker:" placed the order and does not belong on the ticket at all. Use the table
+below only when the order names no contact for the list manager.
+
 REQUESTOR — when the order is from one of these brokers and names no other requestor:
   ADSTRA        BOBBI DURRETT     BOBBI.DURRETT@ADSTRADATA.COM
   RMI           ALICIA GALLAGHER  AGALLAGHER@RMIDIRECT.COM
@@ -148,6 +153,13 @@ several other forms it sits in the List / Price block, e.g.
 
     List:                 AID FOR STARVING CHILDREN
     Price:                12 MONTH (8/25-7/26) $10-$49.99
+
+On an ADSTRA form the select is the "Pull Description:" value, e.g. "3MOS $10+ DONORS".
+
+Take the select line VERBATIM. Never append words lifted from an omit line to it: a line
+like "ADDR. USA NAMES ONLY, OMIT CAN., P.R., FOREIGN, APO, FPO & MIL." is one omit
+criterion and belongs whole in omission_description — do not split its first clause off
+into the description.
 
 and the form's own literal "Selects:" label is a SEPARATE, OFTEN EMPTY field. An empty
 "Selects:" label does not mean the order has no selects — look at the List / Price block

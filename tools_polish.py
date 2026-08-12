@@ -106,6 +106,11 @@ You may NOT:
 - Drop any criterion, state code, number, zip, date, dollar amount, or flag.
 - Change capitalisation or spacing inside a line, except for the single space added where
   you join two wrapped lines, and trimming leading/trailing whitespace.
+- Break one line into several. Operation 2 is the ONLY split there is, and it applies only
+  to a line that is part selection and part omission. A single select criterion names as
+  many values as it likes and is still one criterion: "3MOS $10+ DONORS" is one line and
+  stays one line — do not turn it into "3MOS" / "$10+" / "DONORS". Operation 5 labels a run
+  of lines that were ALREADY separate in the input; it never creates that run.
 
 Apart from that one heading, every word in your output must have come from the input. You are
 re-arranging text between and within two fields, nothing more. When in doubt, leave the line
