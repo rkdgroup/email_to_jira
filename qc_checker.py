@@ -1218,7 +1218,8 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
 
 def format_qc_comment(ticket_key: str, select_filename: str,
                       qc_result: dict, parse_errors: list,
-                      select_warnings: list | None = None) -> str:
+                      select_warnings: list | None = None,
+                      llm_findings: list | None = None) -> str:
     """Build the plain-text Jira comment for the QC result."""
     checks     = qc_result["checks"]
     pass_count = qc_result["pass_count"]
@@ -1240,6 +1241,18 @@ def format_qc_comment(ticket_key: str, select_filename: str,
 
     if hard_fails:
         lines.append(f"HARD FAIL: {', '.join(hard_fails)} must match")
+
+    # Advisory only — these came from the AI reading of the SELECT PDF and the ticket, and
+    # are deliberately excluded from the counts and the verdict above.
+    if llm_findings:
+        lines.append("")
+        lines.append("AI REVIEW (advisory — does not affect the result above):")
+        for f in llm_findings:
+            sev = str(f.get("severity", "note")).upper()
+            lines.append(f"  [{sev}] {f.get('field', '?')}")
+            lines.append(f"      SELECT: {f.get('select_value') or '(none)'}")
+            lines.append(f"      ticket: {f.get('ticket_value') or '(none)'}")
+            lines.append(f"      {f.get('issue', '')}")
 
     all_warnings = list(select_warnings or []) + list(parse_errors or [])
     if all_warnings:
@@ -1303,12 +1316,19 @@ def process_ticket_qc(ticket_key: str, dry_run: bool = False) -> dict:
             return {"ticket_key": ticket_key,
                     "error": "SELECT PDF parsing returned no usable data"}
 
-        # Compare
+        # Compare — these 14 checks alone decide PASS/FAIL.
         qc_result = run_qc_checks(select_data, fields)
+
+        # Second, independent AI reading of the same SELECT PDF against the ticket.
+        # Advisory: reported in its own section, never folded into pass_count or
+        # hard_fails, and returns [] on any failure so QC still posts its verdict.
+        import qc_llm
+        llm_findings = qc_llm.review(tmp_path, fields, select_data)
+        qc_result["llm_findings"] = llm_findings
 
         # Format + print
         comment = format_qc_comment(ticket_key, select_filename, qc_result,
-                                    parse_errors, select_warnings)
+                                    parse_errors, select_warnings, llm_findings)
         print(f"\n{comment}\n")
 
         if dry_run:
