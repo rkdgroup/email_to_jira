@@ -126,6 +126,28 @@ class BaseBrokerParser(ABC):
             return "FTP"
         return "Other"
 
+    # An FTP mention offered as an alternative is not a destination. Broker boilerplate
+    # routinely reads "if you are unable to email records, please place on your FTP site"
+    # on orders that ship by plain email.
+    _FTP_FALLBACK_PROSE = re.compile(
+        r"(?:unable\s+to|can\s?not|cannot|can't|if\s+you|otherwise|alternatively|"
+        r"or\s+(?:please\s+)?(?:place|post|load))[^.\n]{0,90}?\bF\.?\s?T\.?\s?P\.?\b",
+        re.IGNORECASE,
+    )
+
+    def _text_mentions_ftp_destination(self, text: str) -> bool:
+        """True only when FTP is named as the destination, not offered as a fallback.
+
+        Use this for the LAST-RESORT delivery read, after the order's own Via / Ship To
+        field has been tried and not found. Scanning the whole page for a bare "FTP" is
+        what turned DSLF-1022 — a plain email order — into an FTP + ASCII Fixed ticket.
+        Prefer the labelled field via _map_shipping_method() wherever the form has one.
+        """
+        if not text:
+            return False
+        return bool(re.search(r"\bF\.?\s?T\.?\s?P\.?\b",
+                              self._FTP_FALLBACK_PROSE.sub(" ", text), re.IGNORECASE))
+
     def _is_saturn_order(self, text: str) -> bool:
         """True if the order routes to Saturn Corp (FileShare upload / Convert@saturncorp.com).
 

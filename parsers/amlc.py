@@ -258,7 +258,7 @@ class RkdGroupParser(BaseBrokerParser):
             result["ship_to_email"] = m_ship.group(1)
 
         # --- Shipping method ---
-        if re.search(r"\bFTP\b", text, re.IGNORECASE):
+        if self._text_mentions_ftp_destination(text):
             result["shipping_method"] = "FTP"
         elif re.search(r"E-?Mail", text, re.IGNORECASE):
             result["shipping_method"] = "Email"

@@ -201,7 +201,7 @@ class CelcoParser(BaseBrokerParser):
         if not shipping_method:
             if re.search(r"E-?MAIL\s+TRANSMISSION", text, re.IGNORECASE):
                 shipping_method = "Email"
-            elif re.search(r"\bFTP\b", text):
+            elif self._text_mentions_ftp_destination(text):
                 shipping_method = "FTP"
 
         # --- Ship To section ---

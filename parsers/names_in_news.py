@@ -177,7 +177,7 @@ class NamesInNewsParser(BaseBrokerParser):
 
         # --- Shipping method ---
         shipping_method = ""
-        if re.search(r"\bFTP\b", text):
+        if self._text_mentions_ftp_destination(text):
             shipping_method = "FTP"
         elif re.search(r"\bE-?mail\b", text, re.IGNORECASE):
             shipping_method = "Email"

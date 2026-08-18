@@ -64,7 +64,7 @@ class WeAreMooreParser(BaseBrokerParser):
             self._find(text, r"(?:Delivery|Ship(?:ping)?\s+Method|Via)[:\s]+([^\n]+)")
         )
         if not shipping_method:
-            if re.search(r"\bFTP\b", text):
+            if self._text_mentions_ftp_destination(text):
                 shipping_method = "FTP"
             elif re.search(r"\bemail\b", text, re.IGNORECASE):
                 shipping_method = "Email"

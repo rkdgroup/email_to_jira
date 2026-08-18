@@ -110,7 +110,7 @@ class ConradDirectParser(BaseBrokerParser):
         ship_via_raw = self._find(text, r"SHIP\s+VIA:\s*(\S+)")
         shipping_method = self._map_shipping_method(ship_via_raw)
         if not shipping_method:
-            if re.search(r"\bFTP\b|Please\s+FTP", text, re.IGNORECASE):
+            if self._text_mentions_ftp_destination(text):
                 shipping_method = "FTP"
             elif re.search(r"Please\s*Email\s*Names\s*To", text, re.IGNORECASE):
                 shipping_method = "Email"
