@@ -74,6 +74,69 @@ def _get_field_option_id(field_id: str, label: str) -> str | None:
     return None
 
 
+# Data Axle drop-box mailboxes: files sent here are Fixed Format delivered via FTP (per
+# List_Fulfillment_File_Format_and_Delivery_Guide_v2). These mailboxes never receive the
+# file by email — they only take the shipping confirmation.
+#
+# Match the MAILBOX, never the domain. Data Axle is itself one of the twelve brokers, so
+# their staff addresses appear on orders routinely. A domain-wide test treated a broker
+# rep's personal mailbox as the drop-box: DSLF-1022 shipped by plain email to
+# mercy@mmidirect.com, but kap.py had put elizsa.leszczynski@data-axle.com in ship_to_email
+# and this rule then forced FTP + ASCII Fixed onto it. Add real drop-boxes here if there
+# are others; do not widen this back to a domain match.
+_DATA_AXLE_DROPBOXES = ("incoming.files@data-axle.com",)
+
+# Fixed-format processing houses (CREAT 4300 TAPE, DON'T TOP LOAD): files sent to these
+# addresses are ALWAYS fixed-length ASCII. Delivery stays Email — these are emailed, unlike
+# the Saturn / Data Axle FTP uploads. See fixed_format_ship_to_emails.
+_FIXED_FORMAT_EMAILS = (
+    "data@trylondm.com", "data@talonmm.com", "data@rkdgroup.com",
+    "tisdata@trinitydirect.net", "tapelibrarian@directmail.com",
+)
+
+
+def apply_ship_to_rules(ship_to_email: str, file_format: str, shipping_method: str,
+                        order_text: str = "") -> tuple:
+    """Apply the ship-to house rules. Returns (ship_to_email, file_format, shipping_method).
+
+    ONLY the ship-to destination decides format and delivery. A broker, list manager or
+    contact from a processing house named elsewhere on the order is irrelevant — see
+    parsers/kap.py, which reads those values from the Ship To block for the same reason.
+
+    Extracted from create_jira_ticket so these rules are testable without posting a ticket.
+    That they were not is why the data-axle domain match survived.
+    """
+    # Saturn Corp rule: any order routed to Saturn Corp — the CONVERT@SATURNCORP.COM
+    # ship-to, a note like "PLACE ON SATURN'S FTP SITE", or an instruction in the order body
+    # to load the file to the Saturn FileShare — is an FTP upload (never email) and the file
+    # is ALWAYS ASCII Fixed. Force both regardless of what the order/parser produced. Most
+    # common in ADSTRA orders. The order_text scan is deliberate: Saturn orders state the
+    # destination in prose rather than in the Ship To field.
+    if "saturn" in (ship_to_email or "").lower() or "saturn" in (order_text or "").lower():
+        file_format = "ASCII Fixed"
+        shipping_method = "FTP"
+        if ship_to_email:
+            st = ship_to_email.strip()
+            if "@" in st and not st.upper().startswith("FTP NOTIFY:"):
+                st = f"FTP NOTIFY: {st}"
+            if "saturn" not in st.lower():
+                st = f"{st} (SATURN CORP)"
+            ship_to_email = st
+        else:
+            ship_to_email = "PLACE ON SATURN CORP FTP FILESHARE"
+
+    if ship_to_email and any(a in ship_to_email.lower() for a in _DATA_AXLE_DROPBOXES):
+        file_format = "ASCII Fixed"
+        shipping_method = "FTP"
+        if "@" in ship_to_email and not ship_to_email.upper().lstrip().startswith("FTP NOTIFY:"):
+            ship_to_email = f"FTP NOTIFY: {ship_to_email.strip()}"
+
+    if ship_to_email and any(a in ship_to_email.lower() for a in _FIXED_FORMAT_EMAILS):
+        file_format = "ASCII Fixed"
+
+    return ship_to_email, file_format, shipping_method
+
+
 def create_jira_ticket(
     summary: str,
     mailer_name: str = "",
@@ -106,43 +169,8 @@ def create_jira_ticket(
     fire when Saturn is named only in the order body, not in the ship-to address.
     """
 
-    # Saturn Corp rule: any order routed to Saturn Corp — the CONVERT@SATURNCORP.COM ship-to,
-    # a note like "PLACE ON SATURN'S FTP SITE", or an instruction in the order body to load the
-    # file to the Saturn FileShare — is an FTP upload (never email) and the file is ALWAYS ASCII
-    # Fixed. Force both regardless of what the order/parser produced. Most common in ADSTRA orders.
-    # When Saturn is named only in the order body (order_text) and the ship-to is a notify
-    # address, record the Saturn destination on the ship-to so QC and reviewers can see it.
-    if "saturn" in (ship_to_email or "").lower() or "saturn" in (order_text or "").lower():
-        file_format = "ASCII Fixed"
-        shipping_method = "FTP"
-        if ship_to_email:
-            st = ship_to_email.strip()
-            if "@" in st and not st.upper().startswith("FTP NOTIFY:"):
-                st = f"FTP NOTIFY: {st}"
-            if "saturn" not in st.lower():
-                st = f"{st} (SATURN CORP)"
-            ship_to_email = st
-        else:
-            ship_to_email = "PLACE ON SATURN CORP FTP FILESHARE"
-
-    # Data Axle rule: incoming.files@data-axle.com is Fixed Format delivered via FTP
-    # (per List_Fulfillment_File_Format_and_Delivery_Guide_v2). It is NEVER emailed — the
-    # address only receives the shipping confirmation. Force ASCII Fixed + FTP + notify prefix.
-    if ship_to_email and "data-axle.com" in ship_to_email.lower():
-        file_format = "ASCII Fixed"
-        shipping_method = "FTP"
-        if "@" in ship_to_email and not ship_to_email.upper().lstrip().startswith("FTP NOTIFY:"):
-            ship_to_email = f"FTP NOTIFY: {ship_to_email.strip()}"
-
-    # Fixed-format processing houses (CREAT 4300 TAPE, DON'T TOP LOAD): files sent to
-    # these addresses are ALWAYS fixed-length ASCII. Delivery stays Email (these are
-    # emailed, unlike the Saturn / Data Axle FTP uploads). See fixed_format_ship_to_emails.
-    _FIXED_FORMAT_EMAILS = (
-        "data@trylondm.com", "data@talonmm.com", "data@rkdgroup.com",
-        "tisdata@trinitydirect.net", "tapelibrarian@directmail.com",
-    )
-    if ship_to_email and any(a in ship_to_email.lower() for a in _FIXED_FORMAT_EMAILS):
-        file_format = "ASCII Fixed"
+    ship_to_email, file_format, shipping_method = apply_ship_to_rules(
+        ship_to_email, file_format, shipping_method, order_text)
 
     fields: dict = {
         "project": {"key": DSLF_PROJECT_KEY},
