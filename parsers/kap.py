@@ -200,13 +200,27 @@ class KapParser(BaseBrokerParser):
             requestor_name = "Jenny Gomez"
             requestor_email = "jgomez@keyacquisition.com"
 
+        # --- Ship To block ---
+        # ONLY the Ship To block decides the destination, the delivery method and the format.
+        # A broker, list manager or contact from a processing house named elsewhere on the
+        # order is irrelevant: DSLF-1022 was brokered by Data-Axle and shipped by plain
+        # email, and reading the wider page turned it into an FTP order.
+        _ship_block = ""
+        _m_block = re.search(r"Ship\s*-?\s*To\s*:(.{0,260})", text, re.IGNORECASE | re.DOTALL)
+        if _m_block:
+            _ship_block = _m_block.group(1)
+
         # --- Ship to email ---
-        # Data Axle FTP orders: the file-notification target is incoming.files@data-axle.com
-        # (the order states this explicitly), NOT the account rep's "Email:" address.
-        # Otherwise the Ship To block states delivery as "Email to: <addr>"; prefer that
-        # over the first "Email:" match, which is the mailer/broker contact (e.g. DSLF-802).
+        # Data Axle FTP orders name incoming.files@data-axle.com explicitly, and that is a
+        # genuine destination rather than a contact. Otherwise take the address printed
+        # inside the Ship To block. The page-wide "Email:" fallback is LAST because the
+        # first such match is the mailer/broker contact — that is how the Data-Axle rep's
+        # address reached ship_to_email on DSLF-1022 and the mailer's own contact reached it
+        # on DSLF-1029. See also DSLF-802.
         ship_to_email = ""
         m = re.search(r"(incoming\.files@data-axle\.com)", text, re.IGNORECASE)
+        if not m:
+            m = re.search(r"([\w.+-]+@[\w.-]+\.\w+)", _ship_block)
         if not m:
             m = re.search(r"Email\s+to:[^\n@]*?([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
         if not m:
@@ -215,10 +229,20 @@ class KapParser(BaseBrokerParser):
             ship_to_email = m.group(1)
 
         # --- Shipping method ---
+        # Read the Via / Ship To value, not the page. KAP boilerplate says "if you are
+        # unable to email records, please place on your FTP site" on orders that are plain
+        # email, so a bare "FTP" anywhere in the document is not evidence of an FTP order.
+        # Take whichever delivery token appears FIRST in the block: the Ship To values sit
+        # immediately after the labels, ahead of any prose further down.
         shipping_method = ""
-        if re.search(r"\bFTP\b", text):
-            shipping_method = "FTP"
+        _m_via = re.search(r"\b(F\.?\s*T\.?\s*P\.?|E-?\s*MAIL|IN\s*-?\s*HOUSE)\b",
+                           _ship_block, re.IGNORECASE)
+        if _m_via:
+            _tok = re.sub(r"[^A-Z]", "", _m_via.group(1).upper())
+            shipping_method = {"FTP": "FTP", "EMAIL": "Email"}.get(_tok, "Other")
         elif re.search(r"\bE-?mail\b", text, re.IGNORECASE):
+            # No Ship To block found at all — fall back to the old page-wide read, but only
+            # for Email. Never infer FTP from the page.
             shipping_method = "Email"
 
         # Saturn Corp destination (order instructs loading to the Saturn FileShare) is always
