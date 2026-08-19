@@ -54,7 +54,7 @@ Add `-w '%{http_code}'` (or `--fail`) to every Jira call and check it:
 ```bash
 CODE=$(curl -sS -o /tmp/jira.json -w '%{http_code}' \
   -H "Authorization: $JIRA_AUTH" -H "Accept: application/json" \
-  "https://rkdgroup.atlassian.net/rest/api/3/issue/DSLF-1069?fields=*all")
+  "https://rkdgroup.atlassian.net/rest/api/3/issue/DSLF-1069?fields=$FIELDS")
 [ "$CODE" = "200" ] || { echo "Jira read failed with HTTP $CODE"; exit 1; }
 ```
 
@@ -87,7 +87,7 @@ as a clean one.
 curl -sS -G -H "Authorization: $JIRA_AUTH" -H "Accept: application/json" \
   --data-urlencode 'jql=project = DSLF AND status = "Needs Assignment" ORDER BY created DESC' \
   --data-urlencode 'maxResults=100' \
-  --data-urlencode 'fields=*all' \
+  --data-urlencode "fields=$FIELDS" \
   "https://rkdgroup.atlassian.net/rest/api/3/search/jql"
 ```
 
