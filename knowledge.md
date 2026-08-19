@@ -27,10 +27,16 @@ file** — pass it straight into the `-H` argument.
 
 Jira site: `rkdgroup.atlassian.net`. Project `DSLF`, issue type `List Fulfillment` (11806).
 
+**Never request `fields=*all`.** It returns every custom field in the project plus avatars and
+rendered blobs — measured at 9,552 tokens for one ticket against 5,221 for the list below, which
+holds everything these checks read. Set this once per run and reuse it:
+
 ```bash
-# Read one ticket, all fields
+FIELDS='summary,status,duedate,attachment,description,customfield_12089,customfield_12155,customfield_12156,customfield_12191,customfield_12192,customfield_12193,customfield_12194,customfield_12195,customfield_12196,customfield_12231,customfield_12232,customfield_12233,customfield_12234,customfield_12270,customfield_12271,customfield_12272,customfield_12273,customfield_12274,customfield_12275,customfield_12276,customfield_12277,customfield_12278,customfield_12311'
+
+# Read one ticket
 curl -sS -H "Authorization: $JIRA_AUTH" -H "Accept: application/json" \
-  "https://rkdgroup.atlassian.net/rest/api/3/issue/DSLF-1069?fields=*all"
+  "https://rkdgroup.atlassian.net/rest/api/3/issue/DSLF-1069?fields=$FIELDS"
 ```
 
 Responses are JSON; parse them with `python3 -c` or `jq`, whichever the container has. Jira is
