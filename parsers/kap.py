@@ -175,14 +175,30 @@ class KapParser(BaseBrokerParser):
                     segment_criteria = ln
                     break
 
-        # --- RENTAL QTY ---
+        # --- QTY + AVAILABILITY ---
+        # Both live in one block, labelled "Rental Qty:" on a rental and "Exch Qty:" on an
+        # exchange (DL997 is an exchange, which left DSLF-1071's quantity blank). The
+        # availability is the block's own "All available" / "Nth select" value: reading it
+        # from the whole page matched the KAP boilerplate "Please provide the all available
+        # quantity before shipping for approval.", which turned DL997's 5,000 Nth select
+        # into All Available. Same trap as the FTP boilerplate in c7e9751 — a sentence
+        # offering something is not the order asking for it.
+        # The quantity is a line holding nothing but the number, so a price inside the
+        # window ("$100.00") cannot be read as the quantity.
         requested_quantity = 0
         availability_rule = "Nth"
-        qty_m = re.search(r"RENTAL\s*QTY:[\s\S]*?([\d,]{3,})", text, re.IGNORECASE)
+        qty_m = re.search(r"(?:RENTAL|EXCH(?:ANGE)?)\s*QTY:([\s\S]{0,160})", text, re.IGNORECASE)
         if qty_m:
-            requested_quantity = int(qty_m.group(1).replace(",", ""))
-        if re.search(r"All\s+available", text, re.IGNORECASE):
-            availability_rule = "All Available"
+            qty_block = qty_m.group(1)
+            num_m = re.search(r"(?m)^[ \t]*([\d,]{3,})[ \t]*$", qty_block)
+            avail_scope = qty_block
+            if num_m:
+                requested_quantity = int(num_m.group(1).replace(",", ""))
+                # The availability value is printed directly under the number, so stop
+                # there rather than letting the window run on into the page's prose.
+                avail_scope = "\n".join(qty_block[num_m.end():].splitlines()[:4])
+            if re.search(r"All\s+available", avail_scope, re.IGNORECASE):
+                availability_rule = "All Available"
 
         # --- List manager = broker (KAP) ---
         list_manager = "KAP"

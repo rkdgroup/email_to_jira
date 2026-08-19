@@ -207,6 +207,57 @@ def test_order_without_an_upload_target_is_untouched():
           r.shipping_instructions, "CC: rwojack@keyacquisition.com")
 
 
+# The quantity block on an exchange, as DL997 prints it: a different label from a rental,
+# a price line ahead of the number, and the KAP boilerplate further down the page.
+_EXCHANGE_QTY = """Exch Qty:
+Price:
+$0.00/M
+5,000
+Nth select
+Material:
+Price:
+Ship To:
+Via:
+Contact:
+FTP
+$100.00
+Please provide the all available quantity before shipping for approval.
+"""
+
+
+def test_exchange_quantity_label():
+    """DSLF-1071: only "Rental Qty:" was read, so every exchange lost its quantity."""
+    r = PARSER_REGISTRY["kap"].parse(_DL995.replace(
+        "Selects:\nRental Qty:\n5,000\nNth select\n", "Selects:\n" + _EXCHANGE_QTY))
+    check("exchange quantity read", r.requested_quantity, 5000)
+
+
+def test_boilerplate_does_not_flip_nth_to_all_available():
+    """The order asks for an Nth; the page merely offers an all-available count."""
+    r = PARSER_REGISTRY["kap"].parse(_DL995.replace(
+        "Selects:\nRental Qty:\n5,000\nNth select\n", "Selects:\n" + _EXCHANGE_QTY))
+    check("Nth survives the all-available boilerplate", r.availability_rule, "Nth")
+
+
+def test_price_in_the_window_is_not_the_quantity():
+    check("price line not read as quantity",
+          PARSER_REGISTRY["kap"].parse(_DL995.replace(
+              "Selects:\nRental Qty:\n5,000\nNth select\n", "Selects:\n" + _EXCHANGE_QTY)
+          ).requested_quantity, 5000)
+
+
+def test_all_available_still_read_from_its_own_block():
+    r = PARSER_REGISTRY["kap"].parse(_DL984)
+    check("rental quantity still read", r.requested_quantity, 32422)
+    check("All Available still read", r.availability_rule, "All Available")
+
+
+def test_nth_rental_is_not_flipped_either():
+    r = PARSER_REGISTRY["kap"].parse(_DL995)
+    check("rental Nth unchanged", r.availability_rule, "Nth")
+    check("rental quantity unchanged", r.requested_quantity, 5000)
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),
