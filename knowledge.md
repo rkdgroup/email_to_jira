@@ -339,23 +339,24 @@ Send with `bash` + `curl` through Microsoft Graph as the shared service account 
 `qty_approval_scanner.py` uses for the quantity-approval digest, so no new mailbox or app
 registration is needed.
 
-Two values are **literals**, filled in below before the agent is created, because they appear in
-the URL path and vault substitution only covers headers and request bodies:
+The sending mailbox is **dslf-scanner@data-management.com** in tenant
+**b4d5fb30-256f-4dd8-bd5d-c94680361183**. Both appear in the URL path, and vault substitution
+covers only headers and request bodies — so they are written literally into the commands below
+rather than supplied as environment variables. Neither is a secret; they are identifiers.
 
-- `TENANT_ID` — `«fill in from MS_TENANT_ID»`
-- `SENDER` — `«fill in from MS_SERVICE_ACCOUNT»`
-
-Three values are **vault environment-variable credentials** with **body injection enabled**
-(`injection_location: {"body": true}`), scoped to host `login.microsoftonline.com`, because they
-are posted in the token request body: `$MS_CLIENT_ID`, `$MS_CLIENT_SECRET`, `$MS_SERVICE_PASSWORD`.
+Three values **are** secrets and come from the vault as environment-variable credentials with
+**body injection enabled** (`injection_location: {"body": true}`), scoped to host
+`login.microsoftonline.com`, because they are posted in the token request body: `$MS_CLIENT_ID`,
+`$MS_CLIENT_SECRET`, `$MS_SERVICE_PASSWORD`.
 
 ```bash
 # 1. Token — resource-owner password grant, as the service account
-TOKEN=$(curl -sS -X POST "https://login.microsoftonline.com/TENANT_ID/oauth2/v2.0/token" \
+TOKEN=$(curl -sS -X POST \
+  "https://login.microsoftonline.com/b4d5fb30-256f-4dd8-bd5d-c94680361183/oauth2/v2.0/token" \
   -d "grant_type=password" \
   -d "client_id=$MS_CLIENT_ID" \
   -d "client_secret=$MS_CLIENT_SECRET" \
-  -d "username=SENDER" \
+  -d "username=dslf-scanner@data-management.com" \
   -d "password=$MS_SERVICE_PASSWORD" \
   -d "scope=https://graph.microsoft.com/Mail.Send" \
   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('access_token',''))")
@@ -364,7 +365,7 @@ TOKEN=$(curl -sS -X POST "https://login.microsoftonline.com/TENANT_ID/oauth2/v2.
 
 # 2. Send
 curl -sS -o /tmp/send.out -w '%{http_code}' -X POST \
-  "https://graph.microsoft.com/v1.0/users/SENDER/sendMail" \
+  "https://graph.microsoft.com/v1.0/users/dslf-scanner@data-management.com/sendMail" \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d @/tmp/email.json
 ```
