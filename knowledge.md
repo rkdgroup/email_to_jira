@@ -60,8 +60,11 @@ verdict.
 
 Confirm all three, and stop with a plain statement of what is missing if any fail:
 
-1. `$JIRA_AUTH` is set and non-empty. If the value looks like a literal placeholder rather than a
-   credential, the vault is not attached to this session — stop.
+1. `$JIRA_AUTH` is set and non-empty. **An opaque placeholder value is correct** — vault
+   credentials are deliberately unreadable inside the sandbox and the real secret is substituted
+   at egress, so a ~60-character token containing the word `PLACEHOLDER` means the vault *is*
+   attached. Only an unset or empty variable means it is missing. Never judge the credential by
+   its contents; check 2 is what settles it.
 2. A Jira read returns **200**. Use the queue query itself as the probe.
 3. `/mnt/memory/DSLF QC state/` exists and is readable. If it is absent, the memory store is not
    attached — report that and, unless this is a dry run, stop rather than emailing without
