@@ -1,0 +1,227 @@
+"""
+KAP field-extraction regression tests. No network, no Jira, no PDFs.
+
+    python test_kap_fields.py      # standalone, prints PASS / ALL PASSED
+    pytest test_kap_fields.py      # also works
+
+Guards the four faults found on DSLF-1069 (DL984) and DSLF-1070 (DL995):
+
+  1. The broker order # was matched as a single token, so "CRU 924-105" — a real value
+     with a space in it — left Mailer PO blank and the ticket was created without it.
+  2. The select criteria scan treated any line opening with "$" as the price column, so
+     "$10+ LAST 12 MO" was read as a price and the whole selection was dropped. Three
+     tickets lost their selects this way (DSLF-1053, -1070, -1071).
+  3. An omit phrased without the word "omit" ("Please exclude states MN, MS, and NC")
+     reached neither prose field.
+  4. An FTP order that names no address in its Ship To block states the destination in
+     prose ("upload file to: https://..."). That destination was dropped, leaving the
+     ticket with a notify address and nowhere to send the file.
+
+Both fixtures are the real orders, trimmed to the blocks the parser reads.
+"""
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from parsers import PARSER_REGISTRY
+
+_failures = []
+
+
+def check(name, got, want):
+    if got != want:
+        _failures.append(f"{name}\n     got  {got!r}\n     want {want!r}")
+        print(f"FAIL: {name}")
+    else:
+        print(f"PASS: {name}")
+
+
+# DL984 / DSLF-1069 — email order, single-token broker order #, "Please exclude" omit.
+_DL984 = """Order Date:
+KAP Order:
+9943  RW
+DL984
+08/17/26
+www.keyacquisitionpartners.com  Fed. ID # 27-4025351
+Purchase Order
+List rental
+Mailer:
+Offer:
+Key:
+Category:
+KIDS WISH NETWORK
+FUNDRAISING
+Broker order:
+Wanted By:
+1634 SE 47TH  ST., UNIT 9
+CAPE CORAL, FL  33904
+ Email: CWHITNEY@VERADATA.COM
+ Contact:COLLEEN WHITNEY  CWHITNEY@VERADATA.COM
+Mail Date:
+VERA DATA
+222889-CW
+08/19/26
+11/17/26
+Broker:
+List:
+Price:
+AID FOR STARVING CHILDREN
+0-12 $10+ OMIT MN MS NC
+$ 95.00 /M
+Net Arrangement:
+100%
+Selects:
+Rental Qty:
+32,422
+All available
+Material:
+Price:
+Ship To:
+Via:
+Contact:
+Email
+$100.00
+EMAIL
+Email
+dataservices@innovairre.com
+Omit all APO, FPO, Foreign addresses DMAs panders
+Please exclude states MN, MS, and NC
+Please contact Robin Wojack at Email: rwojack@keyacquisition.com
+"""
+
+# DL995 / DSLF-1070 — FTP order, spaced broker order #, "$"-prefixed select, upload URL.
+_DL995 = """Order Date:
+KAP Order:
+9943  RW
+DL995
+08/18/26
+www.keyacquisitionpartners.com  Fed. ID # 27-4025351
+Purchase Order
+List rental
+Mailer:
+Offer:
+Key:
+Category:
+CRU INNER CITY (FKA HERE'S LIFE INNER CITY)
+FUNDRAISING
+Broker order:
+Wanted By:
+113 E. MARKET STREET
+LEESBURG, VA  20176
+ Email: KVONKLEECK@RMLC.NET
+ Contact:KAREN VON KLEECK  KVONKLEECK@RMLC.NET
+Mail Date:
+RMLC-ROBERTSON MAILING LIST CO
+CRU 924-105
+08/19/26
+10/05/26
+Broker:
+List:
+Price:
+AID FOR STARVING CHILDREN
+$10+ LAST 12 MO
+$ 95.00 /M
+Net Arrangement:
+100%
+Selects:
+Rental Qty:
+5,000
+Nth select
+Material:
+Price:
+Ship To:
+Via:
+Contact:
+FTP
+$100.00
+FTP
+FTP
+Attn:
+omit DMA panders, prison, deceased
+upload file to:
+https://ws1.lortondata.com/FileTransfer/UploadForm.aspx
+Please contact Robin Wojack at Email: rwojack@keyacquisition.com
+"""
+
+
+def test_broker_order_number_with_a_space():
+    """DSLF-1070: "CRU 924-105" is the Broker order # and was left blank."""
+    r = PARSER_REGISTRY["kap"].parse(_DL995)
+    check("spaced broker order # becomes Mailer PO", r.mailer_po, "CRU 924-105")
+
+
+def test_single_token_broker_order_number_unchanged():
+    """The 19 other KAP orders on file all carry a single-token order #."""
+    r = PARSER_REGISTRY["kap"].parse(_DL984)
+    check("single-token broker order # still read", r.mailer_po, "222889-CW")
+
+
+def test_address_line_is_not_mistaken_for_an_order_number():
+    """Allowing spaces must not let a prose or address line through."""
+    r = PARSER_REGISTRY["kap"].parse(
+        _DL984.replace("VERA DATA\n", "VERA DATA\n1634 SE 47TH  ST., UNIT 9\n"))
+    check("address line rejected as order #", r.mailer_po, "222889-CW")
+
+
+def test_select_criteria_may_open_with_a_dollar_amount():
+    """DSLF-1070: "$10+ LAST 12 MO" was read as the price column and dropped."""
+    r = PARSER_REGISTRY["kap"].parse(_DL995)
+    check("dollar-prefixed select kept", r.segment_criteria, "$10+ LAST 12 MO")
+
+
+def test_price_line_still_stops_the_select_scan():
+    r = PARSER_REGISTRY["kap"].parse(_DL995.replace("$10+ LAST 12 MO\n", ""))
+    check("bare price is not a select", r.segment_criteria, "")
+
+
+def test_selection_line_unchanged_on_the_email_order():
+    r = PARSER_REGISTRY["kap"].parse(_DL984)
+    check("plain select unchanged", r.segment_criteria, "0-12 $10+ OMIT MN MS NC")
+
+
+def test_exclude_phrasing_reaches_the_omission():
+    """DSLF-1069: an omit that never says "omit" was reaching neither field."""
+    r = PARSER_REGISTRY["kap"].parse(_DL984)
+    check("'Please exclude' captured as an omit",
+          r.omission_description,
+          "Omit all APO, FPO, Foreign addresses DMAs panders\n"
+          "Please exclude states MN, MS, and NC")
+    check("three states stay under the State Omits threshold", r.other_fees, "")
+
+
+def test_upload_destination_reaches_shipping_instructions():
+    """DSLF-1070: the only destination the order gives is a URL in prose."""
+    r = PARSER_REGISTRY["kap"].parse(_DL995)
+    check("upload target appended to the cc line",
+          r.shipping_instructions,
+          "CC: rwojack@keyacquisition.com | "
+          "UPLOAD TO: https://ws1.lortondata.com/FileTransfer/UploadForm.aspx")
+    check("delivery still read from the Ship To block", r.shipping_method, "FTP")
+
+
+def test_order_without_an_upload_target_is_untouched():
+    r = PARSER_REGISTRY["kap"].parse(_DL984)
+    check("cc-only shipping instructions unchanged",
+          r.shipping_instructions, "CC: rwojack@keyacquisition.com")
+
+
+def main():
+    for fn in sorted(
+        (v for k, v in globals().items() if k.startswith("test_") and callable(v)),
+        key=lambda f: f.__code__.co_firstlineno,
+    ):
+        fn()
+    print()
+    if _failures:
+        print("FAILURES:")
+        for f in _failures:
+            print("  - " + f)
+        return 1
+    print("ALL PASSED")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

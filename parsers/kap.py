@@ -120,10 +120,14 @@ class KapParser(BaseBrokerParser):
                     continue
                 if ln.endswith(":"):
                     break  # reached the next label block — stop scanning
-                # Broker order #: a token carrying a digit that appears before the first
-                # date. Keep the last such token so a leading S/B is overwritten by the
-                # order # that follows it.
-                if not dates_found and re.search(r"\d", ln) and re.match(r"^[A-Za-z0-9-]+$", ln):
+                # Broker order #: a value carrying a digit that appears before the first
+                # date. Keep the last such value so a leading S/B is overwritten by the
+                # order # that follows it. Internal spaces are allowed because brokers do
+                # write the order # with one ("CRU 924-105" on DL995, which a single-token
+                # match left blank); the length and word-count caps keep a prose line out.
+                if (not dates_found and re.search(r"\d", ln) and len(ln) <= 30
+                        and re.match(r"^[A-Za-z0-9][A-Za-z0-9 #/.-]*$", ln)
+                        and len(ln.split()) <= 3):
                     mailer_po = ln.strip()
 
             # First date after MAIL DATE label = WANTED BY (ship_by_date), second = MAIL DATE
@@ -160,7 +164,12 @@ class KapParser(BaseBrokerParser):
                 ln = lines[j]
                 if ln.upper().startswith("PRICE:"):
                     continue
-                if ln.endswith(":") or re.match(r"^\$[\d,]", ln) or re.match(r"^\d+\.\d{2}", ln):
+                # Stop at the price column, but only on a line that is *nothing but* a
+                # price ("$ 95.00 /M", "$0.00/M", "$100.00"). A criterion may legitimately
+                # open with a dollar floor — "$10+ LAST 12 MO" (DL995) was being read as a
+                # price and the whole selection dropped.
+                if (ln.endswith(":") or re.match(r"^\d+\.\d{2}", ln)
+                        or re.fullmatch(r"\$\s*[\d,]+(?:\.\d{2})?\s*(?:/\s*M)?", ln)):
                     break
                 if len(ln) > 3:
                     segment_criteria = ln
@@ -256,7 +265,21 @@ class KapParser(BaseBrokerParser):
         if shipping_method == "FTP" and ship_to_email and not ship_to_email.upper().startswith("FTP NOTIFY:"):
             ship_to_email = f"FTP NOTIFY: {ship_to_email}"
 
+        # --- Upload destination ---
+        # An FTP order that names no address inside the Ship To block states its
+        # destination in prose instead: DL995 reads "upload file to:" with the URL on the
+        # next line, and the ticket ended up carrying a notify address and no destination.
+        # Shipping Instructions is a single-line text field, so only the target goes here.
+        upload_target = ""
+        m_up = re.search(r"(?is)\b(?:upload|post|send)[ \t]+(?:the[ \t]+)?file[ \t]+to[ \t]*:[ \t\r\n]*(\S+)",
+                         text)
+        if m_up:
+            upload_target = m_up.group(1).strip().rstrip(".,;")
+
         shipping_instructions = f"CC: {requestor_email}" if requestor_email else ""
+        if upload_target:
+            _upload = f"UPLOAD TO: {upload_target}"
+            shipping_instructions = f"{shipping_instructions} | {_upload}" if shipping_instructions else _upload
 
         # --- Omission ---
         # Collect the real omit/suppress directives (deduped, in order). The old
@@ -279,6 +302,11 @@ class KapParser(BaseBrokerParser):
             _add_omit(m.group(1))
         for ln in lines:
             if re.match(r"(?i)^omit[ \t:]+\S", ln) and not re.search(r"(?i)\bsee below\b", ln):
+                _add_omit(ln)
+        #   4. Directives that never say "omit": DL984 carries "Please exclude states MN,
+        #      MS, and NC" on its own line, which reached neither field.
+        for ln in lines:
+            if re.match(r"(?i)^(?:please[ \t]+)?exclude[ \t]+\S", ln):
                 _add_omit(ln)
         m = re.search(r"(Omit\s+all\s+APO\b[^\n.]*)", text, re.IGNORECASE)
         if m:
