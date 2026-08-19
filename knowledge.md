@@ -335,30 +335,60 @@ BLOCKING-BLANK finding that is not already in the memory store. NOTE-only ticket
 A run where every ticket is clean, or every finding was already reported, produces **no email at
 all** — that is the expected outcome most runs.
 
-Send with `bash` + `curl`. The API key is a vault environment variable; pass it straight into the
-header and never print it.
+Send with `bash` + `curl` through Microsoft Graph as the shared service account — the same path
+`qty_approval_scanner.py` uses for the quantity-approval digest, so no new mailbox or app
+registration is needed.
+
+Two values are **literals**, filled in below before the agent is created, because they appear in
+the URL path and vault substitution only covers headers and request bodies:
+
+- `TENANT_ID` — `«fill in from MS_TENANT_ID»`
+- `SENDER` — `«fill in from MS_SERVICE_ACCOUNT»`
+
+Three values are **vault environment-variable credentials** with **body injection enabled**
+(`injection_location: {"body": true}`), scoped to host `login.microsoftonline.com`, because they
+are posted in the token request body: `$MS_CLIENT_ID`, `$MS_CLIENT_SECRET`, `$MS_SERVICE_PASSWORD`.
 
 ```bash
-# Option A — transactional email API (header-only credential)
-curl -sS -X POST "https://api.resend.com/emails" \
-  -H "Authorization: Bearer $RESEND_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d @/tmp/email.json     # {"from":"...","to":["smondal@teamheller.com"],"subject":"...","text":"..."}
+# 1. Token — resource-owner password grant, as the service account
+TOKEN=$(curl -sS -X POST "https://login.microsoftonline.com/TENANT_ID/oauth2/v2.0/token" \
+  -d "grant_type=password" \
+  -d "client_id=$MS_CLIENT_ID" \
+  -d "client_secret=$MS_CLIENT_SECRET" \
+  -d "username=SENDER" \
+  -d "password=$MS_SERVICE_PASSWORD" \
+  -d "scope=https://graph.microsoft.com/Mail.Send" \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('access_token',''))")
 
-# Option B — Microsoft 365 (app-only). Needs Mail.Send on an app registration, and the
-# vault credential must have BODY injection enabled as well as header, because the
-# client secret is posted in the token request body.
-TOKEN=$(curl -sS -X POST "https://login.microsoftonline.com/$MS_TENANT_ID/oauth2/v2.0/token" \
-  -d "client_id=$MS_CLIENT_ID&client_secret=$MS_CLIENT_SECRET&scope=https://graph.microsoft.com/.default&grant_type=client_credentials" \
-  | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
-curl -sS -X POST "https://graph.microsoft.com/v1.0/users/$MS_SERVICE_ACCOUNT/sendMail" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d @/tmp/email.json
+[ -n "$TOKEN" ] || { echo "MS auth failed — send nothing, record nothing"; exit 1; }
+
+# 2. Send
+curl -sS -o /tmp/send.out -w '%{http_code}' -X POST \
+  "https://graph.microsoft.com/v1.0/users/SENDER/sendMail" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d @/tmp/email.json
 ```
 
-Keep whichever option matches the credential in the vault and delete the other. Build the JSON body
-with a script rather than string-concatenation, so quotes and newlines in ticket values cannot
-break it. **Check the HTTP status** — a non-2xx means the mail did not send, so do **not** record
-those findings in memory; they must be retried next run.
+`/tmp/email.json` — build it with `python3 -c` and `json.dump`, never by string-concatenation, so
+quotes and newlines in ticket values cannot break the payload:
+
+```json
+{
+  "message": {
+    "subject": "[DSLF QC] DSLF-1069 — 2 issues: wrong Client Database",
+    "body": { "contentType": "Text", "content": "<the body from the template below>" },
+    "toRecipients": [{ "emailAddress": { "address": "smondal@teamheller.com" } }]
+  },
+  "saveToSentItems": true
+}
+```
+
+`contentType` stays `Text` — the body template below is plain text, and HTML would render the
+pipes and indentation wrong.
+
+**Check the HTTP status.** Graph returns **202** on success. On anything else, or on an empty
+token, do **not** record those findings in memory — they must be retried on the next run. Never
+print the token or any `$MS_*` value.
 
 **To:** smondal@teamheller.com
 **Subject:** `[DSLF QC] {TICKET-KEY} — {n} issue(s): {shortest description of the worst one}`
