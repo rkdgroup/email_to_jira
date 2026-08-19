@@ -36,6 +36,7 @@ class AdstraParser(BaseBrokerParser):
         list_match = re.search(r"List:\s*(.*?)(?:\nPrice|\nQuantity|\nMaterial)", text, re.IGNORECASE | re.DOTALL)
         
         list_name_raw = ""
+        code_scope = ""
         if list_match:
             raw_block = list_match.group(1)
             clean_lines = []
@@ -52,9 +53,16 @@ class AdstraParser(BaseBrokerParser):
                 clean_lines.append(line)
                 
             list_name_raw = clean_lines[0] if clean_lines else ""
+            # ADSTRA prints the list code on the name's own line on some orders and on the
+            # line directly below it on others, so keep a small window around the name.
+            code_scope = " ".join(clean_lines[:3])
 
-        # Extract 5-digit list code before stripping (used for adstra.yaml lookup)
-        _code_m = re.search(r"\((\d{5})\)", list_name_raw)
+        # Extract 5-digit list code before stripping (used for adstra.yaml lookup).
+        # Reading only the name line missed the code on 11 of the 46 ADSTRA orders on file
+        # — "3-NPTA-NAT POLICE / TROOPER AS" with "(00564)" underneath — which drops the
+        # lookup from its exact tier-0 key to fuzzy name matching. That fallback is how
+        # DSLF-1016, an NPTA order, came out on N24D (NBLPF), a different client.
+        _code_m = re.search(r"\((\d{5})\)", code_scope or list_name_raw)
         adstra_list_code = _code_m.group(1) if _code_m else ""
         # Strip list code in parens (e.g. (00552)) and clean up whitespace
         list_name = re.sub(r"\s*\(\d+\)\s*", " ", list_name_raw).strip()
