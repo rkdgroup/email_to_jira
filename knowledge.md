@@ -36,6 +36,40 @@ curl -sS -H "Authorization: $JIRA_AUTH" -H "Accept: application/json" \
 Responses are JSON; parse them with `python3 -c` or `jq`, whichever the container has. Jira is
 **read-only for this agent** — never issue a POST, PUT, or DELETE against it.
 
+### Check the status of every Jira call
+
+A `curl` that fails to authenticate still exits 0 — the shell command succeeded, the *request*
+didn't. An unchecked 401 body contains no issues, which reads exactly like an empty queue, and the
+run then reports everything as clean. **That is the worst outcome this agent can produce**, because
+silence is how it reports "nothing wrong".
+
+Add `-w '%{http_code}'` (or `--fail`) to every Jira call and check it:
+
+```bash
+CODE=$(curl -sS -o /tmp/jira.json -w '%{http_code}' \
+  -H "Authorization: $JIRA_AUTH" -H "Accept: application/json" \
+  "https://rkdgroup.atlassian.net/rest/api/3/issue/DSLF-1069?fields=*all")
+[ "$CODE" = "200" ] || { echo "Jira read failed with HTTP $CODE"; exit 1; }
+```
+
+A 401 or 403 means the credential is missing or wrong — **not** that the queue is empty. Stop the
+run, say so plainly in your reply, and email nothing. Never let a failed read become a clean
+verdict.
+
+### Preflight — before checking any ticket
+
+Confirm all three, and stop with a plain statement of what is missing if any fail:
+
+1. `$JIRA_AUTH` is set and non-empty. If the value looks like a literal placeholder rather than a
+   credential, the vault is not attached to this session — stop.
+2. A Jira read returns **200**. Use the queue query itself as the probe.
+3. `/mnt/memory/DSLF QC state/` exists and is readable. If it is absent, the memory store is not
+   attached — report that and, unless this is a dry run, stop rather than emailing without
+   de-duplication.
+
+A run that cannot satisfy the preflight has not checked anything. Report it as a failed run, never
+as a clean one.
+
 ---
 
 ## Which tickets to check
@@ -325,6 +359,12 @@ emailed every 30 minutes while a ticket sits in the queue.
 If the memory store is unreadable on a run, **do not fall back to emailing everything** — that
 floods the inbox. Send nothing, and include one line about the failure in the next successful
 email.
+
+**Dry runs.** If the message that starts a run says *dry run*, *do not send*, or *report only*,
+then run every check as normal and write the findings into your reply in the session instead of
+emailing them — and **write nothing to the memory store**, so the real run afterwards still sees
+those findings as unreported. Use this on the first run against a fresh memory store, where every
+finding looks new and the queue may hold a backlog of known defects.
 
 ---
 
