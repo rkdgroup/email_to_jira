@@ -563,6 +563,45 @@ def find_select_attachment(attachments: list) -> tuple[dict | None, list[str]]:
 # SELECT PDF parser
 # ---------------------------------------------------------------------------
 
+def _parse_shipping_info(text: str) -> dict:
+    """Delivery destination from the NOTES block on the SELECT's last page.
+
+        Email:  TO: <email>  and  CC: <email>
+        FTP:    FILENAME: <name>.ZIP
+
+    The filename is built from the Mailer PO and carries it verbatim, spaces included —
+    "FILENAME: CRU 924-105.ZIP" on DSLF-1070. Matching it as a single whitespace-free
+    token missed that, so QC reported "Shipping info not found" on an order whose SELECT
+    states it plainly and skipped the shipping cross-checks without failing anything.
+
+    Lives out here rather than inside parse_select_pdf so it is reachable without a PDF.
+    """
+    _email_re = r'[\w.\-]+@[\w.\-]+'
+    m_to = re.search(r'\bTO\s*:\s*(' + _email_re + r')', text, re.IGNORECASE)
+    m_cc = re.search(r'\bCC\s*:\s*(' + _email_re + r')', text, re.IGNORECASE)
+    # Stay on the label's own line and stop at the first ".ZIP", so a bare FILENAME:
+    # label cannot reach down the page for a value that is not there.
+    m_fn = re.search(r'\bFILENAME\s*:[ \t]*([^\r\n]*?\.ZIP)\b', text, re.IGNORECASE)
+
+    if m_to:
+        return {"shipping_method": "Email",
+                "ship_to_email":   m_to.group(1).strip().upper(),
+                "cc_email":        m_cc.group(1).strip().upper() if m_cc else "",
+                "ftp_filename":    "",
+                "parse_errors":    []}
+    if m_fn:
+        return {"shipping_method": "FTP",
+                "ship_to_email":   "",
+                "cc_email":        "",
+                "ftp_filename":    re.sub(r"\s+", " ", m_fn.group(1)).strip().upper(),
+                "parse_errors":    []}
+    return {"shipping_method": "",
+            "ship_to_email":   "",
+            "cc_email":        "",
+            "ftp_filename":    "",
+            "parse_errors":    ["Shipping info (TO:/CC:/FILENAME:) not found in SELECT PDF"]}
+
+
 def parse_select_pdf(pdf_path: str) -> dict:
     """
     Extract QC-relevant fields from a SELECT PDF.
@@ -724,30 +763,10 @@ def parse_select_pdf(pdf_path: str) -> dict:
         result["file_format"] = ""
         result["parse_errors"].append("File format (ASCII/EXCEL) line not found")
 
-    # Shipping info from NOTES section of last page:
-    #   Email: TO:<email> and CC: <email>
-    #   FTP:   FILENAME: <name>.ZIP
-    _email_re = r'[\w.\-]+@[\w.\-]+'
-    m_to = re.search(r'\bTO\s*:\s*(' + _email_re + r')', text, re.IGNORECASE)
-    m_cc = re.search(r'\bCC\s*:\s*(' + _email_re + r')', text, re.IGNORECASE)
-    m_fn = re.search(r'\bFILENAME\s*:\s*(\S+\.ZIP)', text, re.IGNORECASE)
-
-    if m_to:
-        result["shipping_method"] = "Email"
-        result["ship_to_email"]   = m_to.group(1).strip().upper()
-        result["cc_email"]        = m_cc.group(1).strip().upper() if m_cc else ""
-        result["ftp_filename"]    = ""
-    elif m_fn:
-        result["shipping_method"] = "FTP"
-        result["ftp_filename"]    = m_fn.group(1).strip().upper()
-        result["ship_to_email"]   = ""
-        result["cc_email"]        = ""
-    else:
-        result["shipping_method"] = ""
-        result["ship_to_email"]   = ""
-        result["cc_email"]        = ""
-        result["ftp_filename"]    = ""
-        result["parse_errors"].append("Shipping info (TO:/CC:/FILENAME:) not found in SELECT PDF")
+    # Shipping info from the NOTES section of the last page
+    _shipping = _parse_shipping_info(text)
+    result["parse_errors"].extend(_shipping.pop("parse_errors"))
+    result.update(_shipping)
 
     return result
 
