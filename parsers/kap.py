@@ -345,13 +345,12 @@ class KapParser(BaseBrokerParser):
         if re.fullmatch(rf"(?i)(?:{_MONTH}\s+)?(?:19|20)\d{{2}}", (key_code or "").strip()):
             key_code = ""
 
-        # --- Summary: P.O. {DL_number} {list_name} ---
-        summary = f"P.O. {manager_order_number} {list_name}" if manager_order_number and list_name else ""
-
+        # Summary is deliberately left unset: ParseResult.__post_init__ builds the
+        # LIST NAME - MAILER NAME - MANAGER ORDER NUMBER title every other broker uses.
+        # Setting it here suppressed that and titled 64 KAP tickets "P.O. {DL#} {list}".
         return ParseResult(
             source=f"rule:{self.broker_key}",
             confidence=CONFIDENCE_RULE_BASED,
-            summary=summary,
             mailer_name=mailer_name,
             mailer_po=mailer_po,
             list_name=list_name,

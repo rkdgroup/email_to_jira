@@ -258,6 +258,33 @@ def test_nth_rental_is_not_flipped_either():
     check("rental quantity unchanged", r.requested_quantity, 5000)
 
 
+def test_title_follows_the_list_mailer_order_rule():
+    """The parser set summary itself, which suppressed ParseResult's auto-built title.
+
+    64 of 67 KAP tickets were created as "P.O. {DL#} {list name}" — no mailer, wrong
+    shape, and the manager order # in the wrong place (DSLF-1078, -1079 and back).
+    Leaving summary unset is what every other broker does.
+    """
+    r = PARSER_REGISTRY["kap"].parse(_DL984)
+    check("email order titled LIST - MAILER - MGR ORDER",
+          r.summary, "AID FOR STARVING CHILDREN - KIDS WISH NETWORK - DL984")
+
+
+def test_title_on_the_ftp_order_too():
+    r = PARSER_REGISTRY["kap"].parse(_DL995)
+    check("FTP order titled LIST - MAILER - MGR ORDER",
+          r.summary,
+          "AID FOR STARVING CHILDREN - "
+          "CRU INNER CITY (FKA HERE'S LIFE INNER CITY) - DL995")
+
+
+def test_title_never_carries_the_mailer_po():
+    """The order # in the title is the Manager Order # (DL995), never the Mailer PO."""
+    r = PARSER_REGISTRY["kap"].parse(_DL995)
+    check("mailer PO absent from the title", r.mailer_po in r.summary, False)
+    check("mailer PO still populated", r.mailer_po, "CRU 924-105")
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),
