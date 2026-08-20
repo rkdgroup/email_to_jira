@@ -6,7 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 DSLF List Rental Pipeline — processes purchase order PDFs from brokers, extracts structured fields via **rule-based** parsing (one parser per broker), enriches from generated YAML lookups, and creates DSLF tickets in Jira (rkdgroup.atlassian.net, project DSLF, issue type 11806).
 
-**Every structured field is rule-based.** The one LLM step in the live pipeline is `tools_polish.py`, which structurally cleans the two prose fields (Description, Omission Description) after parsing — see "Prose Polish". A PDF matching none of the 12 broker fingerprints is still flagged for review (no ticket, no Claude fallback parser). Claude is otherwise used only by the offline auxiliary tools (see "AI-Assisted Offline Tools").
+**On the default path every structured field is rule-based.** `parse_pipeline.py` uses one parser per broker and calls Claude only for `tools_polish.py`, which structurally cleans the two prose fields (Description, Omission Description) after parsing — see "Prose Polish". A PDF matching none of the 12 broker fingerprints is **flagged for review and creates no ticket** — `process_pdf` has no Claude fallback.
+
+There are now three other Claude touchpoints; know which is which before changing one:
+
+| Where | Module | Role |
+|-------|--------|------|
+| Live pipeline, every ticket | `tools_polish.py` | structural prose clean, gated, falls back to parser text |
+| Live QC, advisory only | `qc_llm.py` | second opinion on SELECT vs ticket; cannot change PASS/FAIL |
+| Manual create, opt-in | `LLM_writes.py` | Claude extracts **all** fields for an unrecognized broker |
+| Offline, never scheduled | `ai_extract` / `compare_extraction` / `hybrid_create` | see "AI-Assisted Offline Tools" |
 
 ## Commands
 
@@ -22,18 +31,25 @@ python parse_pipeline.py /path/to/folder/
 python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 ```
 
-`--dry-run` and `--verbose` are the **only** two CLI flags. `broker_hint` is a function argument (used by the email scanner), not a flag.
+`--dry-run` and `--verbose` are the **only** two CLI flags for `parse_pipeline.py`. `broker_hint` is a function argument (used by the email scanner), not a flag.
 
-**Testing**: there is no linter and no CI test stage. The single automated test is
-`WO#/test_work_order_allocation.py` (7 branch-coverage tests for the WO collision loop,
-fake cursor, **no DB access**) — run it after touching `WO#/work_order.py`:
+**Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
+protect you if you run them. Five regression files, each a standalone runner that prints
+`PASS` lines and `ALL PASSED` (also collectible by pytest). All five are hermetic: no Jira,
+no DB, no PDFs, no network.
 
 ```bash
-python "WO#/test_work_order_allocation.py"      # standalone runner, prints PASS/ALL PASSED
-pytest "WO#/test_work_order_allocation.py"      # also works under pytest
+python test_ship_to_rules.py         # ship-to house rules + KAP FTP-boilerplate false positive
+python test_kap_fields.py            # KAP exchange qty, spaced order #, $-prefixed select
+python test_adstra_list_code.py      # ADSTRA 5-digit list code vs address digits
+python test_qc_select_parse.py       # qc_checker SELECT-PDF parsing (spaced filenames)
+python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
 ```
 
-Everything else is tested manually via `--dry-run --verbose` against real broker PDFs.
+Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap.py`,
+`parsers/adstra.py`, `qc_checker.py`, or `WO#/work_order.py`. Verified all five pass
+2026-08-20. Everything else is tested manually via `--dry-run --verbose` against real
+broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
 in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
 those paths exist.
@@ -63,6 +79,10 @@ python config_guard.py        # fast syntax gate over config/*.yaml (exit 1 on p
 python verify_configs.py      # deep audit of YAMLs vs source Excel/docs → config_audit_report.md
 python build_profile_yaml.py  # regenerate config/client_profiles.yaml from Client Profiles/
 
+# Pure-LLM create — unrecognized brokers only (see "Pure-LLM Ticket Creation")
+# NOTE: inverted default — this one is a DRY RUN unless you pass --live.
+python LLM_writes.py order.pdf [--live] [--model M] [--effort low|medium|high|xhigh|max] [--json f]
+
 # Offline AI tools (see "AI-Assisted Offline Tools")
 python compare_extraction.py DSLF-916 [--pdf f] [--md f] [--json f]   # read-only diff
 python hybrid_create.py order.pdf [--dry-run] [--no-claude] [--no-attach]  # --dry-run first!
@@ -86,20 +106,30 @@ pip install anthropic requests pymupdf pdfminer.six pymupdf4llm python-dotenv ms
 | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` | Everything (Jira REST) |
 | `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_SERVICE_ACCOUNT`, `MS_SERVICE_PASSWORD`, `MS_TENANT_ID`, `IMAP_EMAIL` | email + qty scanners (MSAL ROPC auth) |
 | `IBMI_HOST`, `IBMI_USER`, `IBMI_PASSWORD` | work-order creation |
-| `ANTHROPIC_API_KEY` | `tools_polish` (live pipeline) + offline AI tools |
+| `ANTHROPIC_API_KEY` | `tools_polish` (live pipeline) + `qc_llm` (QC) + `LLM_writes` + offline AI tools |
 
 The `JIRA_API_TOKEN` in `.env` **can create and edit tickets** — `tools_jira` uses it to create issues (POST), update fields (`update_ticket_fields`, PUT → 204), comment, and attach. (Verified 2026-07-27: created DSLF-919, updated DSLF-936.) The Atlassian MCP connector is an optional alternative for interactive edits under the user's own account, not a requirement.
 
 ## Architecture
 
-`process_pdf()` in `parse_pipeline.py` is the single orchestrator:
+`parse_pipeline.py` is split into a **head** and a **shared tail**, and the seam matters:
+
+- `process_pdf()` — detect the broker and parse. Everything above the seam.
+- `finalize_and_create(result, pdf_path, text, …)` — everything after a `ParseResult` exists.
+  It never looks at the parser or the broker registry, so **any** producer of a `ParseResult`
+  can use it. `LLM_writes.py` is the second producer. Put new post-parse behavior here, not
+  in `process_pdf`, or the LLM path silently misses it.
+- Its `profile_blocks_to_omission=True` flag (used only by `LLM_writes`) routes the profile's
+  suppression blocks into the Omission field instead of the Description.
 
 ```
 PDF → [tools_pdf] extract text (PyMuPDF primary; pdfminer fallback only if PyMuPDF <50 chars)
+    ┄┄ process_pdf ┄┄
     → [parsers/__init__] detect_broker() — ALL of a broker's regexes must match within
       first 3000 chars; rules tried in _RULES order, first fully-matching broker wins.
       No match → flagged for review (no ticket).
     → [parsers/<broker>.py] rule-based parse → ParseResult (confidence 0.92)
+    ┄┄ finalize_and_create — shared with LLM_writes ┄┄
     → [parse_result] validate_result()  ⚠ ADVISORY — see below
     → duplicate check (skipped in dry-run)
     → [client_lookup] enrich db_code/billable/list_manager from config/*.yaml
@@ -128,7 +158,7 @@ Four independent entry points share the pipeline and `.env`. **Only `email_scann
 | Tool | Trigger / scope | Behavior |
 |------|-----------------|----------|
 | `email_scanner/email_scanner.py` | Shared-mailbox `List Rental` folder | MSAL ROPC auth → per message: if `conversationId` in `thread_map.json`, add a comment to the existing ticket; else download PDFs (or synthesize one from the body) → `process_pdf(broker_hint=SENDER_BROKER_MAP[domain])` → move mail to `List Rental/Processed` or `/Failed`. `broker_hint` short-circuits fingerprint detection. |
-| `qc_checker.py` | `Needs QC` tickets | Downloads the most-recent SELECT PDF, posts a PASS/FAIL comment. **Never transitions.** Pass = `PASS count ≥ 4` AND no hard-required fail (hard = Client Database + Manager Order #, plus Records Selected when the count is 0 or unparseable); WARN rows are dropped. Also checks the `INCLUDE BY ACCOUNT #:` universe is not narrower than the order's ask. |
+| `qc_checker.py` | `Needs QC` tickets | Downloads the most-recent SELECT PDF, posts a PASS/FAIL comment. **Never transitions.** Pass = `PASS count ≥ 4` AND no hard-required fail (hard = Client Database + Manager Order #, plus Records Selected when the count is 0 or unparseable); WARN rows are dropped. Also checks the `INCLUDE BY ACCOUNT #:` universe is not narrower than the order's ask. Appends an advisory `AI REVIEW` section from `qc_llm` that cannot change the verdict. |
 | `qty_approval_scanner.py` | `Ready to Send for Qty Approval` tickets | Reads `QTY APPROVAL/<order#>` emails → sets Requested Quantity (`cf[12271]`); SELECT-PDF `TOTAL RECORDS SELECTED` fallback. **Never transitions.** Emails a per-mailer qty digest; single-card subjects prefix the list short code via `resolve_list_code` (from `dslf_list_and_mailer_names.txt`). |
 | `ticket_scanner/ticket_scanner.py` | New DSLF tickets (issue# > saved state) | **Read-only** audit → report under `ticket_scanner/reports/`. `--learn` mines List Name→db_code patterns into `learned_patterns.json` (enrich tier 5). |
 
@@ -214,6 +244,56 @@ There are 2 parts in Jira - Description and ommision description. So the pull de
   after which remaining tickets skip the pass, and an in-process cache so repeated text in a
   multi-page or batched order costs one call. A 7-page AMLC PDF is ~18s of polish.
 - Inputs under two lines total skip the API entirely.
+
+## Pure-LLM Ticket Creation (`LLM_writes.py`) — live creates, manual only
+
+For orders **no parser recognizes**. `process_pdf` flags those for review and creates nothing,
+and `hybrid_create.py` can't help either (it starts from `process_pdf` and raises when the
+parse fails). This path only needs the PDF to be readable by Claude. **Prefer
+`parse_pipeline.py` for any broker that IS recognized** — a parser reads a known layout
+exactly, where this reads it fresh every run. Not scheduled; nothing calls it automatically.
+
+- **The default is a dry run — `--live` creates.** This is the inverse of `parse_pipeline.py`
+  and `hybrid_create.py`, both of which create unless told not to.
+- **Claude supplies only what is printed on the order.** Everything else comes from the shared
+  tail: db_code/Billable/Client DB/Seed DB from `client_lookup` (Claude's own db_code guess is
+  *reported and never sent* — config is authoritative), the profile blocks, `tools_polish`, the
+  duplicate check, SKIP_DB_CODES, the work order, and all four attachment steps.
+- `CONFIDENCE_LLM_BASED = 0.85` — only its being non-zero matters, since `validate_result()`
+  blocks only at exactly 0.0. The lower number records that nothing verified this read.
+- **`_validate_and_fix()` blanks values Jira would reject or store wrong** *before* building the
+  frozen `ParseResult`: a `list_manager` outside the 14 known values (the DSLF-130..134 C69
+  bug), an unknown select-option label, a non-`YYYY-MM-DD` date (which would fail the whole
+  create). `_VALID_LIST_MANAGERS` is read from `client_lookup._MANAGER_TO_FILE`, not re-typed.
+- **`_verify_created()` re-reads the ticket after a live create**, because a create writes no
+  changelog — unresolvable select options are dropped server-side without failing the create.
+  Differences on `file_format`/`shipping_method`/`ship_to_email` are reported as `~` (expected:
+  ship-to house rules rewrite them), everything else as `!`.
+- Its `_SYSTEM` prompt layers broker rules on top of `ai_extract._SYSTEM` and is **transcribed
+  from this file** (per-broker PO sources, the AMLC columnar trap, the SimioCloud→WE ARE MOORE
+  list manager, KAP's "Email to:" line, the `Selects:` indent contract). Fix a field rule here
+  *and* there, or the two paths disagree.
+- Model pin is `claude-sonnet-5` @ `medium` effort (structured transcription against a fixed
+  schema, not open-ended reasoning); `ai_extract`'s own Opus/high defaults are left alone for
+  `compare_extraction` and `hybrid_create`. Override with `--model` / `--effort`.
+
+## Advisory AI QC (`qc_llm.py`)
+
+A second, independent reading inside `qc_checker` — the SELECT PDF plus the ticket as it
+stands — reported in its own `AI REVIEW` section of the QC comment.
+
+- **Advisory by construction**: findings never enter `checks[]`, `pass_count`, or `hard_fails`.
+  The rule-based checks alone decide PASS/FAIL (`QC_PASS_THRESHOLD = 4`).
+- It is asked to report discrepancies **even on fields the rules already cover**, so a rule
+  that is itself wrong becomes visible instead of silently authoritative.
+- Its `_SYSTEM` carries an explicit **do-not-report list** mirroring the known-correct-by-design
+  cases: billable-vs-Client-DB prefix mismatch, house-rule ASCII Fixed/FTP, auto STATE OMITS,
+  blank Mail Date/File Format/Other Fees, qty mismatch under All Available, profile-sourced
+  suppressions absent from the SELECT, Seed Tracking == Manager Order #. Add new known-good
+  patterns here, or QC comments fill with noise.
+- Guards mirror `tools_polish`: `claude-sonnet-5` @ medium, 30s per call, `QC_BUDGET_S = 90`
+  per process (~30s/ticket, so ~3 reviews inside the 4-min Jenkins timeout — the rest of the
+  run goes rules-only), 32 MB PDF cap, in-process cache. **Every failure path returns `[]`.**
 
 ## AI-Assisted Offline Tools
 
