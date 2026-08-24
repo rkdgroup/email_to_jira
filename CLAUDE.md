@@ -310,6 +310,17 @@ python qc_llm.py --post          # also post the verdict as a Jira comment
 - **Severities** are knowledge.md's: `WRONG` (contradicts the order or a house rule),
   `BLOCKING-BLANK` (something required to judge or fulfil is absent — this is also where
   "I could not verify it either way" goes), `NOTE` (worth a human's eye).
+- **`_profile_context()` sends the client's `dollar_cap` and it is load-bearing.** `$10+` on
+  an order is **not** an open-ended floor — it means $10 through *that client's* contracted
+  cap, recorded as `dollar_cap` in `config/client_profiles.yaml` (60 clients at `$99.99`, 48
+  at `$49.99`, a tail at `$249.99`/`$499.99`/`$999.99`, some `NO CAP`, 37 `VARIES PER
+  ORDER`). So a SELECT reading `RECENT PAYMENT AMT. = 10.00 THRU 99.99` against a `$10+`
+  order is **correct** for a `$99.99` client, and the report header saying `$10+` while the
+  criteria line says `10.00 THRU 99.99` is not a contradiction. Without the cap in the
+  prompt every correctly-executed pull reads as lost records — that is exactly what the
+  first live run did, failing four tickets (DSLF-1077/1075/1073/1082) on it. The band test
+  runs in the direction that loses records: a ceiling **below** the cap is `WRONG`, at it is
+  fine, and no profile on file means unverifiable rather than wrong.
 - `_select_context()` passes the regex-parsed `select_data` as an explicitly **unreliable
   hint** — "a blank here does NOT mean the value is absent from the report; where it
   disagrees with the PDF, the PDF wins." Without that caveat the model treats a failed
