@@ -147,6 +147,49 @@ def test_forced_fail_is_visible_in_the_report():
     check("both values quoted", "5,000" in report and "9,900" in report, True)
 
 
+# --- 4. the client's dollar cap must reach the model ----------------------
+#
+# The first live run failed four tickets for the same reason: the SELECT applied
+# "RECENT PAYMENT AMT. = 10.00 THRU 99.99" against an order reading "$10+", and the checker
+# called the ceiling a defect. It is not. "$10+" means $10 through the client's contracted
+# cap, which is a per-client profile term — 60 clients cap at $99.99, 48 at $49.99, and a
+# tail at $249.99/$499.99/$999.99 or no cap. W12D and N11D, two of the four, both cap at
+# $99.99, so all four pulls were correct. The cap has to be in the prompt or every properly
+# executed pull reads as a lost-records defect.
+
+def test_profile_cap_is_sent_for_a_known_client():
+    ctx = qc_llm._profile_context({"client_db": "W12D"})
+    check("cap reaches the prompt", "$99.99" in ctx, True)
+    check("named as authoritative", "authoritative" in ctx, True)
+
+
+def test_profile_cap_is_looked_up_for_a_second_client():
+    check("N11D cap reaches the prompt",
+          "$99.99" in qc_llm._profile_context({"client_db": "N11D"}), True)
+
+
+def test_missing_profile_says_unverifiable_not_wrong():
+    """No profile on file must not become licence to call the ceiling wrong."""
+    ctx = qc_llm._profile_context({"client_db": "ZZ9D"})
+    check("absence is stated", "none on file" in ctx, True)
+    check("steers away from a WRONG verdict", "could not be verified" in ctx, True)
+
+
+def test_blank_client_db_does_not_crash():
+    check("blank db_code handled", isinstance(qc_llm._profile_context({}), str), True)
+
+
+def test_dollar_band_rule_is_in_the_system_prompt():
+    """The rule, the direction of the test, and the do-not-report line must all be present."""
+    s = qc_llm._SYSTEM
+    check("band rule present", "DOLLAR BANDS" in s, True)
+    check("says $10+ is not open-ended", "not an open-ended floor" in s.lower(), True)
+    check("correct case spelled out", "report nothing" in s, True)
+    check("lower-than-cap still caught", "records were lost" in s, True)
+    check("header-vs-criteria is not a contradiction",
+          "is not a contradiction" in s, True)
+
+
 def test_findings_are_ordered_worst_first():
     report = qc_llm.format_report(
         "DSLF-3", "z.SELECT.pdf",

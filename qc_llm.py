@@ -128,8 +128,28 @@ WHAT TO CHECK, WORST FIRST
    picked. When the names share a distinctive word, say so explicitly.
 2. Select criteria. Every priced select the ticket lists — recency window, dollar band,
    HOTLINE, GENDER, Nth, state or zip select — must be reflected in what the SELECT pulled.
-   A ticket asking "12 MONTH $10-$99.99" against a SELECT that pulled 24 months, or no
-   dollar floor, is WRONG. Quote both sides.
+   A ticket asking "12 MONTH $10-$99.99" against a SELECT that pulled 24 months is WRONG.
+   Quote both sides.
+
+   DOLLAR BANDS — read this before reporting one, it is the easiest thing here to get
+   wrong. "$10+" on an order is NOT an open-ended floor. It means $10.00 through this
+   client's contracted cap, and that cap is a per-client term given to you in the CLIENT
+   PROFILE block. A pull of "RECENT PAYMENT AMT. = 10.00 THRU 99.99" against an order
+   reading "$10+" is CORRECT for a client whose cap is $99.99, and it is the normal,
+   expected shape of these reports. Caps genuinely differ between clients — $49.99,
+   $99.99, $249.99, $999.99, or none — so judge the SELECT's ceiling against the profile
+   cap you were given and nothing else:
+     - ceiling matches the client's cap                  -> correct, report nothing
+     - ceiling is lower than the cap (cap $99.99, pulled
+       10.00 THRU 49.99)                                 -> WRONG, records were lost
+     - ceiling where the profile says NO CAP / NONE      -> WRONG unless the order itself
+                                                            states a band
+     - cap "VARIES PER ORDER" or not recorded            -> the order decides; if the order
+                                                            gives no band either, this is a
+                                                            NOTE for a human, never WRONG
+   The report header naming the select "$10+" while the criteria line reads "10.00 THRU
+   99.99" is not a contradiction — the header is the order's shorthand and the criteria
+   line is the cap applied. Do not report it as one.
 3. Omissions. Every criterion in the ticket's Omission Description must have been applied:
    flag omits, state and zip/SCF omits, OMIT PREVIOUS ORDER, 1 PER HOUSEHOLD, DMA panders.
    An omit the SELECT did not apply means suppressed records shipped. Check the flags and
@@ -152,6 +172,8 @@ verify stated — uncertainty is a finding of its own, never a silent pass and n
 presented as fact.
 
 DO NOT REPORT THESE — correct by design, and flagging them is noise:
+- A dollar band whose upper limit equals the client's profile cap, on an order written as
+  "$10+" or "$0.01+". That IS the order, executed correctly. See DOLLAR BANDS above.
 - Billable Account not sharing the Client Database's prefix. The configured billing account
   legitimately differs: A52D bills to A68, S05D bills to S15, N11D bills to N09.
 - Seed Database being the Client Database with a trailing S. That is the rule.
@@ -232,6 +254,33 @@ def _select_context(select_data: dict) -> str:
             "authoritative:\n" + "\n".join(rows))
 
 
+def _profile_context(ticket_fields: dict) -> str:
+    """The client's own profile terms, as the authority on what the order's shorthand means.
+
+    Without this the checker cannot read a dollar band at all. "$10+" on an order does NOT
+    mean an open-ended floor — it means $10 through *this client's* cap, and the cap is a
+    per-client term recorded in their profile document: 60 clients cap at $99.99, 48 at
+    $49.99, and a tail run to $249.99, $499.99, $999.99 or no cap at all. Judging "$10+"
+    against an assumed open range reports every correctly-executed pull as a defect.
+    """
+    from parse_pipeline import _PROFILE_MAP
+
+    db = str(ticket_fields.get("client_db") or "").upper()
+    prof = _PROFILE_MAP.get(db) or _PROFILE_MAP.get(db[:-1] if db else "")
+    if not prof:
+        return ("\n\nCLIENT PROFILE: none on file for this database. You cannot confirm a "
+                "dollar-band ceiling without it — if the SELECT applied one, say it could "
+                "not be verified rather than calling it wrong.")
+
+    rows = [f"  Dollar cap: {prof.get('dollar_cap') or '(not recorded)'}"]
+    if prof.get("select_by"):
+        rows.append(f"  Select by: {prof['select_by']}")
+    if prof.get("flags"):
+        rows.append(f"  Standing flag omits: {prof['flags']}")
+    return ("\n\nCLIENT PROFILE for " + db + " — the contracted terms for this client, and "
+            "authoritative on what the order's shorthand means:\n" + "\n".join(rows))
+
+
 def _unverified(reason: str) -> dict:
     """The one thing this module must never get wrong: an error is not a pass."""
     log.warning("QC UNVERIFIED — %s", reason)
@@ -306,6 +355,7 @@ def review(pdf_path: str, ticket_fields: dict, select_data: dict = None,
                                 "data": base64.standard_b64encode(data).decode("ascii")}},
                     {"type": "text",
                      "text": f"THE ORDER, as the ticket states it:\n\n{ticket_text}"
+                             f"{_profile_context(ticket_fields)}"
                              f"{_select_context(select_data)}\n\n"
                              f"The attached SELECT report is what was actually pulled. "
                              f"Decide whether it delivered this order."},
