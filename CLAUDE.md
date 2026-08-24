@@ -13,7 +13,7 @@ There are now three other Claude touchpoints; know which is which before changin
 | Where | Module | Role |
 |-------|--------|------|
 | Live pipeline, every ticket | `tools_polish.py` | structural prose clean, gated, falls back to parser text |
-| Live QC, advisory only | `qc_llm.py` | second opinion on SELECT vs ticket; cannot change PASS/FAIL |
+| Live QC — **the verdict** | `qc_llm.py` | decides PASS/FAIL/UNVERIFIED on SELECT vs ticket |
 | Manual create, opt-in | `LLM_writes.py` | Claude extracts **all** fields for an unrecognized broker |
 | Offline, never scheduled | `ai_extract` / `compare_extraction` / `hybrid_create` | see "AI-Assisted Offline Tools" |
 
@@ -43,6 +43,7 @@ python test_ship_to_rules.py         # ship-to house rules + KAP FTP-boilerplate
 python test_kap_fields.py            # KAP exchange qty, spaced order #, $-prefixed select
 python test_adstra_list_code.py      # ADSTRA 5-digit list code vs address digits
 python test_qc_select_parse.py       # qc_checker SELECT-PDF parsing (spaced filenames)
+python test_qc_llm_verdict.py        # qc_llm fail-closed + the FAIL-forcing verdict gate
 python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
 ```
 
@@ -158,7 +159,7 @@ Four independent entry points share the pipeline and `.env`. **Only `email_scann
 | Tool | Trigger / scope | Behavior |
 |------|-----------------|----------|
 | `email_scanner/email_scanner.py` | Shared-mailbox `List Rental` folder | MSAL ROPC auth → per message: if `conversationId` in `thread_map.json`, add a comment to the existing ticket; else download PDFs (or synthesize one from the body) → `process_pdf(broker_hint=SENDER_BROKER_MAP[domain])` → move mail to `List Rental/Processed` or `/Failed`. `broker_hint` short-circuits fingerprint detection. |
-| `qc_checker.py` | `Needs QC` tickets | Downloads the most-recent SELECT PDF, posts a PASS/FAIL comment. **Never transitions.** Pass = `PASS count ≥ 4` AND no hard-required fail (hard = Client Database + Manager Order #, plus Records Selected when the count is 0 or unparseable); WARN rows are dropped. Also checks the `INCLUDE BY ACCOUNT #:` universe is not narrower than the order's ask. Appends an advisory `AI REVIEW` section from `qc_llm` that cannot change the verdict. |
+| `qc_checker.py` | `Needs QC` tickets | Downloads the most-recent SELECT PDF, posts a PASS/FAIL comment. **Never transitions.** Pass = `PASS count ≥ 4` AND no hard-required fail (hard = Client Database + Manager Order #, plus Records Selected when the count is 0 or unparseable); WARN rows are dropped. Also checks the `INCLUDE BY ACCOUNT #:` universe is not narrower than the order's ask. **The verdict now comes from `qc_llm`** — the rule checks print as a reference appendix; `pass_count >= 4` no longer decides. |
 | `qty_approval_scanner.py` | `Ready to Send for Qty Approval` tickets | Reads `QTY APPROVAL/<order#>` emails → sets Requested Quantity (`cf[12271]`); SELECT-PDF `TOTAL RECORDS SELECTED` fallback. **Never transitions.** Emails a per-mailer qty digest; single-card subjects prefix the list short code via `resolve_list_code` (from `dslf_list_and_mailer_names.txt`). |
 | `ticket_scanner/ticket_scanner.py` | New DSLF tickets (issue# > saved state) | **Read-only** audit → report under `ticket_scanner/reports/`. `--learn` mines List Name→db_code patterns into `learned_patterns.json` (enrich tier 5). |
 
@@ -277,23 +278,62 @@ exactly, where this reads it fresh every run. Not scheduled; nothing calls it au
   schema, not open-ended reasoning); `ai_extract`'s own Opus/high defaults are left alone for
   `compare_extraction` and `hybrid_create`. Override with `--model` / `--effort`.
 
-## Advisory AI QC (`qc_llm.py`)
+## LLM QC (`qc_llm.py`) — the QC verdict
 
-A second, independent reading inside `qc_checker` — the SELECT PDF plus the ticket as it
-stands — reported in its own `AI REVIEW` section of the QC comment.
+`qc_llm` decides PASS/FAIL. The 14 rule-based checks in `run_qc_checks()` still run and are
+printed under `RULE CHECKS (reference only)` by `_rules_appendix()`, but they no longer
+produce the verdict. It was advisory until 2026-08-24; anything describing it that way,
+including its own older docstring, is stale.
 
-- **Advisory by construction**: findings never enter `checks[]`, `pass_count`, or `hard_fails`.
-  The rule-based checks alone decide PASS/FAIL (`QC_PASS_THRESHOLD = 4`).
-- It is asked to report discrepancies **even on fields the rules already cover**, so a rule
-  that is itself wrong becomes visible instead of silently authoritative.
-- Its `_SYSTEM` carries an explicit **do-not-report list** mirroring the known-correct-by-design
-  cases: billable-vs-Client-DB prefix mismatch, house-rule ASCII Fixed/FTP, auto STATE OMITS,
-  blank Mail Date/File Format/Other Fees, qty mismatch under All Available, profile-sourced
-  suppressions absent from the SELECT, Seed Tracking == Manager Order #. Add new known-good
-  patterns here, or QC comments fill with noise.
-- Guards mirror `tools_polish`: `claude-sonnet-5` @ medium, 30s per call, `QC_BUDGET_S = 90`
-  per process (~30s/ticket, so ~3 reviews inside the 4-min Jenkins timeout — the rest of the
-  run goes rules-only), 32 MB PDF cap, in-process cache. **Every failure path returns `[]`.**
+The question it answers: **the ticket is the order, the SELECT report is the delivery — did
+the delivery satisfy the order?** It works demand-first (take each thing the ticket asks
+for, find evidence in the SELECT that it happened) rather than diffing value pairs, because
+the common defect is a criterion that was never applied at all, not two values that differ.
+
+```bash
+python qc_llm.py                 # every ticket in Needs QC, print only
+python qc_llm.py DSLF-1075       # one ticket
+python qc_llm.py --post          # also post the verdict as a Jira comment
+```
+
+- **Three verdicts, and the third is the point.** `PASS`/`FAIL` are the model's;
+  **`UNVERIFIED` is the code's** and is returned by every failure path — no API key,
+  timeout, exhausted budget, API error, refusal, unreadable or oversize PDF, failed Jira
+  read. `UNVERIFIED` is **not a pass**: it means QC did not run. This inversion is the
+  whole reason the promotion is safe. As the advisory pass every failure returned `[]`,
+  which was harmless while the rules decided and would have silently passed the entire
+  queue once they stopped. `test_qc_llm_verdict.py` pins it.
+- **The gate overrides the model, not the reverse.** `_reconcile()` forces `FAIL` whenever
+  any finding is `WRONG` or `BLOCKING-BLANK`, whatever the model wrote in `verdict`, and
+  records `verdict_forced`. A model cannot list a wrong Client Database and still pass the
+  ticket. `NOTE` never forces a fail. Same philosophy as `tools_polish._validate`.
+- **Severities** are knowledge.md's: `WRONG` (contradicts the order or a house rule),
+  `BLOCKING-BLANK` (something required to judge or fulfil is absent — this is also where
+  "I could not verify it either way" goes), `NOTE` (worth a human's eye).
+- `_select_context()` passes the regex-parsed `select_data` as an explicitly **unreliable
+  hint** — "a blank here does NOT mean the value is absent from the report; where it
+  disagrees with the PDF, the PDF wins." Without that caveat the model treats a failed
+  regex as a missing field and invents findings.
+- **`_SYSTEM` carries a do-not-report list** for the known-correct-by-design cases:
+  billable-vs-Client-DB prefix mismatch, house-rule ASCII Fixed/FTP, auto STATE OMITS,
+  blank Mail Date/File Format/Other Fees/Key Code, qty mismatch under All Available,
+  profile-sourced suppressions absent from the SELECT, Seed Tracking == Manager Order #,
+  Seed DB = Client DB + S. Add new known-good patterns here or QC fills with noise.
+- **`claude-opus-5` @ high effort**, on knowledge.md's reasoning now that this call is the
+  verdict: a wrong database sends the wrong donor file to the wrong company, so accuracy
+  beats speed and cost. Measured ~24–40s per ticket.
+- ⚠ **`QC_BUDGET_S` is now 600s (was 90s) and collides with the Jenkins 4-minute timeout.**
+  At ~35s/ticket the old 90s cap covered 3 tickets and the rest fell back to the rules;
+  there is no fallback now, so ticket 4 onward would come back `UNVERIFIED`. Raise the
+  Jenkinsfile timeout alongside it, or accept that a long queue drains across runs.
+  Override with the `QC_BUDGET_S` env var; `0` disables the cap.
+
+**`knowledge.md` is a different agent, not this one.** It specs a hosted checker for
+whether a ticket was *created* correctly, against the **order** PDF, on **Needs Assignment**,
+reporting by **email**; it says outright it does not check SELECT files. Reuse its field map,
+severities and judgement rules — but **not** its line-161 claim that KAP titles are
+`P.O. {DL#} {LIST NAME}` "by design". That was fixed in `39d94bc`; treating it as design
+would suppress a real defect.
 
 ## AI-Assisted Offline Tools
 

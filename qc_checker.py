@@ -1283,6 +1283,31 @@ def format_qc_comment(ticket_key: str, select_filename: str,
     return "\n".join(lines)
 
 
+def _rules_appendix(qc_result: dict, parse_errors: list,
+                    select_warnings: list | None = None) -> str:
+    """The 14 rule-based checks, as a diagnostic appendix below the verdict.
+
+    These used to decide PASS/FAIL. They no longer do — qc_llm does — but they are free
+    to compute and deterministic, so a reader can still see what the regexes made of the
+    SELECT, and a disagreement between the two is itself informative. Deliberately
+    labelled so nobody mistakes a row here for the verdict.
+    """
+    lines = ["", "", "-" * 60,
+             f"RULE CHECKS (reference only — the VERDICT above is the result): "
+             f"{qc_result['pass_count']}/{qc_result['total_checks']} passed"]
+    for status, label, detail in qc_result["checks"]:
+        lines.append(f"  {status:<4}  {label:<22} {detail}")
+    if qc_result.get("hard_fails"):
+        lines.append(f"  hard-required mismatch: {', '.join(qc_result['hard_fails'])}")
+
+    all_warnings = list(select_warnings or []) + list(parse_errors or [])
+    if all_warnings:
+        lines.append("")
+        lines.append("WARNINGS:")
+        lines.extend(f"  - {w}" for w in all_warnings)
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # Single-ticket orchestrator
 # ---------------------------------------------------------------------------
@@ -1335,27 +1360,30 @@ def process_ticket_qc(ticket_key: str, dry_run: bool = False) -> dict:
             return {"ticket_key": ticket_key,
                     "error": "SELECT PDF parsing returned no usable data"}
 
-        # Compare — these 14 checks alone decide PASS/FAIL.
-        qc_result = run_qc_checks(select_data, fields)
-
-        # Second, independent AI reading of the same SELECT PDF against the ticket.
-        # Advisory: reported in its own section, never folded into pass_count or
-        # hard_fails, and returns [] on any failure so QC still posts its verdict.
+        # qc_llm decides. The 14 rule-based checks below still run — they cost nothing,
+        # they are deterministic, and they are useful as a diagnostic appendix — but they
+        # no longer produce the verdict. See "LLM QC" in CLAUDE.md.
+        #
+        # A UNVERIFIED verdict means QC did not run (no key, timeout, budget, API error).
+        # It is NOT a pass: overall_pass stays False so nothing downstream reads silence
+        # as approval.
         import qc_llm
-        llm_findings = qc_llm.review(tmp_path, fields, select_data)
-        qc_result["llm_findings"] = llm_findings
+        llm = qc_llm.review(tmp_path, fields, select_data)
 
-        # Format + print
-        comment = format_qc_comment(ticket_key, select_filename, qc_result,
-                                    parse_errors, select_warnings, llm_findings)
+        qc_result = run_qc_checks(select_data, fields)
+        qc_result["llm"] = llm
+        qc_result["overall_pass"] = (llm["verdict"] == qc_llm.PASS)
+
+        comment = (qc_llm.format_report(ticket_key, select_filename, llm)
+                   + _rules_appendix(qc_result, parse_errors, select_warnings))
         print(f"\n{comment}\n")
 
         if dry_run:
             log.info("[DRY RUN] %s: QC %s — would post report comment (no transition)",
-                     ticket_key,
-                     "PASSED" if qc_result["overall_pass"] else "FAILED")
+                     ticket_key, llm["verdict"])
             return {
                 "ticket_key":      ticket_key,
+                "verdict":         llm["verdict"],
                 "overall_pass":    qc_result["overall_pass"],
                 "pass_count":      qc_result["pass_count"],
                 "total_checks":    qc_result["total_checks"],
@@ -1370,12 +1398,11 @@ def process_ticket_qc(ticket_key: str, dry_run: bool = False) -> dict:
             log.error("Could not post QC comment to %s: %s", ticket_key, cr["error"])
         else:
             log.info("%s: QC %s — report posted, ticket stays in %r",
-                     ticket_key,
-                     "PASSED" if qc_result["overall_pass"] else "FAILED",
-                     NEED_QC_STATUS)
+                     ticket_key, llm["verdict"], NEED_QC_STATUS)
 
         return {
             "ticket_key":      ticket_key,
+            "verdict":         llm["verdict"],
             "overall_pass":    qc_result["overall_pass"],
             "pass_count":      qc_result["pass_count"],
             "total_checks":    qc_result["total_checks"],

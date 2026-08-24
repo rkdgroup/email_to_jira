@@ -486,6 +486,9 @@ QC_FIELDS = [
     "customfield_12275",  # Ship To Email
     "customfield_12276",  # Shipping Method
     "customfield_12277",  # Shipping Instructions (CC: email)
+    "customfield_12191",  # Billable Account
+    "customfield_12196",  # Mail Date
+    "customfield_12278",  # Other Fees
 ]
 
 
@@ -598,6 +601,9 @@ def get_ticket_qc_fields(ticket_key: str) -> dict:
             "ship_to_email":          raw.get("customfield_12275") or "",
             "shipping_method":        _select("customfield_12276"),
             "shipping_instructions":  raw.get("customfield_12277") or "",
+            "billable_account":       _select("customfield_12191"),
+            "mail_date":              raw.get("customfield_12196") or "",
+            "other_fees":             raw.get("customfield_12278") or "",
         }
     except Exception as e:
         log.warning("get_ticket_qc_fields failed for %s: %s", ticket_key, e)
