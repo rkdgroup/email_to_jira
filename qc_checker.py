@@ -639,7 +639,10 @@ def parse_select_pdf(pdf_path: str) -> dict:
     m = re.search(r'REPORT\s*:\s*P\.O\.#\s*([A-Z0-9]+)\s*(.*)', text, re.IGNORECASE)
     if m:
         result["manager_order"]  = m.group(1).strip()
-        suffix                   = m.group(2).strip()
+        # The REPORT line runs to the page footer, so the raw tail carries
+        # "PAGE :    1" and the column padding before it. Trim both — this value is
+        # quoted verbatim into the QC comment a human reads.
+        suffix = re.split(r'\s{2,}PAGE\s*:', m.group(2), 1)[0].strip()
         result["criteria_suffix"] = suffix
         # Dollar ranges ("$10-99.99", KAP style) and thresholds ("$5+" / "05+"), plus
         # time periods "L12M"/"L3M"/"L03" — see _criteria_tokens.
@@ -878,28 +881,21 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
                f"No $-amount or L#M tokens in SELECT REPORT line "
                f"({select_data.get('criteria_suffix', '') or 'no suffix'})")
     else:
-        missing_dollar = []  # FAIL — $ amount not found at all
         missing_period = []  # WARN — period missing or different in description
 
-        for dc in s_dollar:
-            if '-' in dc:  # range like "$10-99.99"; description may write "$10-$99.99"
-                lo, hi = dc.lstrip('$').split('-', 1)
-                pat = rf'(?<![\d.]){re.escape(lo)}(?:\.0+)?\s*-\s*\$?\s*{re.escape(hi)}'
-            else:
-                amount = re.escape(dc.replace('$', '').rstrip('+'))
-                # digit boundaries so "$5+" is not satisfied by "$15+" or "$50+"
-                pat = (rf'(?<![\d.,])\$?\s*{amount}(?:\.0+)?\s*\+'
-                       rf'|\$\s*{amount}(?:\.0+)?(?![\d.])')
-            if not re.search(pat, desc_text):
-                missing_dollar.append(dc)
+        # _desc_has_dollar / _desc_has_period, not a second copy of their regexes. This
+        # check used to inline both and the dollar branch dropped the helper's
+        # lower-bound alternative, so a SELECT range was only ever matched literally.
+        # That failed every capped order: the SELECT prints "$10-99.99" (the client's
+        # $99.99 cap applied) while the order is written "$10+", which is the same ask.
+        # Five of six KAP tickets measured on 2026-08-24 failed this way — all correct
+        # pulls. See "dollar cap" in CLAUDE.md.
+        missing_dollar = [dc for dc in s_dollar if not _desc_has_dollar(desc_text, dc)]
 
         for pc in s_period:
-            n = re.match(r'L(\d+)M', pc).group(1)
-            # Exact period with digit boundary ("3M" must not match "13M"). Accept the
-            # KAP "12MO" abbreviation as well as "12M"/"12 MONTH(S)".
-            if re.search(rf'(?<!\d){n}\s*M(?:ONTHS?|O)?\b', desc_text):
+            if _desc_has_period(desc_text, pc):
                 continue
-            other = re.search(r'(?<!\d)(\d+)\s*M(?:ONTHS?|O)?\b', desc_text)
+            other = re.search(r'(?<!\d)(\d+)\s*M(?:ONTHS?|OS?)?\b', desc_text)
             missing_period.append(
                 (pc, other.group(0).strip() if other else None))
 
@@ -1237,8 +1233,7 @@ def run_qc_checks(select_data: dict, ticket_fields: dict) -> dict:
 
 def format_qc_comment(ticket_key: str, select_filename: str,
                       qc_result: dict, parse_errors: list,
-                      select_warnings: list | None = None,
-                      llm_findings: list | None = None) -> str:
+                      select_warnings: list | None = None) -> str:
     """Build the plain-text Jira comment for the QC result."""
     checks     = qc_result["checks"]
     pass_count = qc_result["pass_count"]
@@ -1261,18 +1256,6 @@ def format_qc_comment(ticket_key: str, select_filename: str,
     if hard_fails:
         lines.append(f"HARD FAIL: {', '.join(hard_fails)} must match")
 
-    # Advisory only — these came from the AI reading of the SELECT PDF and the ticket, and
-    # are deliberately excluded from the counts and the verdict above.
-    if llm_findings:
-        lines.append("")
-        lines.append("AI REVIEW (advisory — does not affect the result above):")
-        for f in llm_findings:
-            sev = str(f.get("severity", "note")).upper()
-            lines.append(f"  [{sev}] {f.get('field', '?')}")
-            lines.append(f"      SELECT: {f.get('select_value') or '(none)'}")
-            lines.append(f"      ticket: {f.get('ticket_value') or '(none)'}")
-            lines.append(f"      {f.get('issue', '')}")
-
     all_warnings = list(select_warnings or []) + list(parse_errors or [])
     if all_warnings:
         lines.append("")
@@ -1280,31 +1263,6 @@ def format_qc_comment(ticket_key: str, select_filename: str,
         for w in all_warnings:
             lines.append(f"  - {w}")
 
-    return "\n".join(lines)
-
-
-def _rules_appendix(qc_result: dict, parse_errors: list,
-                    select_warnings: list | None = None) -> str:
-    """The 14 rule-based checks, as a diagnostic appendix below the verdict.
-
-    These used to decide PASS/FAIL. They no longer do — qc_llm does — but they are free
-    to compute and deterministic, so a reader can still see what the regexes made of the
-    SELECT, and a disagreement between the two is itself informative. Deliberately
-    labelled so nobody mistakes a row here for the verdict.
-    """
-    lines = ["", "", "-" * 60,
-             f"RULE CHECKS (reference only — the VERDICT above is the result): "
-             f"{qc_result['pass_count']}/{qc_result['total_checks']} passed"]
-    for status, label, detail in qc_result["checks"]:
-        lines.append(f"  {status:<4}  {label:<22} {detail}")
-    if qc_result.get("hard_fails"):
-        lines.append(f"  hard-required mismatch: {', '.join(qc_result['hard_fails'])}")
-
-    all_warnings = list(select_warnings or []) + list(parse_errors or [])
-    if all_warnings:
-        lines.append("")
-        lines.append("WARNINGS:")
-        lines.extend(f"  - {w}" for w in all_warnings)
     return "\n".join(lines)
 
 
@@ -1360,30 +1318,22 @@ def process_ticket_qc(ticket_key: str, dry_run: bool = False) -> dict:
             return {"ticket_key": ticket_key,
                     "error": "SELECT PDF parsing returned no usable data"}
 
-        # qc_llm decides. The 14 rule-based checks below still run — they cost nothing,
-        # they are deterministic, and they are useful as a diagnostic appendix — but they
-        # no longer produce the verdict. See "LLM QC" in CLAUDE.md.
-        #
-        # A UNVERIFIED verdict means QC did not run (no key, timeout, budget, API error).
-        # It is NOT a pass: overall_pass stays False so nothing downstream reads silence
-        # as approval.
-        import qc_llm
-        llm = qc_llm.review(tmp_path, fields, select_data)
-
+        # These 14 checks alone decide PASS/FAIL, and this path makes no API call:
+        # it is the Jenkins-scheduled entry point, so it stays deterministic, free and
+        # inside the build timeout. The LLM checker is `qc_llm.py`, run locally and by
+        # hand — see "LLM QC" in CLAUDE.md.
         qc_result = run_qc_checks(select_data, fields)
-        qc_result["llm"] = llm
-        qc_result["overall_pass"] = (llm["verdict"] == qc_llm.PASS)
 
-        comment = (qc_llm.format_report(ticket_key, select_filename, llm)
-                   + _rules_appendix(qc_result, parse_errors, select_warnings))
+        comment = format_qc_comment(ticket_key, select_filename, qc_result,
+                                    parse_errors, select_warnings)
         print(f"\n{comment}\n")
 
         if dry_run:
             log.info("[DRY RUN] %s: QC %s — would post report comment (no transition)",
-                     ticket_key, llm["verdict"])
+                     ticket_key,
+                     "PASSED" if qc_result["overall_pass"] else "FAILED")
             return {
                 "ticket_key":      ticket_key,
-                "verdict":         llm["verdict"],
                 "overall_pass":    qc_result["overall_pass"],
                 "pass_count":      qc_result["pass_count"],
                 "total_checks":    qc_result["total_checks"],
@@ -1398,11 +1348,12 @@ def process_ticket_qc(ticket_key: str, dry_run: bool = False) -> dict:
             log.error("Could not post QC comment to %s: %s", ticket_key, cr["error"])
         else:
             log.info("%s: QC %s — report posted, ticket stays in %r",
-                     ticket_key, llm["verdict"], NEED_QC_STATUS)
+                     ticket_key,
+                     "PASSED" if qc_result["overall_pass"] else "FAILED",
+                     NEED_QC_STATUS)
 
         return {
             "ticket_key":      ticket_key,
-            "verdict":         llm["verdict"],
             "overall_pass":    qc_result["overall_pass"],
             "pass_count":      qc_result["pass_count"],
             "total_checks":    qc_result["total_checks"],

@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from qc_checker import _parse_shipping_info
+from qc_checker import _parse_shipping_info, _desc_has_dollar, _desc_has_period
 
 _failures = []
 
@@ -74,6 +74,46 @@ def test_missing_shipping_info_still_reported():
     check("missing shipping info still reported", r["parse_errors"],
           ["Shipping info (TO:/CC:/FILENAME:) not found in SELECT PDF"])
     check("missing shipping info leaves method blank", r["shipping_method"], "")
+
+
+# A SELECT prints the dollar band with the client's cap applied ("$10-99.99") while the
+# order is written open-ended ("$10+"). Same ask: the cap is a per-client profile term, and
+# 60 of 195 clients cap at $99.99. The Selection Criteria check used to inline its own
+# regex instead of calling _desc_has_dollar, and that copy matched a SELECT range only
+# literally — so it failed every capped order. Five of six KAP tickets measured on
+# 2026-08-24 (DSLF-1079, -1078, -1071, -1070, -1069) failed this way, all correct pulls.
+
+def test_capped_band_is_satisfied_by_an_open_threshold():
+    check("$10-99.99 satisfied by '$10+ L12'",
+          _desc_has_dollar("$10+ L12", "$10-99.99"), True)
+    check("$0.01-99.99 satisfied by '$0.01+'",
+          _desc_has_dollar("$0.01+ 12 MONTH", "$0.01-99.99"), True)
+
+
+def test_capped_band_still_matches_when_written_in_full():
+    check("explicit range still matches",
+          _desc_has_dollar("12 MONTH $10-$99.99", "$10-99.99"), True)
+
+
+def test_a_different_floor_is_not_satisfied():
+    """The fix must not make the check unfalsifiable — a wrong floor still fails."""
+    check("$25 floor does not satisfy a $10 band",
+          _desc_has_dollar("$25+ L12", "$10-99.99"), False)
+    check("$5+ is not satisfied by $50+",
+          _desc_has_dollar("$50+ DONORS", "$5+"), False)
+    check("$5+ is not satisfied by $15+",
+          _desc_has_dollar("$15+ DONORS", "$5+"), False)
+
+
+def test_period_helper_accepts_the_abbreviations_the_orders_use():
+    for desc, tok, want, name in (
+        ("3M $5+",            "L3M",  True,  "3M"),
+        ("3 MOS $5+",         "L3M",  True,  "3 MOS"),
+        ("12 MONTH $10+",     "L12M", True,  "12 MONTH"),
+        ("$10+ L12",          "L12M", False, "bare L12 (no trailing M)"),
+        ("13M $5+",           "L3M",  False, "13M must not satisfy L3M"),
+    ):
+        check(f"period {name}", _desc_has_period(desc, tok), want)
 
 
 def main():
