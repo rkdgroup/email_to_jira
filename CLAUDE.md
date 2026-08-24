@@ -13,7 +13,7 @@ There are now three other Claude touchpoints; know which is which before changin
 | Where | Module | Role |
 |-------|--------|------|
 | Live pipeline, every ticket | `tools_polish.py` | structural prose clean, gated, falls back to parser text |
-| Live QC — **the verdict** | `qc_llm.py` | decides PASS/FAIL/UNVERIFIED on SELECT vs ticket |
+| Local QC, by hand | `qc_llm.py` | PASS/FAIL/UNVERIFIED on SELECT vs ticket; **not** scheduled |
 | Manual create, opt-in | `LLM_writes.py` | Claude extracts **all** fields for an unrecognized broker |
 | Offline, never scheduled | `ai_extract` / `compare_extraction` / `hybrid_create` | see "AI-Assisted Offline Tools" |
 
@@ -159,7 +159,7 @@ Four independent entry points share the pipeline and `.env`. **Only `email_scann
 | Tool | Trigger / scope | Behavior |
 |------|-----------------|----------|
 | `email_scanner/email_scanner.py` | Shared-mailbox `List Rental` folder | MSAL ROPC auth → per message: if `conversationId` in `thread_map.json`, add a comment to the existing ticket; else download PDFs (or synthesize one from the body) → `process_pdf(broker_hint=SENDER_BROKER_MAP[domain])` → move mail to `List Rental/Processed` or `/Failed`. `broker_hint` short-circuits fingerprint detection. |
-| `qc_checker.py` | `Needs QC` tickets | Downloads the most-recent SELECT PDF, posts a PASS/FAIL comment. **Never transitions.** Pass = `PASS count ≥ 4` AND no hard-required fail (hard = Client Database + Manager Order #, plus Records Selected when the count is 0 or unparseable); WARN rows are dropped. Also checks the `INCLUDE BY ACCOUNT #:` universe is not narrower than the order's ask. **The verdict now comes from `qc_llm`** — the rule checks print as a reference appendix; `pass_count >= 4` no longer decides. |
+| `qc_checker.py` | `Needs QC` tickets | Downloads the most-recent SELECT PDF, posts a PASS/FAIL comment. **Never transitions.** Pass = `PASS count ≥ 4` AND no hard-required fail (hard = Client Database + Manager Order #, plus Records Selected when the count is 0 or unparseable); WARN rows are dropped. Also checks the `INCLUDE BY ACCOUNT #:` universe is not narrower than the order's ask. **Makes no API call** — the LLM checker is separate. ⚠ See "the pass threshold" below: a non-hard FAIL does not block a pass. |
 | `qty_approval_scanner.py` | `Ready to Send for Qty Approval` tickets | Reads `QTY APPROVAL/<order#>` emails → sets Requested Quantity (`cf[12271]`); SELECT-PDF `TOTAL RECORDS SELECTED` fallback. **Never transitions.** Emails a per-mailer qty digest; single-card subjects prefix the list short code via `resolve_list_code` (from `dslf_list_and_mailer_names.txt`). |
 | `ticket_scanner/ticket_scanner.py` | New DSLF tickets (issue# > saved state) | **Read-only** audit → report under `ticket_scanner/reports/`. `--learn` mines List Name→db_code patterns into `learned_patterns.json` (enrich tier 5). |
 
@@ -278,12 +278,23 @@ exactly, where this reads it fresh every run. Not scheduled; nothing calls it au
   schema, not open-ended reasoning); `ai_extract`'s own Opus/high defaults are left alone for
   `compare_extraction` and `hybrid_create`. Override with `--model` / `--effort`.
 
-## LLM QC (`qc_llm.py`) — the QC verdict
+## LLM QC (`qc_llm.py`) — local, manual, not scheduled
 
-`qc_llm` decides PASS/FAIL. The 14 rule-based checks in `run_qc_checks()` still run and are
-printed under `RULE CHECKS (reference only)` by `_rules_appendix()`, but they no longer
-produce the verdict. It was advisory until 2026-08-24; anything describing it that way,
-including its own older docstring, is stale.
+**Two separate checkers, and only one runs on Jenkins:**
+
+| | `qc_checker.py` | `qc_llm.py` |
+|---|---|---|
+| Trigger | Jenkins cron, every 5 min | local, by hand |
+| Verdict from | the 14 rule checks | the model |
+| API calls | **none** | one per ticket |
+| Posts to Jira | yes, always | only with `--post` |
+
+`qc_checker` makes **no API call at all** — no `qc_llm` import, no key needed, deterministic
+and inside the build timeout. Don't wire the LLM back into it without also raising the
+Jenkinsfile 4-minute timeout; at ~35s/ticket a queue of five overruns it.
+
+`qc_llm` is the deeper check you run by hand when a ticket looks wrong. It briefly decided
+the scheduled verdict on 2026-08-24 and was moved back out the same day.
 
 The question it answers: **the ticket is the order, the SELECT report is the delivery — did
 the delivery satisfy the order?** It works demand-first (take each thing the ticket asks
@@ -333,11 +344,11 @@ python qc_llm.py --post          # also post the verdict as a Jira comment
 - **`claude-opus-5` @ high effort**, on knowledge.md's reasoning now that this call is the
   verdict: a wrong database sends the wrong donor file to the wrong company, so accuracy
   beats speed and cost. Measured ~24–40s per ticket.
-- ⚠ **`QC_BUDGET_S` is now 600s (was 90s) and collides with the Jenkins 4-minute timeout.**
-  At ~35s/ticket the old 90s cap covered 3 tickets and the rest fell back to the rules;
-  there is no fallback now, so ticket 4 onward would come back `UNVERIFIED`. Raise the
-  Jenkinsfile timeout alongside it, or accept that a long queue drains across runs.
-  Override with the `QC_BUDGET_S` env var; `0` disables the cap.
+- **`QC_BUDGET_S` is 600s**, sized for a full queue run by hand rather than for the
+  Jenkins build. It is the reason this must not be wired back into `qc_checker` without
+  raising the Jenkinsfile 4-minute timeout: at ~35s/ticket a queue of five overruns it,
+  and with the rules no longer deciding there is no fallback — ticket 4 onward would
+  come back `UNVERIFIED`. Override with the `QC_BUDGET_S` env var; `0` disables the cap.
 
 **`knowledge.md` is a different agent, not this one.** It specs a hosted checker for
 whether a ticket was *created* correctly, against the **order** PDF, on **Needs Assignment**,
@@ -345,6 +356,43 @@ reporting by **email**; it says outright it does not check SELECT files. Reuse i
 severities and judgement rules — but **not** its line-161 claim that KAP titles are
 `P.O. {DL#} {LIST NAME}` "by design". That was fixed in `39d94bc`; treating it as design
 would suppress a real defect.
+
+## ⚠ The QC pass threshold — a non-hard FAIL does not block a pass
+
+`run_qc_checks()` ends with:
+
+```python
+pass_count   = sum(1 for s, _, _ in checks if s == "PASS")
+overall_pass = (pass_count >= QC_PASS_THRESHOLD) and (not hard_fails)   # threshold = 4
+```
+
+**Failures are never counted and never subtract.** Only `hard_fails` blocks, and that set is
+just Client Database + Manager Order # (plus Records Selected when 0/unparseable). So four
+passes are enough to pass a ticket carrying any number of other FAILs — including
+`Include Set` ("donors giving $10–$50 were never in the pool"), `Seed Database`,
+`Selection Criteria`, `File Format` and `Shipping Method`. Reproduced 2026-08-24: a
+constructed ticket scored **4 passes / 5 fails → `QC PASSED`**.
+
+The denominator also moves: WARN rows are dropped from `checks` entirely, so `total_checks`
+ranges 9–15 across real tickets. A fixed absolute threshold against a variable denominator
+does not mean the same thing on two different tickets.
+
+The fix is `overall_pass = not hard_fails and no FAIL at all`. It was **not** applied,
+because it changes the verdict on a 5-minute cron and the remaining failures need a domain
+call first — measured over the 30 most-recent tickets with a SELECT PDF, after the
+`_desc_has_dollar` fix, exactly two still fail a non-hard check:
+
+- **DSLF-1066** — `List Name`: SELECT customer is `AREIVIM`, ticket list is
+  `3-HOC HEAL OUR CHILDREN`, db `A12D`.
+- **DSLF-1083** — `List Name`: SELECT customer is `NEWPORT CREATIVE SWEEPS MASTER`, ticket
+  list is `3-SDCA CHARITABLE APPEALS MF`, db `N15R`; plus `File Format` ASCII Delimited
+  where the destination forces ASCII Fixed (that one looks like a real defect).
+
+Both `List Name` rows are the same question: for a hosted list the SELECT prints the
+**host/master account** name while the ticket names the **rented list**, and those
+legitimately differ. If that is by design the check needs to compare against the host
+rather than the list name — otherwise it is the wrong-client check knowledge.md calls the
+highest-value one, and these two are live incidents.
 
 ## AI-Assisted Offline Tools
 
