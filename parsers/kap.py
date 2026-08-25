@@ -40,8 +40,13 @@ class KapParser(BaseBrokerParser):
         #   31+: right column values for those labels (MAIL DATE, broker name, S/B, BROKER ORDER#, dates)
 
         # --- KAP ORDER (manager_order_number) ---
+        # DL and DM are the same slot: the line under "KAP Order:" holds DL### on most
+        # orders and DM### on others (DSLF-1092 DM009, DSLF-1100 DM022 both parsed blank
+        # while a DL-only regex was here, which sent the mailer_po into the title via
+        # ParseResult's fallback and left Seed Tracking Number empty). Measured over 22
+        # KAP order PDFs that line carried only those two prefixes.
         manager_order_number = ""
-        m = re.search(r"(DL\d+)", text)
+        m = re.search(r"(D[LM]\d+)", text)
         if m:
             manager_order_number = m.group(1)
 

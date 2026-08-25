@@ -285,6 +285,20 @@ def test_title_never_carries_the_mailer_po():
     check("mailer PO still populated", r.mailer_po, "CRU 924-105")
 
 
+def test_kap_order_may_use_a_dm_prefix():
+    """DL and DM are the same slot under "KAP Order:", so both must be read.
+
+    A DL-only regex left DSLF-1092 (DM009) and DSLF-1100 (DM022) with a blank Manager
+    Order #, which then put the Mailer PO in the title via ParseResult's fallback and
+    left Seed Tracking Number empty. Checked against 69 KAP orders: only DL and DM
+    occur, and first-match still equals the Manager Order # on all 67 that had one.
+    """
+    r = PARSER_REGISTRY["kap"].parse(_DL984.replace("DL984", "DM022"))
+    check("DM-prefixed KAP order read", r.manager_order_number, "DM022")
+    check("DM order titled LIST - MAILER - MGR ORDER",
+          r.summary, "AID FOR STARVING CHILDREN - KIDS WISH NETWORK - DM022")
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),
