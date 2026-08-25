@@ -34,8 +34,8 @@ python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 `--dry-run` and `--verbose` are the **only** two CLI flags for `parse_pipeline.py`. `broker_hint` is a function argument (used by the email scanner), not a flag.
 
 **Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
-protect you if you run them. Five regression files, each a standalone runner that prints
-`PASS` lines and `ALL PASSED` (also collectible by pytest). All five are hermetic: no Jira,
+protect you if you run them. Six regression files, each a standalone runner that prints
+`PASS` lines and `ALL PASSED` (also collectible by pytest). All six are hermetic: no Jira,
 no DB, no PDFs, no network.
 
 ```bash
@@ -48,8 +48,8 @@ python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
 ```
 
 Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap.py`,
-`parsers/adstra.py`, `qc_checker.py`, or `WO#/work_order.py`. Verified all five pass
-2026-08-20. Everything else is tested manually via `--dry-run --verbose` against real
+`parsers/adstra.py`, `qc_checker.py`, or `WO#/work_order.py`. Verified all six pass
+2026-08-25. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
 in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
@@ -207,6 +207,17 @@ complete credential picture. (`ANTHROPIC_API_KEY` **is** now used by scheduled r
 
 On every **live** create, `_create_and_link_work_order()` imports `WO#/work_order.py` (jt400 JDBC via `jaydebeapi`+`JPype1`) to INSERT into `DMIJOBS.ARWRKSCH`, then writes the WO# to `customfield_12089`. It re-reads the billable account from the just-created ticket. Requires `IBMI_*` env + `jt400.jar`. **Failures are non-fatal** (logged, ticket still succeeds); skipped entirely if billable_account is empty.
 
+- **`WCCUST` is `letter_pos * 1000 + trailing`**, not a modulo (`_billable_to_wccust`:
+  `K40` -> 11040, `T11` -> 20011). An earlier modulo version wrote wrong billing codes on
+  live work orders; `WO#/fix_wccust.py` is the one-off repair script that corrected them and
+  is a record of which WOs were affected, not something to re-run.
+- **`(WWORKO, WSUFX)` is a DB-enforced composite key** and the pipeline always writes a blank
+  suffix, so the collision guarded against is a human keying the same WWORKO with a
+  *different* suffix. `allocate_and_create()` runs scan -> insert -> verify -> auto-reassign
+  on one connection; it also reads the shop's `PEPBK#` counter as an allocation floor (read
+  only — the ARWRKSCH trigger advances it) so it won't take a number order-entry reserved
+  ahead of the committed MAX. `WO#/test_work_order_allocation.py` pins this loop.
+
 ## Prose Polish (`tools_polish.py`) — the live LLM step
 
 Runs on every ticket inside `process_pdf`, between kwargs assembly and the FLAG OMITS append.
@@ -303,8 +314,9 @@ the common defect is a criterion that was never applied at all, not two values t
 
 ```bash
 python qc_llm.py                 # every ticket in Needs QC, print only
-python qc_llm.py DSLF-1075       # one ticket
+python qc_llm.py DSLF-1075       # one ticket (accepts several keys)
 python qc_llm.py --post          # also post the verdict as a Jira comment
+python qc_llm.py --model M --effort low|medium|high|xhigh|max --json FILE
 ```
 
 - **Three verdicts, and the third is the point.** `PASS`/`FAIL` are the model's;
