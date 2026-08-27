@@ -4,6 +4,53 @@ import re
 from parsers.base import BaseBrokerParser, CONFIDENCE_RULE_BASED
 from parse_result import ParseResult
 
+# --- Ship Label PO extraction ------------------------------------------------------
+#
+# The Ship Label is a slash-separated jumble of the mailer's own reference numbers, and
+# only one of them is the Mailer PO. Per Suvam 2026-08-27, on DSLF-1091's
+# "MOWP E20467/QTY/WWP/JOB 54634":
+#
+#   - a JOB number is the MAILER's internal number, not ours. Never the PO.
+#   - an E-prefixed number IS the PO even when nothing says "PO" — "if you see E-----,
+#     use that".
+#   - three letters followed by two digits (CLU96) is also a PO.
+#
+# Order matters: the explicit PO marker wins, then the E form, then the three-plus-two
+# form, and only then the old bare digit-run guess. Measured over the 25 most recent
+# WE ARE MOORE / DATA-AXLE tickets this changes exactly six values, all of them wrong
+# before, and leaves every other one byte-identical.
+_JOB_NOISE = re.compile(r"\b(?:JOB|MERGE)\s*#?\s*\d+", re.IGNORECASE)
+_TOKEN_SPLIT = re.compile(r"[\s/_,\-]+")
+# Full-token matches only. An unanchored [A-Z]{3}\d{2} would find "AGA11" inside
+# "TSAGA112991" and invent a PO out of the middle of another number.
+_PO_FORMS = (
+    re.compile(r"^E\d{3,}$", re.IGNORECASE),      # E20467, E22163, E21035
+    re.compile(r"^[A-Z]{3}\d{2}$", re.IGNORECASE),  # CLU96, CLP78, CLL76
+)
+
+
+def _ship_label_po(label: str) -> str:
+    """The Mailer PO out of a Ship Label, or "" when the label holds none."""
+    if not label:
+        return ""
+    # Drop the mailer's own JOB/MERGE numbers before anything else looks for digits.
+    cleaned = _JOB_NOISE.sub(" ", label)
+
+    # An explicit marker with its value attached, letter prefix included.
+    m = re.search(r"PO[#:\s]*([A-Z]{0,3}\d{3,})", cleaned, re.IGNORECASE)
+    if m:
+        return m.group(1).strip()
+
+    tokens = [t for t in _TOKEN_SPLIT.split(cleaned.replace("#", " ")) if t]
+    for form in _PO_FORMS:
+        for t in tokens:
+            if form.match(t):
+                return t.upper()
+
+    # Last resort, unchanged from before: the first long digit run that is not a JOB.
+    m = re.search(r"(\d{4,})", cleaned)
+    return m.group(1) if m else ""
+
 
 class DataAxleParser(BaseBrokerParser):
     broker_key: str = "data_axle"
@@ -24,23 +71,12 @@ class DataAxleParser(BaseBrokerParser):
         manager_order_number = self._find(text, r"Order\s*#\s*(\d+)")
         key_code_from_order = self._find(text, r"Order\s*#\s*\d+-(\S+)")
 
-        # --- Mailer PO and list abbreviation from Ship Label ---
+        # --- Mailer PO from the Ship Label --- see _ship_label_po for the rules
         ship_label = self._find(text, r"Ship\s*Label[:\s]*([^\n]+)")
         mailer_po = ""
         if ship_label:
             ship_label = self._clean_nextmark_text(ship_label)
-            # The PO value can carry a letter prefix: DSLF-1132's label reads
-            # "WWP f/PBC/PO# E23063/Job #54793" and a digits-only capture failed the PO#
-            # branch entirely, fell through to the bare digit-run fallback below and stored
-            # 23063 — the same number with its leading E missing. Found by qc_llm's order
-            # check. Letters are optional so "PO: 58364" is read exactly as before.
-            m = re.search(r"PO[#:\s]*([A-Z]{0,3}[0-9]{3,})", ship_label, re.IGNORECASE)
-            if m:
-                mailer_po = m.group(1).strip()
-            else:
-                m = re.search(r"(\d{4,})", ship_label)
-                if m:
-                    mailer_po = m.group(1)
+            mailer_po = _ship_label_po(ship_label)
 
         if not mailer_po:
             mailer_po = manager_order_number

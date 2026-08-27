@@ -513,19 +513,49 @@ Run at the top of `create_jira_ticket` and **override** whatever the parser prod
 | CONRAD DIRECT | BROK/MAIL PO: field | PURCHASE ORDER NO |
 | Names in News | 6-7 digit number | LR # |
 | CELCO | ORDER # | ORDER # |
-| SimioCloud | Ship Label `PO#` **including a letter prefix** (`PO# E23063` -> `E23063`), else first 4+ digit run in the label, else falls back to Order# | Order# (inherits `DataAxleParser.parse`) |
+| SimioCloud | Ship Label, by `_ship_label_po` — see the note below | Order# (inherits `DataAxleParser.parse`) |
 | RKD / AMLC | `Client P.O.:` — in AMLC's columnar layout the value can sit up to 25 lines *below* its label | first 5-6 digit number in the first 10 lines (Service Bureau No. / Purchase Order No.) |
 
-**A failed match in the Ship Label becomes a plausible wrong answer, not a blank.**
-Until 2026-08-27 the `PO#` capture was digits-only, so a letter-prefixed value did not
-match at all and control fell through to the "first 4+ digit run anywhere in the label"
-fallback — which then found the digits of the value the first branch had just rejected and
-stored them without the prefix. DSLF-1132's label reads `WWP f/PBC/PO# E23063/Job #54793`
-and the ticket held `23063`. `qc_llm`'s ORDER check found it on its first live run; the
-parser is fixed and DSLF-1132 was corrected to `E23063`. **Other SimioCloud/Data Axle
-tickets created before the fix may carry the same truncation** — it can only be confirmed
-against each order PDF, and `python qc_llm.py --status "<queue>" --order-only` is the way
-to sweep for it. `test_data_axle_ship_label.py` pins both branches.
+### The Ship Label is a jumble and only one number in it is ours
+
+`parsers/data_axle._ship_label_po` reads the Mailer PO for Data Axle / SimioCloud /
+WE ARE MOORE. The label is slash-separated and carries several of the mailer's own
+reference numbers, so the rules are (per Lee Ann's team, 2026-08-27), in priority order:
+
+1. An explicit `PO#` / `PO:` marker with a value attached, **letter prefix included**.
+2. An **`E`-prefixed number is the PO even when nothing says "PO"** — `MOWP E20467/QTY/WWP/JOB 54634` yields `E20467`.
+3. **Three letters followed by two digits** is a PO — `CLU96`, `CLP78`, `CLL76`.
+4. Only then the old guess: the first 4+ digit run. Blank falls back to Manager Order #.
+
+**A `JOB` or `MERGE` number is the mailer's own and is never the PO.** Those are stripped
+before anything looks for digits, so they cannot win even when they come first.
+
+**Match whole tokens.** An unanchored `[A-Z]{3}\d{2}` finds `AGA11` inside `TSAGA112991`
+(DSLF-1093) and invents a PO out of the middle of somebody else's number.
+
+**A failed match here becomes a plausible wrong answer, not a blank** — which is why this
+went unnoticed for so long. Until 2026-08-27 the capture was digits-only with no token
+rules, so a letter-prefixed value failed and control fell through to the digit-run
+fallback, which then stored the same number without its prefix; and a label whose only PO
+was `CLU96` matched nothing at all and fell back to the Manager Order #, putting the same
+number in both fields. Measured over the **25 most recent** WE ARE MOORE / DATA-AXLE
+tickets, the fix changes **6** values and leaves **19** byte-identical:
+
+| Ticket | Ship Label | Was | Now |
+|---|---|---|---|
+| DSLF-1091 | `MOWP E20467/QTY/WWP/JOB 54634` | `20467` | `E20467` |
+| DSLF-1117 | `WWP f/F&F/PO# E22163/Merge #54725` | `22163` | `E22163` |
+| DSLF-981 | `SMF/E21035/Qty/Wounded Warrior/Job` | `21035` | `E21035` |
+| DSLF-1118 | `WWP f/SO/PO#/CLU96/Key S98/Qty` | `66457` (= mgr order) | `CLU96` |
+| DSLF-1082 | `Wounded Warrior/NYULH/Qty/CLP78` | `70641` (= mgr order) | `CLP78` |
+| DSLF-1077 | `WWP/Qty/Key ACF/CRS/CLL76` | `64416` (= mgr order) | `CLL76` |
+
+**Shapes deliberately left alone** because no stated rule covers them, and guessing would
+be worse than the status quo: `DD4769` (two letters, DSLF-982), `TSAGA112991` / `SGK108431`
+(letters + six digits, DSLF-1093/-1075), `CB21PH01` (DSLF-1101). All four keep their bare
+digit run. Ask before extending the token forms to cover these.
+
+`test_data_axle_ship_label.py` pins every rule and all 19 unchanged values.
 
 ## Requestor by Broker
 
