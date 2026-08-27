@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     options {
-        timeout(time: 4, unit: 'MINUTES')
+        timeout(time: 15, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '100'))
         disableConcurrentBuilds()
     }
@@ -23,6 +23,9 @@ pipeline {
         IBMI_USER         = credentials('DSLF_IBMI_USER')
         IBMI_PASSWORD     = credentials('DSLF_IBMI_PASSWORD')
         IBMI_JT400_JAR    = "${WORKSPACE}/jt400.jar"
+        // Caps the QC stage so it cannot consume the whole build. Tickets
+        // past it come back UNVERIFIED and are re-checked next run.
+        QC_BUDGET_S       = '420'
     }
 
     stages {
@@ -38,7 +41,7 @@ pipeline {
         }
         stage('Scan QC queue') {
             steps {
-                sh 'python3 qc_checker.py'
+                sh 'python3 qc_llm.py --post'
             }
         }
     }

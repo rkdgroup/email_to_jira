@@ -27,20 +27,21 @@ class DataAxleParser(BaseBrokerParser):
         # --- Mailer PO and list abbreviation from Ship Label ---
         ship_label = self._find(text, r"Ship\s*Label[:\s]*([^\n]+)")
         mailer_po = ""
-        list_abbreviation = ""
         if ship_label:
             ship_label = self._clean_nextmark_text(ship_label)
-            m = re.search(r"PO[#:\s]*([0-9]+)", ship_label, re.IGNORECASE)
+            # The PO value can carry a letter prefix: DSLF-1132's label reads
+            # "WWP f/PBC/PO# E23063/Job #54793" and a digits-only capture failed the PO#
+            # branch entirely, fell through to the bare digit-run fallback below and stored
+            # 23063 — the same number with its leading E missing. Found by qc_llm's order
+            # check. Letters are optional so "PO: 58364" is read exactly as before.
+            m = re.search(r"PO[#:\s]*([A-Z]{0,3}[0-9]{3,})", ship_label, re.IGNORECASE)
             if m:
                 mailer_po = m.group(1).strip()
-                parts = ship_label.split("/")
-                if len(parts) >= 2:
-                    list_abbreviation = parts[1].strip()
             else:
                 m = re.search(r"(\d{4,})", ship_label)
                 if m:
                     mailer_po = m.group(1)
-        
+
         if not mailer_po:
             mailer_po = manager_order_number
 

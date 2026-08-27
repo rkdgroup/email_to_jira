@@ -489,6 +489,15 @@ QC_FIELDS = [
     "customfield_12191",  # Billable Account
     "customfield_12196",  # Mail Date
     "customfield_12278",  # Other Fees
+    # Added for the order-vs-ticket creation check in qc_llm: these are the fields the
+    # broker's order PDF is authoritative on, so they are also the auto-fixable ones.
+    "customfield_12193",  # Mailer PO
+    "customfield_12195",  # Key Code
+    "customfield_12232",  # Requestor Name
+    "customfield_12233",  # Requestor Email
+    "customfield_12272",  # Seed Tracking Number
+    "customfield_12311",  # Special Seed Instructions
+    "duedate",            # Ship By
 ]
 
 
@@ -604,6 +613,13 @@ def get_ticket_qc_fields(ticket_key: str) -> dict:
             "billable_account":       _select("customfield_12191"),
             "mail_date":              raw.get("customfield_12196") or "",
             "other_fees":             raw.get("customfield_12278") or "",
+            "mailer_po":              raw.get("customfield_12193") or "",
+            "key_code":               raw.get("customfield_12195") or "",
+            "requestor_name":         raw.get("customfield_12232") or "",
+            "requestor_email":        raw.get("customfield_12233") or "",
+            "seed_tracking":          raw.get("customfield_12272") or "",
+            "special_seed":           raw.get("customfield_12311") or "",
+            "due_date":               raw.get("duedate") or "",
         }
     except Exception as e:
         log.warning("get_ticket_qc_fields failed for %s: %s", ticket_key, e)

@@ -79,7 +79,8 @@ broker must match for it to be selected (rules are evaluated in the order below)
 ├── parse_result.py         # ParseResult dataclass + validate_result()
 ├── client_lookup.py        # Client enrichment from config/*.yaml
 ├── client_profiles.py      # Locate/read client profile .doc(x) sheets
-├── qc_checker.py           # QC of SELECT PDFs on "Needs QC" tickets
+├── qc_llm.py               # LLM QC: order-vs-ticket + ticket-vs-SELECT
+├── select_pdf.py           # SELECT PDF text parser (no judgements)
 ├── qty_approval_scanner.py # Sets Requested Qty from Qty Approval emails
 ├── config_guard.py         # Fail-fast startup validation of config/*.yaml
 ├── verify_configs.py       # Deeper config audit vs source Excel/docs
@@ -110,7 +111,7 @@ broker must match for it to be selected (rules are evaluated in the order below)
 
 | Tool | Purpose |
 |------|---------|
-| `qc_checker.py` | Downloads the SELECT PDF on a "Needs QC" ticket, compares parsed fields against the ticket, and posts a pass/fail comment (never transitions the ticket). |
+| `qc_llm.py` | The QC checker. Two LLM checks per ticket: was it created correctly from the broker's order, and did the SELECT deliver it. Posts a comment; `--fix` writes the order-check corrections back. Never transitions the ticket. |
 | `qty_approval_scanner.py` | Reads Qty Approval emails / SELECT PDFs and sets the ticket's Requested Qty. |
 | `email_scanner/` | Watches the shared inbox and routes broker PDFs into `parse_pipeline` by sender domain. |
 | `ticket_scanner/` | Scheduled scan of DSLF tickets, writing reports under `ticket_scanner/reports/`. |

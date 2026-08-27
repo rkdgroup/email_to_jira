@@ -8,12 +8,14 @@ DSLF List Rental Pipeline — processes purchase order PDFs from brokers, extrac
 
 **On the default path every structured field is rule-based.** `parse_pipeline.py` uses one parser per broker and calls Claude only for `tools_polish.py`, which structurally cleans the two prose fields (Description, Omission Description) after parsing — see "Prose Polish". A PDF matching none of the 12 broker fingerprints is **flagged for review and creates no ticket** — `process_pdf` has no Claude fallback.
 
-There are now three other Claude touchpoints; know which is which before changing one:
+## API cost is set to $100, use opus 5 model (medium effort) for all LLM related tasks and don't worry about the API cost. 
+
+There are three other Claude touchpoints; know which is which before changing one:
 
 | Where | Module | Role |
 |-------|--------|------|
 | Live pipeline, every ticket | `tools_polish.py` | structural prose clean, gated, falls back to parser text |
-| Local QC, by hand | `qc_llm.py` | PASS/FAIL/UNVERIFIED on SELECT vs ticket; **not** scheduled |
+| Jenkins-scheduled QC | `qc_llm.py` | the only QC. Two checks/ticket: order-vs-ticket (fixable) + ticket-vs-SELECT |
 | Manual create, opt-in | `LLM_writes.py` | Claude extracts **all** fields for an unrecognized broker |
 | Offline, never scheduled | `ai_extract` / `compare_extraction` / `hybrid_create` | see "AI-Assisted Offline Tools" |
 
@@ -34,22 +36,25 @@ python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 `--dry-run` and `--verbose` are the **only** two CLI flags for `parse_pipeline.py`. `broker_hint` is a function argument (used by the email scanner), not a flag.
 
 **Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
-protect you if you run them. Six regression files, each a standalone runner that prints
-`PASS` lines and `ALL PASSED` (also collectible by pytest). All six are hermetic: no Jira,
-no DB, no PDFs, no network.
+protect you if you run them. Eight regression files, each a standalone runner that prints
+`PASS` lines and `ALL PASSED` (also collectible by pytest). All eight are hermetic: no
+Jira, no DB, no PDFs, no network — the QC tests never call the API.
 
 ```bash
 python test_ship_to_rules.py         # ship-to house rules + KAP FTP-boilerplate false positive
 python test_kap_fields.py            # KAP exchange qty, spaced order #, $-prefixed select
 python test_adstra_list_code.py      # ADSTRA 5-digit list code vs address digits
-python test_qc_select_parse.py       # qc_checker SELECT-PDF parsing (spaced filenames)
-python test_qc_llm_verdict.py        # qc_llm fail-closed + the FAIL-forcing verdict gate
+python test_qc_select_parse.py       # select_pdf SELECT-PDF parsing (spaced filenames)
+python test_qc_llm_verdict.py        # qc_llm fail-closed, verdict gate, auto-fix whitelist
+python test_dollar_cap_backfill.py   # Dollar Cap placement + no-duplicate re-run
+python test_data_axle_ship_label.py  # Ship Label PO# prefix vs the digit-run fallback
 python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
 ```
 
 Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap.py`,
-`parsers/adstra.py`, `qc_checker.py`, or `WO#/work_order.py`. Verified all six pass
-2026-08-25. Everything else is tested manually via `--dry-run --verbose` against real
+`parsers/adstra.py`, `parsers/data_axle.py`, `qc_llm.py`, `select_pdf.py`,
+`parse_pipeline._build_adf_description`, or `WO#/work_order.py`. Verified all eight pass
+2026-08-27. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
 in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
@@ -71,7 +76,8 @@ authoritative and update README only when a change is user-facing.
 ```bash
 # Scheduled automation (see "Scheduled Automation")
 python email_scanner/email_scanner.py                 # one poll of the shared mailbox
-python qc_checker.py [DSLF-123] [--dry-run] [--watch [MIN]]
+python qc_llm.py [DSLF-123 ...] [--status S] [--post] [--fix] [--dry-run]
+                 [--order-only|--select-only] [--model M] [--effort E] [--json f]
 python qty_approval_scanner.py [--no-email-scan] [--combined] [--output f] [--email a] [--cc b] [--subject s]
 python ticket_scanner/ticket_scanner.py [--loop N] [--reset] [--learn] [--reporter NAME]
 
@@ -79,6 +85,10 @@ python ticket_scanner/ticket_scanner.py [--loop N] [--reset] [--learn] [--report
 python config_guard.py        # fast syntax gate over config/*.yaml (exit 1 on parse error)
 python verify_configs.py      # deep audit of YAMLs vs source Excel/docs → config_audit_report.md
 python build_profile_yaml.py  # regenerate config/client_profiles.yaml from Client Profiles/
+
+# One-off correction — adds the client Dollar Cap line to existing ticket descriptions.
+# DRY RUN by default; --live writes. The durable fix is in _build_adf_description.
+python backfill_dollar_cap.py [DSLF-123 ...] [--status S] [--live]
 
 # Pure-LLM create — unrecognized brokers only (see "Pure-LLM Ticket Creation")
 # NOTE: inverted default — this one is a DRY RUN unless you pass --live.
@@ -97,7 +107,7 @@ pip install anthropic requests pymupdf pdfminer.six pymupdf4llm python-dotenv ms
 ```
 
 - `requirements.txt` now covers **every** runtime import, including `python-docx` (added in `86d03d0`; needed by `client_profiles.py`, `build_profile_yaml.py`, `verify_configs.py`) and `openpyxl`/`xlrd` for the zip-omit splitter. Jenkins installs from this file *only* (`pip3 install -q -r requirements.txt`), so a new runtime import that isn't added here breaks the scheduled run, not the local one.
-- `anthropic` is imported by the offline AI tools (`ai_extract.py`) **and by `tools_polish.py`, which runs in the live pipeline** — so `ANTHROPIC_API_KEY` is now load-bearing for scheduled runs (a missing key degrades prose quality, it does not break ticket creation).
+- `anthropic` is imported by the offline AI tools (`ai_extract.py`), by `tools_polish.py` in the live pipeline, and by `qc_llm.py` on the Jenkins cron — so `ANTHROPIC_API_KEY` is load-bearing for scheduled runs twice over. A missing key degrades prose quality and returns `UNVERIFIED` for every QC ticket; it does not break ticket creation.
 - `jaydebeapi` + `JPype1` (+ `jt400.jar`) power the IBM i work-order step.
 
 `.env` credentials by consumer:
@@ -154,16 +164,16 @@ Load-bearing behaviors that are easy to get wrong:
 
 ## Scheduled Automation
 
-Four independent entry points share the pipeline and `.env`. **Only `email_scanner` + `qc_checker` are Jenkins-scheduled** (Jenkinsfile, cron `H/5 * * * *`, 4-min timeout). `qty_approval_scanner` is run manually / emailed; `ticket_scanner` uses a Windows Task Scheduler `.bat`.
+Four independent entry points share the pipeline and `.env`. **Only `email_scanner` + `qc_llm` are Jenkins-scheduled** (Jenkinsfile, cron `H/5 * * * *`, **15-min** timeout, `QC_BUDGET_S=420`). `qty_approval_scanner` is run manually / emailed; `ticket_scanner` uses a Windows Task Scheduler `.bat`.
 
 | Tool | Trigger / scope | Behavior |
 |------|-----------------|----------|
 | `email_scanner/email_scanner.py` | Shared-mailbox `List Rental` folder | MSAL ROPC auth → per message: if `conversationId` in `thread_map.json`, add a comment to the existing ticket; else download PDFs (or synthesize one from the body) → `process_pdf(broker_hint=SENDER_BROKER_MAP[domain])` → move mail to `List Rental/Processed` or `/Failed`. `broker_hint` short-circuits fingerprint detection. |
-| `qc_checker.py` | `Needs QC` tickets | Downloads the most-recent SELECT PDF, posts a PASS/FAIL comment. **Never transitions.** Pass = `PASS count ≥ 4` AND no hard-required fail (hard = Client Database + Manager Order #, plus Records Selected when the count is 0 or unparseable); WARN rows are dropped. Also checks the `INCLUDE BY ACCOUNT #:` universe is not narrower than the order's ask. **Makes no API call** — the LLM checker is separate. ⚠ See "the pass threshold" below: a non-hard FAIL does not block a pass. |
+| `qc_llm.py` | `Needs QC` tickets (`--status` for any other queue) | Two LLM checks per ticket — was it **created** right from the broker order, and did the **SELECT** deliver it. Posts a comment on every ticket checked, pass included. **Never transitions.** `--fix` writes the order check's field corrections back (not enabled on the cron). Verdict is the worse of the two; `UNVERIFIED` means QC did not run and is **not** a pass. See "QC" below. |
 | `qty_approval_scanner.py` | `Ready to Send for Qty Approval` tickets | Reads `QTY APPROVAL/<order#>` emails → sets Requested Quantity (`cf[12271]`); SELECT-PDF `TOTAL RECORDS SELECTED` fallback. **Never transitions.** Emails a per-mailer qty digest; single-card subjects prefix the list short code via `resolve_list_code` (from `dslf_list_and_mailer_names.txt`). |
 | `ticket_scanner/ticket_scanner.py` | New DSLF tickets (issue# > saved state) | **Read-only** audit → report under `ticket_scanner/reports/`. `--learn` mines List Name→db_code patterns into `learned_patterns.json` (enrich tier 5). |
 
-Notes: `email_scanner.main()` has **no argparse** — `run_email_scanner.bat --loop` is a silent no-op (single scan). SKIP_DB_CODES emails are deliberately **left in `List Rental`** for manual handling (not moved). `email_scanner.py` and `qc_checker.py` call `config_guard.validate_configs_or_exit()` before doing work.
+Notes: `email_scanner.main()` has **no argparse** — `run_email_scanner.bat --loop` is a silent no-op (single scan). SKIP_DB_CODES emails are deliberately **left in `List Rental`** for manual handling (not moved). `email_scanner.py` and `qc_llm.py` call `config_guard.validate_configs_or_exit()` before doing work.
 
 ### Email scanner specifics
 
@@ -217,6 +227,16 @@ On every **live** create, `_create_and_link_work_order()` imports `WO#/work_orde
   on one connection; it also reads the shop's `PEPBK#` counter as an allocation floor (read
   only — the ARWRKSCH trigger advances it) so it won't take a number order-entry reserved
   ahead of the committed MAX. `WO#/test_work_order_allocation.py` pins this loop.
+- **`jt400.jar` is auto-discovered, not configured** (`WO#/base.py:_resolve_jt400`): `IBMI_JT400_JAR`
+  first, then `/opt/jt400/jt400.jar`, the Jenkins workspace
+  `/var/lib/jenkins/workspace/DSLF-Email-Scanner/jt400.jar`, the project root, and finally a
+  hardcoded Windows RDi plugin path. Jenkinsfile sets `IBMI_JT400_JAR = "${WORKSPACE}/jt400.jar"`.
+  Adding a machine means adding a path here or setting the env var — the jar is **not** in the repo.
+- Only `IBMI_PASSWORD` is truly required: `IBMI_HOST` and `IBMI_USER` fall back to hardcoded
+  defaults (`SYSTEM5.DATA-MANAGEMENT.COM`, `DMISUVAM`), so a missing host silently uses prod.
+- There is a **second** `WO#/requirements.txt` (`jaydebeapi`/`JPype1`/`python-dotenv`) that
+  Jenkins never installs — it runs `pip3 install -r requirements.txt` on the root file only.
+  Keep the three pins in sync with root or the scheduled run misses them.
 
 ## Prose Polish (`tools_polish.py`) — the live LLM step
 
@@ -289,122 +309,151 @@ exactly, where this reads it fresh every run. Not scheduled; nothing calls it au
   schema, not open-ended reasoning); `ai_extract`'s own Opus/high defaults are left alone for
   `compare_extraction` and `hybrid_create`. Override with `--model` / `--effort`.
 
-## LLM QC (`qc_llm.py`) — local, manual, not scheduled
+## QC (`qc_llm.py`) — one file, all LLM, both questions
 
-**Two separate checkers, and only one runs on Jenkins:**
+**There is exactly one QC checker and it makes API calls.** The 14 rule-based checks in
+`qc_checker.run_qc_checks()` are gone; `qc_checker.py` is deleted. Its SELECT-PDF regexes
+survive in `select_pdf.py`, which reads printed values and makes **no judgements** — do not
+grow a comparison back into it.
 
-| | `qc_checker.py` | `qc_llm.py` |
+`qc_llm.py` asks two questions about the same ticket, in one run, with one LLM call each:
+
+| | ORDER check | SELECT check |
 |---|---|---|
-| Trigger | Jenkins cron, every 5 min | local, by hand |
-| Verdict from | the 14 rule checks | the model |
-| API calls | **none** | one per ticket |
-| Posts to Jira | yes, always | only with `--post` |
+| Question | was the ticket **created** right from the broker order? | did the **pull** deliver the order? |
+| Source of truth | the order PDF attached to the ticket | the SELECT report |
+| Runs when | a non-SELECT PDF matches a broker fingerprint | a `*SELECT*.pdf` is attached |
+| Findings carry a fix | **yes** — `fix_field` / `fix_value`, applied with `--fix` | **no**, by design |
+| Prompt | `_SYSTEM_ORDER` (absorbed from `knowledge.md`) | `_SYSTEM_SELECT` |
 
-`qc_checker` makes **no API call at all** — no `qc_llm` import, no key needed, deterministic
-and inside the build timeout. Don't wire the LLM back into it without also raising the
-Jenkinsfile 4-minute timeout; at ~35s/ticket a queue of five overruns it.
-
-`qc_llm` is the deeper check you run by hand when a ticket looks wrong. It briefly decided
-the scheduled verdict on 2026-08-24 and was moved back out the same day.
-
-The question it answers: **the ticket is the order, the SELECT report is the delivery — did
-the delivery satisfy the order?** It works demand-first (take each thing the ticket asks
-for, find evidence in the SELECT that it happened) rather than diffing value pairs, because
-the common defect is a criterion that was never applied at all, not two values that differ.
+The ticket verdict is the **worse** of the two, and `UNVERIFIED` outranks `FAIL` — not
+knowing is worse than knowing it failed.
 
 ```bash
-python qc_llm.py                 # every ticket in Needs QC, print only
-python qc_llm.py DSLF-1075       # one ticket (accepts several keys)
-python qc_llm.py --post          # also post the verdict as a Jira comment
+python qc_llm.py                              # scan Needs QC, print only
+python qc_llm.py DSLF-1075 DSLF-1082          # named tickets
+python qc_llm.py --status "Needs Assignment"  # the creation-check queue
+python qc_llm.py --post                       # comment on every ticket checked
+python qc_llm.py --post --fix                 # also write the order-check corrections
+python qc_llm.py --order-only | --select-only | --dry-run
 python qc_llm.py --model M --effort low|medium|high|xhigh|max --json FILE
 ```
 
-- **Three verdicts, and the third is the point.** `PASS`/`FAIL` are the model's;
+- **Jenkins runs `python3 qc_llm.py --post`**, not `--fix`. Two LLM calls per ticket:
+  measured **50.7s** for one ORDER check on DSLF-1132 (opus-5 @ high), so budget ~100s per
+  ticket for both. The build timeout went **4 min → 15 min** and the Jenkinsfile sets
+  `QC_BUDGET_S=420`, which is about **4 tickets per run** — enough for a normal cron tick,
+  and anything past it comes back `UNVERIFIED` and is retried next run rather than being
+  skipped. The cap also stops QC starving the email scanner queued behind it in the same
+  build. `disableConcurrentBuilds()` means an overrunning build makes the next cron tick
+  skip, not pile up.
+- **First live run (2026-08-27, DSLF-1132) found a real parser defect**: Mailer PO stored
+  as `23063` where the Ship Label reads `PO# E23063` — the leading letter was dropped. The
+  ORDER check proposed `mailer_po: 23063 -> E23063` and `--fix --dry-run` validated it.
+  That is a `SimioCloudParser`/`DataAxleParser` Ship-Label bug, not a QC bug — the parser
+  fell through to the "first 4+ digit run in the label" branch instead of taking the `PO#`
+  value whole.
+- **A comment is posted on every ticket checked, pass included** — a clean ticket ends with
+  "Checked and correct — no action needed." Silence used to mean "clean"; now it means
+  "not checked".
+- **Three verdicts and the third is the point.** `PASS`/`FAIL` are the model's;
   **`UNVERIFIED` is the code's** and is returned by every failure path — no API key,
   timeout, exhausted budget, API error, refusal, unreadable or oversize PDF, failed Jira
-  read. `UNVERIFIED` is **not a pass**: it means QC did not run. This inversion is the
-  whole reason the promotion is safe. As the advisory pass every failure returned `[]`,
-  which was harmless while the rules decided and would have silently passed the entire
-  queue once they stopped. `test_qc_llm_verdict.py` pins it.
+  read, and a prompt that could not be assembled. `UNVERIFIED` is **not a pass**: QC did
+  not run. `test_qc_llm_verdict.py` pins every path.
+- **An `UNVERIFIED` comment does not count as "already checked".** `_last_qc_comment_time`
+  returns `None` when the last QC comment reads `VERDICT: UNVERIFIED`, so a ticket the
+  budget cut off comes back next run. Without that, the re-run guard would see an unchanged
+  ticket carrying a QC comment and skip it forever. The guard greps the report text, so
+  `format_report` and `_last_qc_comment_time` are coupled — a test pins them together.
 - **The gate overrides the model, not the reverse.** `_reconcile()` forces `FAIL` whenever
   any finding is `WRONG` or `BLOCKING-BLANK`, whatever the model wrote in `verdict`, and
-  records `verdict_forced`. A model cannot list a wrong Client Database and still pass the
-  ticket. `NOTE` never forces a fail. Same philosophy as `tools_polish._validate`.
-- **Severities** are knowledge.md's: `WRONG` (contradicts the order or a house rule),
-  `BLOCKING-BLANK` (something required to judge or fulfil is absent — this is also where
-  "I could not verify it either way" goes), `NOTE` (worth a human's eye).
+  records `verdict_forced`. `NOTE` never forces a fail. Same philosophy as
+  `tools_polish._validate`.
 - **`_profile_context()` sends the client's `dollar_cap` and it is load-bearing.** `$10+` on
   an order is **not** an open-ended floor — it means $10 through *that client's* contracted
-  cap, recorded as `dollar_cap` in `config/client_profiles.yaml` (60 clients at `$99.99`, 48
-  at `$49.99`, a tail at `$249.99`/`$499.99`/`$999.99`, some `NO CAP`, 37 `VARIES PER
-  ORDER`). So a SELECT reading `RECENT PAYMENT AMT. = 10.00 THRU 99.99` against a `$10+`
-  order is **correct** for a `$99.99` client, and the report header saying `$10+` while the
-  criteria line says `10.00 THRU 99.99` is not a contradiction. Without the cap in the
-  prompt every correctly-executed pull reads as lost records — that is exactly what the
-  first live run did, failing four tickets (DSLF-1077/1075/1073/1082) on it. The band test
-  runs in the direction that loses records: a ceiling **below** the cap is `WRONG`, at it is
-  fine, and no profile on file means unverifiable rather than wrong.
-- `_select_context()` passes the regex-parsed `select_data` as an explicitly **unreliable
-  hint** — "a blank here does NOT mean the value is absent from the report; where it
-  disagrees with the PDF, the PDF wins." Without that caveat the model treats a failed
-  regex as a missing field and invents findings.
-- **`_SYSTEM` carries a do-not-report list** for the known-correct-by-design cases:
-  billable-vs-Client-DB prefix mismatch, house-rule ASCII Fixed/FTP, auto STATE OMITS,
+  cap (60 clients at `$99.99`, 48 at `$49.99`, a tail at `$249.99`/`$499.99`/`$999.99`, some
+  `NO CAP`, 37 `VARIES PER ORDER`). A SELECT reading `10.00 THRU 99.99` against a `$10+`
+  order is **correct** for a `$99.99` client. Without the cap every correctly-executed pull
+  reads as lost records — that is exactly what the first live run did, failing
+  DSLF-1077/1075/1073/1082 on it. The band test runs in the direction that loses records: a
+  ceiling **below** the cap is `WRONG`, at it is fine, and no profile on file means
+  unverifiable rather than wrong. The cap is now also written onto the ticket itself — see
+  Field Rules.
+- **`claude-opus-5` @ high effort.** A wrong database sends the wrong donor file to the
+  wrong company, so accuracy beats speed and cost. `QC_BUDGET_S` defaults to 900s locally.
+- Both prompts carry a **do-not-report list** for the known-correct-by-design cases
+  (billable-vs-Client-DB prefix mismatch, house-rule ASCII Fixed/FTP, auto STATE OMITS,
   blank Mail Date/File Format/Other Fees/Key Code, qty mismatch under All Available,
   profile-sourced suppressions absent from the SELECT, Seed Tracking == Manager Order #,
-  Seed DB = Client DB + S. Add new known-good patterns here or QC fills with noise.
-- **`claude-opus-5` @ high effort**, on knowledge.md's reasoning now that this call is the
-  verdict: a wrong database sends the wrong donor file to the wrong company, so accuracy
-  beats speed and cost. Measured ~24–40s per ticket.
-- **`QC_BUDGET_S` is 600s**, sized for a full queue run by hand rather than for the
-  Jenkins build. It is the reason this must not be wired back into `qc_checker` without
-  raising the Jenkinsfile 4-minute timeout: at ~35s/ticket a queue of five overruns it,
-  and with the rules no longer deciding there is no fallback — ticket 4 onward would
-  come back `UNVERIFIED`. Override with the `QC_BUDGET_S` env var; `0` disables the cap.
+  Seed DB = Client DB + S, and the hosted-list case below). Add new known-good patterns
+  there or QC fills with noise.
 
-**`knowledge.md` is a different agent, not this one.** It specs a hosted checker for
-whether a ticket was *created* correctly, against the **order** PDF, on **Needs Assignment**,
-reporting by **email**; it says outright it does not check SELECT files. Reuse its field map,
-severities and judgement rules — but **not** its line-161 claim that KAP titles are
-`P.O. {DL#} {LIST NAME}` "by design". That was fixed in `39d94bc`; treating it as design
-would suppress a real defect.
+### What the deleted rule checker knew, and where it went
 
-## ⚠ The QC pass threshold — a non-hard FAIL does not block a pass
+Its verdict was `pass_count >= 4 and not hard_fails`. **Failures were never counted and
+never subtracted**, so a ticket could carry any number of non-hard FAILs and still pass on
+four passes — reproduced at **4 passes / 5 fails → `QC PASSED`**. The denominator moved too:
+WARN rows were dropped entirely, so `total_checks` ranged 9–15 and a fixed absolute
+threshold meant different things on different tickets. That is why it is gone rather than
+patched.
 
-`run_qc_checks()` ends with:
+Everything below it knew is now prompt text in `_SYSTEM_SELECT`, and
+`test_qc_llm_verdict.py` asserts each one is still present:
 
-```python
-pass_count   = sum(1 for s, _, _ in checks if s == "PASS")
-overall_pass = (pass_count >= QC_PASS_THRESHOLD) and (not hard_fails)   # threshold = 4
-```
+- a completed SELECT can never legitimately return **0 records**
+- **Nth** means the count must not exceed the requested quantity; **All Available** skips
+  the quantity comparison entirely
+- the **include set** is judged in one direction only — a standing universe is routinely
+  *wider* than any one order, and only *narrower* (higher floor, shorter window) is wrong,
+  because those donors were never in the pool
+- **flags/states/zips are asymmetric**: an omit the ticket requires and the SELECT skipped
+  is `WRONG`; an extra omit in the SELECT is a `NOTE`
+- flags deferred to prose (`FLAG OMITS: FLAGS LISTED BELOW IN SPECIAL INST.`) are
+  `BLOCKING-BLANK`, not a pass — they cannot be verified at all
+- ADSTRA's published per-seed-database flag defaults still load from
+  `config/adstra_omit_database.yaml` (`_adstra_flag_context`) as a third source
 
-**Failures are never counted and never subtract.** Only `hard_fails` blocks, and that set is
-just Client Database + Manager Order # (plus Records Selected when 0/unparseable). So four
-passes are enough to pass a ticket carrying any number of other FAILs — including
-`Include Set` ("donors giving $10–$50 were never in the pool"), `Seed Database`,
-`Selection Criteria`, `File Format` and `Shipping Method`. Reproduced 2026-08-24: a
-constructed ticket scored **4 passes / 5 fails → `QC PASSED`**.
+**The live incident it left open is now handled as design.** Measured over the 30
+most-recent tickets with a SELECT PDF, the only surviving non-hard failures were two
+`List Name` rows — DSLF-1066 (SELECT customer `AREIVIM`, ticket list `3-HOC HEAL OUR
+CHILDREN`, db `A12D`) and DSLF-1083 (SELECT customer `NEWPORT CREATIVE SWEEPS MASTER`,
+ticket list `3-SDCA CHARITABLE APPEALS MF`, db `N15R`). Both are **hosted lists**: the
+SELECT prints the host/master account while the ticket names the rented list, and the two
+legitimately differ. `_SYSTEM_SELECT` states this — the database **code** must still match,
+and a name-only difference is a `NOTE`. DSLF-1083 also carried a real `File Format` defect
+(ASCII Delimited where the destination forces ASCII Fixed) which the check still reports.
 
-The denominator also moves: WARN rows are dropped from `checks` entirely, so `total_checks`
-ranges 9–15 across real tickets. A fixed absolute threshold against a variable denominator
-does not mean the same thing on two different tickets.
+### Auto-fix (`--fix`) — order-check findings only
 
-The fix is `overall_pass = not hard_fails and no FAIL at all`. It was **not** applied,
-because it changes the verdict on a 5-minute cron and the remaining failures need a domain
-call first — measured over the 30 most-recent tickets with a SELECT PDF, after the
-`_desc_has_dollar` fix, exactly two still fail a non-hard check:
+`apply_fixes()` collects every finding whose `fix_field` is in the `_FIXABLE` whitelist and
+writes them in **one PUT**. What it refuses, and why the refusals are the design:
 
-- **DSLF-1066** — `List Name`: SELECT customer is `AREIVIM`, ticket list is
-  `3-HOC HEAL OUR CHILDREN`, db `A12D`.
-- **DSLF-1083** — `List Name`: SELECT customer is `NEWPORT CREATIVE SWEEPS MASTER`, ticket
-  list is `3-SDCA CHARITABLE APPEALS MF`, db `N15R`; plus `File Format` ASCII Delimited
-  where the destination forces ASCII Fixed (that one looks like a real defect).
+- **`client_db` / `seed_db` / `billable_account` are never writable.** They come from
+  `client_lookup`, not off the order; they are select fields resolved against a live
+  createmeta lookup; and a wrong write here is the worst outcome in this system. Reported,
+  never written.
+- **`description` / `omission` are never writable** — ADF prose owned by the parsers and
+  `tools_polish`, and a field-level overwrite flattens the bullet structure
+  `_build_adf_description` builds.
+- A **select option** Jira cannot resolve is dropped server-side *without failing the
+  request*, so `_validate_fix` checks every option against `AVAILABILITY_RULE_OPTIONS` /
+  `FILE_FORMAT_OPTIONS` / `SHIPPING_METHOD_OPTIONS` and sends `{"id": ...}`.
+- `list_manager` must be one of the 14 (read from `client_lookup._MANAGER_TO_FILE`), dates
+  must be `YYYY-MM-DD`, quantities must be plausible positive integers, and `seed_tracking`
+  must equal the Manager Order # or it is refused.
+- **`NOTE`-severity findings are never applied**, an empty `fix_value` is refused (blanking
+  a field is not a fix), and a second fix for the same field is ignored.
+- Every refusal is printed in the QC comment under `NOT APPLIED` with its reason, so a
+  skipped fix is visible rather than silent.
 
-Both `List Name` rows are the same question: for a hosted list the SELECT prints the
-**host/master account** name while the ticket names the **rented list**, and those
-legitimately differ. If that is by design the check needs to compare against the host
-rather than the list name — otherwise it is the wrong-client check knowledge.md calls the
-highest-value one, and these two are live incidents.
+**`knowledge.md` has been absorbed, not referenced.** It specced a separate hosted agent for
+whether a ticket was *created* correctly against the **order** PDF, reporting by email. That
+job is now the ORDER check: its field map, severities, broker PO table, requestor defaults,
+known-missing-Jira-options list and both wrong-client incidents live in `_SYSTEM_ORDER`. Its
+line-161 claim that KAP titles are `P.O. {DL#} {LIST NAME}` "by design" was **not** carried
+over — that was a bug fixed in `39d94bc` which 64 tickets carried, and
+`test_qc_llm_verdict.py` asserts the exemption never comes back.
 
 ## AI-Assisted Offline Tools
 
@@ -421,7 +470,8 @@ Auxiliary, **not part of the live pipeline**. All require `ANTHROPIC_API_KEY` an
 ## Field Rules
 
 - **Title**: `{LIST NAME} - {MAILER NAME} - {MANAGER ORDER NUMBER}` (never Mailer PO). e.g. `JUDICIAL WATCH DONORS - HERITAGE FOUNDATION - W74926JW`
-- **Description**: an **ADF document** of `segment_criteria` (selection/select portion of the PDF) plus the client profile's `Select By`, `Standard Suppressions`, and `Special Instructions`. It is **not** the raw PDF text — the raw order text is passed separately as `create_jira_ticket(order_text=…)` and used only for the Saturn ship-to rule; the PDF itself is attached.
+- **Description**: an **ADF document** of `segment_criteria` (selection/select portion of the PDF) plus the client profile's `Select By`, `Dollar Cap`, `Standard Suppressions`, and `Special Instructions`. It is **not** the raw PDF text — the raw order text is passed separately as `create_jira_ticket(order_text=…)` and used only for the Saturn ship-to rule; the PDF itself is attached.
+  - **`Dollar Cap:` is written on every ticket that has one on file**, immediately after `Select By:`, verbatim from the profile's `dollar_cap` (`$99.99`, `NO CAP`, `VARIES PER ORDER`, … — never normalised, each means something different). Without it neither a human nor `qc_llm` can tell a correct capped pull (`10.00 THRU 99.99` against a `$10+` order) from one that quietly lost every donor above the cap. Tickets created before this ran are corrected by `backfill_dollar_cap.py`; a client with no cap recorded gets no line.
   - **Indentation in `segment_criteria` is structural, not cosmetic.** In `_build_adf_description` a run of indented lines becomes an ADF `bulletList` under the paragraph above it — the same shape the profile blocks use. This is the contract `tools_polish` writes to when it labels a `Selects:` group. Jira's renderer collapses leading whitespace, so an indent that stays a plain string is invisible in the UI; it has to become real ADF structure.
 - **Omission Description** (`cf[12270]`, ADF): what is omitted/suppressed — flags, states, zips/SCFs, "OMIT PREVIOUS ORDER", "1 PER HOUSEHOLD", plus profile `FLAG OMITS:`. Accepts a pre-built ADF dict **or** a plain string; a plain string is split into **one paragraph per line** so criteria don't render as a run-on blob.
 - **List Manager** = one of these exact values: ADSTRA, AALC, AMLC, CELCO, CONRAD, DATA-AXLE, KAP, MARY E GRANGER, NEGEV, NAMES IN THE NEWS, RKD, RMI, WASHINGTON LISTS, WE ARE MOORE
@@ -454,8 +504,19 @@ Run at the top of `create_jira_ticket` and **override** whatever the parser prod
 | CONRAD DIRECT | BROK/MAIL PO: field | PURCHASE ORDER NO |
 | Names in News | 6-7 digit number | LR # |
 | CELCO | ORDER # | ORDER # |
-| SimioCloud | Ship Label `PO#`, else first 4+ digit run in the label, else falls back to Order# | Order# (inherits `DataAxleParser.parse`) |
+| SimioCloud | Ship Label `PO#` **including a letter prefix** (`PO# E23063` -> `E23063`), else first 4+ digit run in the label, else falls back to Order# | Order# (inherits `DataAxleParser.parse`) |
 | RKD / AMLC | `Client P.O.:` — in AMLC's columnar layout the value can sit up to 25 lines *below* its label | first 5-6 digit number in the first 10 lines (Service Bureau No. / Purchase Order No.) |
+
+**A failed match in the Ship Label becomes a plausible wrong answer, not a blank.**
+Until 2026-08-27 the `PO#` capture was digits-only, so a letter-prefixed value did not
+match at all and control fell through to the "first 4+ digit run anywhere in the label"
+fallback — which then found the digits of the value the first branch had just rejected and
+stored them without the prefix. DSLF-1132's label reads `WWP f/PBC/PO# E23063/Job #54793`
+and the ticket held `23063`. `qc_llm`'s ORDER check found it on its first live run; the
+parser is fixed and DSLF-1132 was corrected to `E23063`. **Other SimioCloud/Data Axle
+tickets created before the fix may carry the same truncation** — it can only be confirmed
+against each order PDF, and `python qc_llm.py --status "<queue>" --order-only` is the way
+to sweep for it. `test_data_axle_ship_label.py` pins both branches.
 
 ## Requestor by Broker
 
@@ -532,6 +593,19 @@ From db_code (e.g., F41D): Billable Account = db_code without suffix (F41); Clie
 1. Create `parsers/my_broker.py` inheriting from `BaseBrokerParser`; implement `parse(text) -> ParseResult`.
 2. Register in `PARSER_REGISTRY` in `parsers/__init__.py`.
 3. Add detection regex to `_RULES` in `parsers/__init__.py` — **positioned** so its patterns neither shadow nor are shadowed by an existing broker (more-specific/ambiguous formats first).
+
+## Project Subagents (`.claude/agents/`)
+
+Two repo-local agents, both `model: opus` and both **write-capable**
+(`Read, Write, Edit, Bash, Glob, Grep, Agent, WebSearch, WebFetch`):
+
+| Agent | Scope |
+|-------|-------|
+| `jira_Auto` | General DSLF pipeline work — parse broker PDFs, fix parsers, manage tickets. |
+| `bff_agent` | BrightFocus Foundation orders only (ADSTRA-brokered, ADR/MDR/NGR programs) and their BFF-specific parsing quirks. |
+
+They can create and edit live Jira tickets through `tools_jira`, same as the pipeline. Prefer
+`bff_agent` when the order is BFF — it carries the program-level knowledge `jira_Auto` does not.
 
 ## Github Rules
 

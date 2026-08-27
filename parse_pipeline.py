@@ -358,7 +358,8 @@ def finalize_and_create(result, pdf_path: str, text: str,
     if verbose or dry_run:
         _print_result(result, select_by=profile_data.get("select_by", ""),
                       omission_description=kwargs.get("omission_description", ""),
-                      segment_criteria=polished_criteria)
+                      segment_criteria=polished_criteria,
+                      dollar_cap=profile_data.get("dollar_cap", ""))
 
     # Render the omission as ADF last — after _print_result, which expects a plain string.
     # The profile blocks lead; the order's own omit lines (FLAG OMITS already appended
@@ -537,7 +538,7 @@ def _build_adf_omission(omission_text: str, profile_data: dict = None) -> dict:
 
 
 def _build_adf_description(result, profile_data: dict = None, select_by: str = "",
-                           segment_criteria: str = None) -> dict:
+                           segment_criteria: str = None, dollar_cap: str = "") -> dict:
     """Build ADF description: segment criteria from PDF, plus profile suppressions/instructions as bullet lists.
 
     segment_criteria overrides result.segment_criteria when supplied (the polished text
@@ -573,6 +574,16 @@ def _build_adf_description(result, profile_data: dict = None, select_by: str = "
     if resolved_select_by:
         content.append(para(f"Select By: {resolved_select_by}"))
 
+    # Dollar cap from the profile, stated verbatim. "$10+" on an order is not an
+    # open-ended floor — it means $10 through THIS client's contracted cap, and without
+    # the cap on the ticket neither a human nor qc_llm can tell a correct pull
+    # ("10.00 THRU 99.99") from one that lost records. Printed as recorded, never
+    # normalised: the profiles say "$99.99", "NO CAP", "VARIES PER ORDER" and
+    # "No transaction $ available", and each means something different.
+    resolved_cap = dollar_cap or profile_data.get("dollar_cap", "")
+    if resolved_cap:
+        content.append(para(f"Dollar Cap: {resolved_cap}"))
+
     # Standard Suppressions as bullet list
     std_sup = profile_data.get("standard_suppressions") or []
     if std_sup:
@@ -592,7 +603,7 @@ def _build_adf_description(result, profile_data: dict = None, select_by: str = "
 
 
 def _print_result(result, select_by: str = "", omission_description: str = "",
-                  segment_criteria: str = None) -> None:
+                  segment_criteria: str = None, dollar_cap: str = "") -> None:
     """Pretty-print all extracted Jira fields."""
     W = 22  # label column width
     print("\n" + "=" * 65)
@@ -632,7 +643,8 @@ def _print_result(result, select_by: str = "", omission_description: str = "",
 
     print("-" * 65)
     print(f"  {'Description':<{W}}:")
-    adf = _build_adf_description(result, select_by=select_by, segment_criteria=segment_criteria)
+    adf = _build_adf_description(result, select_by=select_by, segment_criteria=segment_criteria,
+                                 dollar_cap=dollar_cap)
     for node in adf.get("content", []):
         if node["type"] == "paragraph":
             text = "".join(c.get("text", "") for c in node.get("content", []))
