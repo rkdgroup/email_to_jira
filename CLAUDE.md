@@ -356,6 +356,15 @@ python qc_llm.py --model M --effort low|medium|high|xhigh|max --json FILE
 - **A comment is posted on every ticket checked, pass included** — a clean ticket ends with
   "Checked and correct — no action needed." Silence used to mean "clean"; now it means
   "not checked".
+- **The comment is one line per finding, and length is enforced in two places.**
+  `_one_line` renders `N. SEVERITY  Field: have -> want (source: …)` and budgets the whole
+  line at 110 chars, dropping the source quote first and then shortening the values — a
+  per-field cap alone still wrapped, and a wrapped line in a Jira comment is what made the
+  original five-labelled-rows-per-finding format unreadable. The prompts do the other half:
+  value fields hold values only, `issue` is one clause of ≤15 words and must add something
+  the values do not already show, `delivered` ≤20 words. A 4-finding ticket is ~14 lines;
+  it used to be ~40. `BLOCKING-BLANK` prints as `BLANK` for width — the schema value is
+  unchanged.
 - **Three verdicts and the third is the point.** `PASS`/`FAIL` are the model's;
   **`UNVERIFIED` is the code's** and is returned by every failure path — no API key,
   timeout, exhausted budget, API error, refusal, unreadable or oversize PDF, failed Jira

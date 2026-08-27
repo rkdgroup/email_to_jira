@@ -294,7 +294,7 @@ def test_pass_report_says_so_explicitly():
                   "model": "m", "elapsed_s": 2.0},
         "order_filename": "order.pdf"})
     check("clean ticket is told so", "Checked and correct" in report, True)
-    check("no-findings line present", "No discrepancies found." in report, True)
+    check("no-findings line present", "nothing wrong found" in report, True)
 
 
 def test_nothing_attached_is_not_a_pass():
@@ -311,7 +311,7 @@ def test_forced_fail_is_disclosed():
                                  "ticket_value": "A", "select_value": "B",
                                  "expected": "A", "issue": "mismatch"}]},
         "select_filename": "S.pdf"})
-    check("forced verdict disclosed", "forced to FAIL" in report, True)
+    check("forced verdict disclosed", "verdict forced" in report, True)
     check("both sides quoted", "A" in report and "B" in report, True)
 
 
@@ -323,8 +323,8 @@ def test_fix_section_distinguishes_applied_from_refused():
         "order_filename": "o.pdf",
         "fixes": {"applied": ["mailer_po: (empty) -> CRU 924-105"],
                   "refused": ["client_db: not auto-fixable"]}})
-    check("applied fixes listed", "APPLIED" in report, True)
-    check("refused fixes listed", "NOT APPLIED" in report, True)
+    check("applied fixes listed", "WOULD FIX" in report or "FIXED" in report, True)
+    check("refused fixes listed", "SKIPPED" in report, True)
 
 
 # ---------------------------------------------------------------------------

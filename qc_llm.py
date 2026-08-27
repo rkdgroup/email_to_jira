@@ -204,7 +204,17 @@ stated — uncertainty is a finding of its own, never a silent pass and never a 
 presented as fact.
 
 Quote every value verbatim from the ticket or the document. Never paraphrase a field value.
-A clean pass is a normal and common outcome — do not invent a finding to fill the list."""
+A clean pass is a normal and common outcome — do not invent a finding to fill the list.
+
+LENGTH — these findings are read in a Jira comment, so be brief
+"ticket_value", "select_value" and "expected" hold VALUES ONLY, quoted verbatim. No
+commentary, no parenthetical explanation, no restating the rule inside them.
+"issue" is at most ONE clause of 15 words saying what is wrong. It must add something the
+values do not already show — if the two values make the problem obvious on their own, leave
+"issue" empty. Never explain the rule, never re-quote a value you already put in a value
+field, never justify your severity.
+"delivered" is one clause of at most 20 words.
+Long findings get skimmed and the real defect gets missed, so length costs accuracy."""
 
 
 _SYSTEM_SELECT = """You are the quality check on a DSLF list-rental fulfilment ticket (Data \
@@ -343,9 +353,9 @@ FAIL if any finding is WRONG or BLOCKING-BLANK. PASS only when the SELECT demons
 delivered the order and nothing outstanding remains. Never pass a ticket whose central
 demand you could not verify: say what is unverified instead.
 
-In "delivered", state in one sentence what was asked and what arrived, naming the numbers.
-Leave "fix_field" and "fix_value" out of your thinking here — this check proposes no
-writes."""
+In "delivered", name the ask and the delivery in one short clause with the numbers, e.g.
+"asked 5,000 Nth, pulled 4,847". Leave "fix_field" and "fix_value" out of your thinking
+here — this check proposes no writes."""
 
 
 _SYSTEM_ORDER = """You are checking whether a DSLF list-rental Jira ticket was CREATED \
@@ -506,9 +516,10 @@ WHAT TO CHECK
 
 VERDICT
 FAIL if any finding is WRONG or BLOCKING-BLANK. PASS when the ticket faithfully reproduces
-the order. In "delivered", state in one sentence what the order asked for and whether the
-ticket reproduces it. Put the order's own wording in "select_value" — for this check that
-field means "what the ORDER says"."""
+the order. In "delivered", name the order in one short clause, e.g. "KAP DL995, CRU Inner
+City, 5,000 Nth". Put the order's own wording in "select_value" — for this check that field
+means "what the ORDER says" — and keep it to the shortest fragment that proves the point,
+not the whole line off the page."""
 
 
 # ---------------------------------------------------------------------------
@@ -928,38 +939,85 @@ def find_order_attachment(attachments: list, ticket_key: str = "") -> tuple:
 _SEV_ORDER = {"WRONG": 0, "BLOCKING-BLANK": 1, "NOTE": 2}
 
 
+_SEV_SHORT = {"BLOCKING-BLANK": "BLANK"}
+
+
+def _one_line(i: int, f: dict) -> list:
+    """One finding as one line, plus a second only when the reason adds something.
+
+    The old layout spent five lines per finding on labelled Ticket/Source/Expected/Why
+    rows. On a five-finding ticket that is 25 lines of scaffolding for about six facts, and
+    a reader scrolls instead of reading. The values carry the meaning, so they go inline:
+        3. WRONG  Mailer PO: 23063 -> E23063
+           order reads "PO# E23063", leading E dropped
+    """
+    def short(v, n=64):
+        """Bound the line regardless of what the model put in the field."""
+        v = " ".join(str(v or "").split())
+        return v if len(v) <= n else v[:n - 1].rstrip() + "…"
+
+    sev   = str(f.get("severity", "")).upper()
+    label = _SEV_SHORT.get(sev, sev)
+    field = f.get("field") or "?"
+
+    def build(n, with_source):
+        have = short(f.get("ticket_value"), n)
+        src  = short(f.get("select_value"), n)
+        want = short(f.get("expected"), n) or src
+        parts = []
+        if have:
+            parts.append(have)
+        if want and want != have:
+            parts.append(f"-> {want}")
+        # The source quote only earns space when it is not just where `want` came from,
+        # and when it is an actual value rather than a bare label off the page ("Key Code:").
+        if (with_source and src and src not in (have, want) and want not in src
+                and not src.endswith(":")):
+            parts.append(f"(source: {src})")
+        return f"{field}: {' '.join(parts)}" if parts else field
+
+    # One finding, one readable line. A per-field cap is not enough on its own: two long
+    # values plus a source quote still add up past any sane width, and a wrapped line in a
+    # Jira comment is what made the old format unreadable. Budget the whole line instead,
+    # dropping the least load-bearing part first.
+    head = build(64, True)
+    if len(head) > 110:
+        head = build(64, False)
+    if len(head) > 110:
+        head = build(40, False)
+
+    out = [f"{i}. {label:<6} {head}"]
+    # The reason is worth a line only when it says more than the values already did.
+    why = short(f.get("issue"), 150)
+    if why and why.lower() not in head.lower():
+        out.append(f"   {why}")
+    return out
+
+
 def _format_one(result: dict, title: str) -> list:
-    """One check's section of the comment."""
+    """One check's section of the comment: a heading line, then one line per finding."""
     verdict = result.get("verdict", UNVERIFIED)
-    lines = [f"{title}: {verdict}"]
 
     if verdict == UNVERIFIED:
-        lines += [f"  DID NOT RUN: {result.get('unverified_reason', 'unknown')}",
-                  "  This is NOT a pass — this check did not run."]
-        return lines
-
-    if result.get("verdict_forced"):
-        lines.append("  (forced to FAIL — blocking findings present)")
-    if result.get("delivered"):
-        lines.append(f"  {result['delivered']}")
+        return [f"{title}: UNVERIFIED — did not run: "
+                f"{result.get('unverified_reason', 'unknown')}"]
 
     findings = sorted(result.get("findings") or [],
                       key=lambda f: _SEV_ORDER.get(str(f.get("severity", "")).upper(), 3))
     if not findings:
-        lines.append("  No discrepancies found.")
-        return lines
+        return [f"{title}: PASS — nothing wrong found."]
 
-    lines += ["", f"  FINDINGS: {len(findings)} ({result.get('blocking_count', 0)} blocking)", ""]
+    n = len(findings)
+    head = f"{title}: {verdict} — {n} finding" + ("" if n == 1 else "s")
+    blocking = result.get("blocking_count", 0)
+    if blocking:
+        head += f", {blocking} blocking"
+    if result.get("verdict_forced"):
+        head += " (verdict forced by the gate)"
+
+    lines = [head]
     for i, f in enumerate(findings, 1):
-        lines.append(f"  {i}. [{f.get('severity')}] {f.get('field')}")
-        for label, key in (("Ticket", "ticket_value"), ("Source", "select_value"),
-                           ("Expected", "expected")):
-            v = f.get(key)
-            if v:
-                lines.append(f"     {label + ':':<10}{v}")
-        if f.get("issue"):
-            lines.append(f"     {'Why:':<10}{f['issue']}")
-        lines.append("")
+        lines += _one_line(i, f)
     return lines
 
 
@@ -972,37 +1030,31 @@ def format_report(ticket_key: str, result: dict) -> str:
     select = result.get("select")
 
     if order:
-        lines += ["", "-" * 66,
-                  f"ORDER CHECK — was this ticket created correctly? "
-                  f"({result.get('order_filename', '—')})", "-" * 66]
-        lines += _format_one(order, "Result")
+        lines += [""] + _format_one(order, "ORDER (ticket vs the broker order)")
     if select:
-        lines += ["", "-" * 66,
-                  f"SELECT CHECK — did the pull deliver the order? "
-                  f"({result.get('select_filename', '—')})", "-" * 66]
-        lines += _format_one(select, "Result")
+        lines += [""] + _format_one(select, "SELECT (ticket vs the pull)")
     if not order and not select:
-        lines += ["", "Nothing to check: no broker order PDF and no SELECT PDF is attached.",
+        lines += ["", "Nothing to check: no broker order PDF and no SELECT PDF attached.",
                   "This is NOT a pass."]
 
     fixes = result.get("fixes") or {}
     if fixes.get("applied") or fixes.get("refused"):
-        lines += ["", "-" * 66, "AUTOMATIC FIXES", "-" * 66]
+        lines.append("")
+        verb = "WOULD FIX" if fixes.get("dry_run") else "FIXED"
         for a in fixes.get("applied", []):
-            lines.append(f"  {'APPLIED' if not fixes.get('dry_run') else 'WOULD APPLY'}  {a}")
+            lines.append(f"{verb}  {a}")
         for r in fixes.get("refused", []):
-            lines.append(f"  NOT APPLIED  {r}")
+            lines.append(f"SKIPPED  {r}")
 
     if result.get("verdict") == PASS:
         lines += ["", "Checked and correct — no action needed."]
     elif result.get("verdict") == UNVERIFIED:
-        lines += ["", "QC did not run. The ticket has not been checked and still needs a "
-                      "human before it ships."]
+        lines += ["", "QC did not run — NOT a pass. This ticket still needs a human."]
 
     models = {c.get("model") for c in (order, select) if c and c.get("model")}
     secs   = sum(c.get("elapsed_s", 0) for c in (order, select) if c)
     if models:
-        lines.append(f"\nChecked by {', '.join(sorted(models))} in {secs:.1f}s.")
+        lines.append(f"\n{', '.join(sorted(models))} · {secs:.0f}s")
     return "\n".join(lines).rstrip()
 
 
