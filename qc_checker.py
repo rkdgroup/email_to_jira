@@ -706,6 +706,25 @@ WHAT TO CHECK, WORST FIRST
    pool — which the REPORT line alone cannot reveal, because that line only echoes what
    was typed on the job.
 
+   THE INCLUDE SET IS ALSO EVIDENCE THAT A CRITERION WAS APPLIED, not only something to
+   check for narrowness. When a criteria block states NO date line and NO amount line, the
+   dollar band and the recency window are coming from the include set, and the include-set
+   title is where you verify them. That is normal and correct — do not call the window
+   unverifiable because the block does not repeat it.
+
+   DSLF-1138 is the shape: the ticket asked "24 Month (8/24-7/25) $5+ Donors w/Zips", the
+   include set reads "5-99.99 L24M" — the 24-month window and the $5 floor, ceiling at the
+   client's $99.99 cap — and criteria block 37 adds only "ZIP CODE = 62002 OR = 62010 …",
+   the zip select, with no date or amount line of its own. Every part of the ask is
+   accounted for. Reporting BLOCKING-BLANK there is wrong.
+
+   AND A BLOCK'S NAME IS NOT AN APPLIED CRITERION. Only the "FIELD = value" lines beneath a
+   block are applied; its title is the operator's shorthand for the job, the same way the
+   report header is the order's shorthand. Block 37 above is *named* "$5-99.99 L12M ZIPS"
+   while the include set enforces L24M — the "L12M" in that name contradicts nothing,
+   because the block applies no date line at all. Never treat a block title, or the REPORT
+   header, as evidence that a window was applied or misapplied; read the "=" lines.
+
    Judge it in ONE direction only. The include set is a STANDING universe and is routinely
    WIDER than any single order: "0-49.99 L3M" backing a "$5+" order, an L6M window backing
    a 4-month ask. Wider is correct and must not be reported. What matters is that the
