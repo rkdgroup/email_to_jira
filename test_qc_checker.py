@@ -344,6 +344,9 @@ def test_select_prompt_keeps_the_rules_the_regex_checker_knew():
         ("All Available",        "the availability split"),
         ("hosted",               "the host-vs-rented-list exception (DSLF-1066/1083)"),
         ("FLAGS LISTED",         "flags deferred to prose are unverifiable"),
+        ("12 MOS HOTLINE",       "one block can satisfy several priced selects (DSLF-1140)"),
+        ("SATISFIED VERSUS DROPPED", "the satisfied-vs-dropped rule (DSLF-1140 vs -1092)"),
+        ("00001 THRU 99998",     "the contrast case: a genuinely dropped geo (DSLF-1092)"),
     ):
         check(f"SELECT prompt keeps {why}", needle.lower() in s.lower(), True)
 
@@ -450,6 +453,41 @@ def test_no_budget_cap_exists_any_more():
     """The cap was removed on request — a queue runs to completion, however long."""
     check("no QC_BUDGET_S constant", hasattr(qc, "QC_BUDGET_S"), False)
     check("no per-run spend counter", hasattr(qc, "_spent_s"), False)
+
+
+def test_the_nth_quantity_comparison_is_computed_not_inferred():
+    """Subtraction should not depend on the model noticing. _quantity_context states the
+    conclusion; these are the four branches it has to get right."""
+    import qc_checker as q
+
+    def ctx(total, found, rule, asked, monkey={}):
+        saved = q.parse_select_pdf
+        try:
+            q.parse_select_pdf = lambda p: {"total_records": total,
+                                            "total_records_found": found}
+            return q._quantity_context("x.pdf",
+                                       {"availability_rule": rule, "requested_qty": asked})
+        finally:
+            q.parse_select_pdf = saved
+
+    over = ctx(13717, True, "Nth", 5000)
+    check("Nth overage is stated as WRONG", "EXCEEDS" in over and "WRONG" in over, True)
+    check("both numbers quoted", "13,717" in over and "5,000" in over, True)
+
+    under = ctx(4847, True, "Nth", 5000)
+    check("Nth under the cap says it is correct", "Correct" in under, True)
+    check("no WRONG when within the cap", "WRONG" in under, False)
+
+    allav = ctx(426622, True, "All Available", 50000)
+    check("All Available suppresses the comparison", "must NOT be reported" in allav, True)
+
+    zero = ctx(0, True, "All Available", 50000)
+    check("zero records is WRONG whatever the rule", "WRONG" in zero, True)
+
+    unread = ctx(0, False, "Nth", 5000)
+    check("an unreadable count says so rather than asserting",
+          "could not be read" in unread, True)
+    check("and does not claim a WRONG", "WRONG" in unread, False)
 
 
 def test_the_select_parser_lives_here_too():

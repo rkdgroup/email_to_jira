@@ -652,7 +652,33 @@ WHAT TO CHECK, WORST FIRST
 3. SELECT CRITERIA. Every priced select the ticket lists — recency window, dollar band,
    HOTLINE, GENDER, Nth, state or zip select — must be reflected in what the SELECT pulled.
    A ticket asking "12 MONTH $10-$99.99" against a SELECT that pulled 24 months is WRONG.
-   Quote both sides.
+   Quote both sides. A select the SELECT never applied is the most serious defect on this
+   list, because the records that shipped are not the records that were ordered.
+
+   SATISFIED VERSUS DROPPED — decide this per criterion, on the VALUES applied, never on
+   the number of criteria blocks. The ticket lists what the list owner PRICED, not how the
+   job was keyed, and one block routinely satisfies several priced lines because they
+   describe one population from different angles. Take each priced line and look for the
+   value that answers it anywhere in the applied criteria:
+
+     "12 MOS HOTLINE"  <- a RECENT PAYMENT DATE range spanning 12 months
+     "12M $5+ DONORS"  <- RECENT PAYMENT AMT. from 5.00, over that same 12-month range
+     "GENDER"          <- a gender field in the criteria
+     "SCF 900-908"     <- a ZIP CODE or SCF CODE list covering those SCFs
+
+   SATISFIED (report nothing): DSLF-1140 priced "12M $5+ DONORS" and "12 MOS HOTLINE" as
+   two lines, and one block applied "RECENT PAYMENT AMT. = 5.00 THRU 49.99" with
+   "RECENT PAYMENT DATE = 7/31/2025 THRU 7/30/2026". A 12-month recency window IS a
+   12-month hotline. Both lines are answered; there is no second block to look for.
+
+   DROPPED (report WRONG): DSLF-1092 asked for "DONORS IN SCF'S 900-908, 913-916" and the
+   SELECT applied "ZIP CODE = 00001 THRU 99998" — the whole country. Nothing in the applied
+   criteria narrows the geography at all, so that select was never executed and records
+   outside those SCFs shipped. A nationwide zip range standing where a geographic select
+   was ordered is always this defect, never the case above.
+
+   The test is whether the SUBSTANCE has a counterpart, not whether the wording matches and
+   not whether the block count matches.
 
    DOLLAR BANDS — read this before reporting one, it is the easiest thing here to get
    wrong. "$10+" on an order is NOT an open-ended floor. It means $10.00 through this
@@ -721,6 +747,9 @@ WHAT TO CHECK, WORST FIRST
 """ + _SEVERITY_BLOCK + """
 
 DO NOT REPORT THESE — correct by design, and flagging them is noise:
+- The NUMBER of criteria blocks differing from the number of priced select lines, when
+  every priced line's substance is present in what was applied. See "SATISFIED VERSUS
+  DROPPED" under 3 — that section, not this one, decides whether a select was applied.
 - A dollar band whose upper limit equals the client's profile cap, on an order written as
   "$10+" or "$0.01+". That IS the order, executed correctly. See DOLLAR BANDS above.
 - A hosted list's SELECT printing the host/master account name where the ticket names the
@@ -1136,6 +1165,62 @@ def _review(pdf_path: str, system: str, schema: dict, user_text: str,
     return result
 
 
+def _quantity_context(pdf_path: str, ticket_fields: dict) -> str:
+    """State the Nth quantity comparison as arithmetic the model cannot overlook.
+
+    Everything else in this file is a judgement the model is better at than a regex. This
+    one is not: "13,717 selected against a 5,000 Nth request" is subtraction. Handing over
+    the conclusion instead of hoping it is noticed costs nothing and removes the one check
+    here whose correctness does not depend on reading comprehension. The model still words
+    the finding and still owns every other call.
+
+    No measured miss is claimed. DSLF-1135 looked like one — its overage was reported on
+    2026-08-27 and absent afterwards — but the SELECT had been replaced by a corrected
+    re-pull (attachment 166846, 5,000 records, superseding the 13,717 one). Same filename,
+    different attachment; comparing filenames rather than ids is what made it look like
+    model variance. Both verdicts were right about the data in front of them.
+
+    Deliberately says nothing under All Available, where the requested figure is only an
+    estimate, and says the count is unreadable rather than guessing when the regex fails.
+    """
+    try:
+        data = parse_select_pdf(pdf_path)
+    except Exception as e:
+        return f"\n\nQUANTITY: the SELECT's record count could not be read ({e})."
+
+    if not data.get("total_records_found"):
+        return ("\n\nQUANTITY: TOTAL RECORDS SELECTED could not be read from this report. "
+                "Judge the count from the PDF yourself; do not assume it is absent.")
+
+    total = int(data.get("total_records") or 0)
+    rule  = (ticket_fields.get("availability_rule") or "").strip()
+    try:
+        asked = int(float(ticket_fields.get("requested_qty") or 0))
+    except (TypeError, ValueError):
+        asked = 0
+
+    head = f"\n\nQUANTITY, computed from the report — {total:,} records selected"
+    if total == 0:
+        return (head + ". A completed SELECT can never legitimately return 0 records: an "
+                "empty output file is a failure whatever the availability rule. Report "
+                "this as WRONG.")
+    if "all" in rule.lower():
+        return (head + f", against a requested {asked:,} under \"{rule}\". Under All "
+                "Available the requested figure is only an estimate — the difference is "
+                "expected and must NOT be reported.")
+    if rule.lower().startswith("nth") and asked > 0:
+        if total > asked:
+            return (head + f", against a maximum of {asked:,} under \"Nth\". "
+                    f"{total:,} EXCEEDS {asked:,} by {total - asked:,}. Under Nth the count "
+                    "must not exceed the request, so the Nth was not applied and more "
+                    "records shipped than were ordered. Report this as WRONG, quoting both "
+                    "numbers.")
+        return (head + f", within the {asked:,} maximum under \"Nth\". Correct — report "
+                "nothing about the quantity.")
+    return (head + f", against a requested {asked:,} under availability rule "
+            f"\"{rule or '(blank)'}\".")
+
+
 def review_select(pdf_path: str, ticket_fields: dict,
                   model: str = None, effort: str = None) -> dict:
     """Did the SELECT deliver what the ticket asked for?"""
@@ -1144,6 +1229,7 @@ def review_select(pdf_path: str, ticket_fields: dict,
                 + _ticket_text(ticket_fields)
                 + _profile_context(ticket_fields)
                 + _adstra_flag_context(ticket_fields)
+                + _quantity_context(pdf_path, ticket_fields)
                 + "\n\nThe attached SELECT report is what was actually pulled. Decide "
                   "whether it delivered this order.")
     except Exception as e:
