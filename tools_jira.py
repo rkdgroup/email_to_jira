@@ -489,7 +489,7 @@ QC_FIELDS = [
     "customfield_12191",  # Billable Account
     "customfield_12196",  # Mail Date
     "customfield_12278",  # Other Fees
-    # Added for the order-vs-ticket creation check in qc_llm: these are the fields the
+    # Added for the order-vs-ticket creation check in qc_checker: these are the fields the
     # broker's order PDF is authoritative on, so they are also the auto-fixable ones.
     "customfield_12193",  # Mailer PO
     "customfield_12195",  # Key Code

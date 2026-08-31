@@ -1,10 +1,10 @@
 """
-qc_llm safety tests. No network, no Jira, no API calls, no PDFs.
+qc_checker safety tests. No network, no Jira, no API calls, no PDFs.
 
-    python test_qc_llm_verdict.py      # standalone, prints PASS / ALL PASSED
-    pytest test_qc_llm_verdict.py      # also works
+    python test_qc_checker.py      # standalone, prints PASS / ALL PASSED
+    pytest test_qc_checker.py      # also works
 
-qc_llm is the only QC there is now — the 14 rule-based checks it used to sit beside are
+qc_checker is the only QC there is now — the 14 rule-based checks it used to sit beside are
 gone. Two properties have to hold, and neither is the model's to keep:
 
   1. NO FAILURE PATH MAY RETURN A PASS. Every one returns UNVERIFIED, which is not a pass.
@@ -28,7 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-import qc_llm
+import qc_checker as qc
 
 _failures = []
 
@@ -48,10 +48,10 @@ def check(name, got, want):
 def test_missing_api_key_is_unverified():
     saved = os.environ.pop("ANTHROPIC_API_KEY", None)
     try:
-        for name, fn in (("SELECT", qc_llm.review_select), ("ORDER", qc_llm.review_order)):
+        for name, fn in (("SELECT", qc.review_select), ("ORDER", qc.review_order)):
             r = fn("whatever.pdf", {})
-            check(f"no API key gives UNVERIFIED [{name}]", r["verdict"], qc_llm.UNVERIFIED)
-            check(f"no API key is not a pass [{name}]", r["verdict"] == qc_llm.PASS, False)
+            check(f"no API key gives UNVERIFIED [{name}]", r["verdict"], qc.UNVERIFIED)
+            check(f"no API key is not a pass [{name}]", r["verdict"] == qc.PASS, False)
     finally:
         if saved is not None:
             os.environ["ANTHROPIC_API_KEY"] = saved
@@ -59,24 +59,13 @@ def test_missing_api_key_is_unverified():
 
 def test_unreadable_pdf_is_unverified():
     os.environ.setdefault("ANTHROPIC_API_KEY", "test-key-not-used")
-    r = qc_llm.review_select("no_such_file_anywhere.pdf", {})
-    check("unreadable PDF gives UNVERIFIED", r["verdict"], qc_llm.UNVERIFIED)
-    check("unreadable PDF is not a pass", r["verdict"] == qc_llm.PASS, False)
-
-
-def test_exhausted_budget_is_unverified():
-    saved = qc_llm._spent_s
-    try:
-        qc_llm._spent_s = qc_llm.QC_BUDGET_S + 1
-        r = qc_llm.review_select("whatever.pdf", {})
-        check("budget exhausted gives UNVERIFIED", r["verdict"], qc_llm.UNVERIFIED)
-        check("budget exhaustion is not a pass", r["verdict"] == qc_llm.PASS, False)
-    finally:
-        qc_llm._spent_s = saved
+    r = qc.review_select("no_such_file_anywhere.pdf", {})
+    check("unreadable PDF gives UNVERIFIED", r["verdict"], qc.UNVERIFIED)
+    check("unreadable PDF is not a pass", r["verdict"] == qc.PASS, False)
 
 
 def test_unverified_carries_no_findings_and_a_reason():
-    r = qc_llm._unverified("something broke", "SELECT")
+    r = qc._unverified("something broke", "SELECT")
     check("UNVERIFIED has no findings", r["findings"], [])
     check("UNVERIFIED states why", bool(r["unverified_reason"]), True)
     check("UNVERIFIED names the check", r["check"], "SELECT")
@@ -88,14 +77,14 @@ def test_review_never_raises_on_a_broken_ticket():
         def get(self, *a, **k):
             raise RuntimeError("boom")
 
-    for name, fn in (("SELECT", qc_llm.review_select), ("ORDER", qc_llm.review_order)):
+    for name, fn in (("SELECT", qc.review_select), ("ORDER", qc.review_order)):
         try:
             r = fn("whatever.pdf", Exploding())
         except Exception as e:
             check(f"{name} swallowed the context error", f"raised {e}", "UNVERIFIED")
             continue
         check(f"broken ticket context gives UNVERIFIED [{name}]",
-              r["verdict"], qc_llm.UNVERIFIED)
+              r["verdict"], qc.UNVERIFIED)
 
 
 # ---------------------------------------------------------------------------
@@ -103,51 +92,51 @@ def test_review_never_raises_on_a_broken_ticket():
 # ---------------------------------------------------------------------------
 
 def test_wrong_finding_forces_fail():
-    r = qc_llm._reconcile({"verdict": qc_llm.PASS, "findings": [
+    r = qc._reconcile({"verdict": qc.PASS, "findings": [
         {"field": "Client Database", "severity": "WRONG"}]})
-    check("PASS plus a WRONG finding becomes FAIL", r["verdict"], qc_llm.FAIL)
+    check("PASS plus a WRONG finding becomes FAIL", r["verdict"], qc.FAIL)
     check("the override is recorded", r.get("verdict_forced"), True)
 
 
 def test_blocking_blank_forces_fail():
-    r = qc_llm._reconcile({"verdict": qc_llm.PASS, "findings": [
+    r = qc._reconcile({"verdict": qc.PASS, "findings": [
         {"field": "Availability Rule", "severity": "BLOCKING-BLANK"}]})
-    check("PASS plus BLOCKING-BLANK becomes FAIL", r["verdict"], qc_llm.FAIL)
+    check("PASS plus BLOCKING-BLANK becomes FAIL", r["verdict"], qc.FAIL)
 
 
 def test_note_never_forces_fail():
-    r = qc_llm._reconcile({"verdict": qc_llm.PASS, "findings": [
+    r = qc._reconcile({"verdict": qc.PASS, "findings": [
         {"field": "Other Fees", "severity": "NOTE"}]})
-    check("PASS survives a NOTE-only finding", r["verdict"], qc_llm.PASS)
+    check("PASS survives a NOTE-only finding", r["verdict"], qc.PASS)
     check("NOTE is not counted as blocking", r["blocking_count"], 0)
 
 
 def test_severity_case_does_not_matter():
-    r = qc_llm._reconcile({"verdict": qc_llm.PASS, "findings": [
+    r = qc._reconcile({"verdict": qc.PASS, "findings": [
         {"field": "Seed Database", "severity": "wrong"}]})
-    check("lowercase 'wrong' still forces FAIL", r["verdict"], qc_llm.FAIL)
+    check("lowercase 'wrong' still forces FAIL", r["verdict"], qc.FAIL)
 
 
 def test_model_fail_is_never_upgraded():
-    r = qc_llm._reconcile({"verdict": qc_llm.FAIL, "findings": []})
-    check("model FAIL is never upgraded to PASS", r["verdict"], qc_llm.FAIL)
+    r = qc._reconcile({"verdict": qc.FAIL, "findings": []})
+    check("model FAIL is never upgraded to PASS", r["verdict"], qc.FAIL)
 
 
 def test_clean_pass_survives():
-    r = qc_llm._reconcile({"verdict": qc_llm.PASS, "findings": []})
-    check("clean PASS survives the gate", r["verdict"], qc_llm.PASS)
+    r = qc._reconcile({"verdict": qc.PASS, "findings": []})
+    check("clean PASS survives the gate", r["verdict"], qc.PASS)
     check("clean PASS is not marked forced", r.get("verdict_forced"), None)
 
 
 def test_worst_verdict_combination():
     """Two checks per ticket now. Not knowing is worse than knowing it failed."""
-    W = qc_llm._worst
-    check("PASS + PASS", W(qc_llm.PASS, qc_llm.PASS), qc_llm.PASS)
-    check("PASS + FAIL", W(qc_llm.PASS, qc_llm.FAIL), qc_llm.FAIL)
-    check("FAIL + UNVERIFIED", W(qc_llm.FAIL, qc_llm.UNVERIFIED), qc_llm.UNVERIFIED)
-    check("PASS + UNVERIFIED", W(qc_llm.PASS, qc_llm.UNVERIFIED), qc_llm.UNVERIFIED)
-    check("one check only", W(qc_llm.PASS, None), qc_llm.PASS)
-    check("no check at all is UNVERIFIED, not PASS", W(), qc_llm.UNVERIFIED)
+    W = qc._worst
+    check("PASS + PASS", W(qc.PASS, qc.PASS), qc.PASS)
+    check("PASS + FAIL", W(qc.PASS, qc.FAIL), qc.FAIL)
+    check("FAIL + UNVERIFIED", W(qc.FAIL, qc.UNVERIFIED), qc.UNVERIFIED)
+    check("PASS + UNVERIFIED", W(qc.PASS, qc.UNVERIFIED), qc.UNVERIFIED)
+    check("one check only", W(qc.PASS, None), qc.PASS)
+    check("no check at all is UNVERIFIED, not PASS", W(), qc.UNVERIFIED)
 
 
 # ---------------------------------------------------------------------------
@@ -157,66 +146,66 @@ def test_worst_verdict_combination():
 def test_database_triad_is_never_writable():
     """A wrong write here sends the wrong donor file to the wrong company."""
     for field in ("client_db", "seed_db", "billable_account"):
-        fid, val, reason = qc_llm._validate_fix(field, "N11D", {})
+        fid, val, reason = qc._validate_fix(field, "N11D", {})
         check(f"{field} refused", fid, None)
         check(f"{field} says why", bool(reason), True)
 
 
 def test_prose_fields_are_never_writable():
     for field in ("description", "omission", "description_adf", "status"):
-        fid, _, reason = qc_llm._validate_fix(field, "anything", {})
+        fid, _, reason = qc._validate_fix(field, "anything", {})
         check(f"{field} refused", fid, None)
 
 
 def test_empty_fix_value_is_refused():
-    fid, _, reason = qc_llm._validate_fix("mailer_po", "   ", {})
+    fid, _, reason = qc._validate_fix("mailer_po", "   ", {})
     check("blank replacement refused", fid, None)
     check("blanking a field is not a fix", "no replacement value" in (reason or ""), True)
 
 
 def test_select_option_must_exist():
     """Jira drops an unresolvable option WITHOUT failing the request — it looks like it worked."""
-    fid, _, reason = qc_llm._validate_fix("file_format", "ASCII Fixed Length", {})
+    fid, _, reason = qc._validate_fix("file_format", "ASCII Fixed Length", {})
     check("unknown file format refused", fid, None)
-    fid, val, reason = qc_llm._validate_fix("file_format", "ASCII Fixed", {})
+    fid, val, reason = qc._validate_fix("file_format", "ASCII Fixed", {})
     check("known file format accepted", fid, "customfield_12274")
     check("sent as an option id", val, {"id": "13238"})
 
 
 def test_availability_and_shipping_options():
-    fid, val, _ = qc_llm._validate_fix("availability_rule", "All Available", {})
+    fid, val, _ = qc._validate_fix("availability_rule", "All Available", {})
     check("All Available maps to its id", val, {"id": "13236"})
-    fid, val, _ = qc_llm._validate_fix("shipping_method", "FTP", {})
+    fid, val, _ = qc._validate_fix("shipping_method", "FTP", {})
     check("FTP maps to its id", val, {"id": "13242"})
-    fid, _, reason = qc_llm._validate_fix("availability_rule", "Full Run", {})
+    fid, _, reason = qc._validate_fix("availability_rule", "Full Run", {})
     check("'Full Run' is not a Jira option", fid, None)
 
 
 def test_list_manager_must_be_one_of_the_fourteen():
-    fid, _, reason = qc_llm._validate_fix("list_manager", "SIMIOCLOUD", {})
+    fid, _, reason = qc._validate_fix("list_manager", "SIMIOCLOUD", {})
     check("unknown list manager refused", fid, None)
-    fid, val, _ = qc_llm._validate_fix("list_manager", "we are moore", {})
+    fid, val, _ = qc._validate_fix("list_manager", "we are moore", {})
     check("known list manager accepted, upper-cased", val, "WE ARE MOORE")
 
 
 def test_dates_must_be_iso():
-    fid, _, _ = qc_llm._validate_fix("mail_date", "08/19/26", {})
+    fid, _, _ = qc._validate_fix("mail_date", "08/19/26", {})
     check("US-format date refused", fid, None)
-    fid, val, _ = qc_llm._validate_fix("mail_date", "2026-08-19", {})
+    fid, val, _ = qc._validate_fix("mail_date", "2026-08-19", {})
     check("ISO date accepted", val, "2026-08-19")
 
 
 def test_quantity_must_be_a_plausible_integer():
-    check("comma quantity parsed", qc_llm._validate_fix("requested_qty", "32,422", {})[1], 32422)
-    check("non-numeric refused", qc_llm._validate_fix("requested_qty", "all", {})[0], None)
-    check("zero refused", qc_llm._validate_fix("requested_qty", "0", {})[0], None)
+    check("comma quantity parsed", qc._validate_fix("requested_qty", "32,422", {})[1], 32422)
+    check("non-numeric refused", qc._validate_fix("requested_qty", "all", {})[0], None)
+    check("zero refused", qc._validate_fix("requested_qty", "0", {})[0], None)
 
 
 def test_seed_tracking_is_forced_to_the_manager_order():
     fields = {"manager_order": "DL995"}
-    fid, val, _ = qc_llm._validate_fix("seed_tracking", "DL995", fields)
+    fid, val, _ = qc._validate_fix("seed_tracking", "DL995", fields)
     check("matching seed tracking accepted", val, "DL995")
-    fid, _, reason = qc_llm._validate_fix("seed_tracking", "CRU 924-105", fields)
+    fid, _, reason = qc._validate_fix("seed_tracking", "CRU 924-105", fields)
     check("a different seed tracking refused", fid, None)
     check("reason names the house rule", "manager order" in (reason or "").lower(), True)
 
@@ -224,7 +213,7 @@ def test_seed_tracking_is_forced_to_the_manager_order():
 def test_apply_fixes_dry_run_writes_nothing():
     findings = [{"field": "Mailer PO", "severity": "WRONG", "ticket_value": "",
                  "fix_field": "mailer_po", "fix_value": "CRU 924-105"}]
-    r = qc_llm.apply_fixes("DSLF-0", findings, {}, dry_run=True)
+    r = qc.apply_fixes("DSLF-0", findings, {}, dry_run=True)
     check("dry run reports the fix", len(r["applied"]), 1)
     check("dry run is flagged", r.get("dry_run"), True)
 
@@ -240,13 +229,13 @@ def test_apply_fixes_skips_notes_and_duplicates():
         {"field": "Client Database", "severity": "WRONG",
          "fix_field": "client_db", "fix_value": "N11D"},
     ]
-    r = qc_llm.apply_fixes("DSLF-0", findings, {}, dry_run=True)
+    r = qc.apply_fixes("DSLF-0", findings, {}, dry_run=True)
     check("only the first real fix is applied", len(r["applied"]), 1)
     check("NOTE, duplicate and triad all refused", len(r["refused"]), 3)
 
 
 def test_apply_fixes_with_nothing_to_do():
-    r = qc_llm.apply_fixes("DSLF-0", [{"field": "x", "severity": "WRONG"}], {}, dry_run=True)
+    r = qc.apply_fixes("DSLF-0", [{"field": "x", "severity": "WRONG"}], {}, dry_run=True)
     check("no fix_field means no write", r["applied"], [])
     check("still reports ok", r["ok"], True)
 
@@ -261,21 +250,21 @@ def test_unverified_report_is_recognisable_to_the_rerun_guard():
     If the report format drifts, the guard silently starts treating unchecked tickets as
     checked and they never come back. This pins the two together.
     """
-    report = qc_llm.format_report("DSLF-1", {
-        "verdict": qc_llm.UNVERIFIED,
-        "select": qc_llm._unverified("budget exhausted", "SELECT"),
+    report = qc.format_report("DSLF-1", {
+        "verdict": qc.UNVERIFIED,
+        "select": qc._unverified("budget exhausted", "SELECT"),
         "select_filename": "S.pdf"})
     check("report starts with the prefix the guard looks for",
-          report.startswith(qc_llm._QC_COMMENT_PREFIXES), True)
+          report.startswith(qc._QC_COMMENT_PREFIXES), True)
     check("guard's UNVERIFIED pattern matches the report",
           bool(re.search(r'^VERDICT:\s*UNVERIFIED', report, re.MULTILINE)), True)
     check("report says it is not a pass", "NOT a pass" in report, True)
 
 
 def test_a_real_verdict_is_not_mistaken_for_unverified():
-    report = qc_llm.format_report("DSLF-1", {
-        "verdict": qc_llm.PASS,
-        "select": {"verdict": qc_llm.PASS, "findings": [], "delivered": "d",
+    report = qc.format_report("DSLF-1", {
+        "verdict": qc.PASS,
+        "select": {"verdict": qc.PASS, "findings": [], "delivered": "d",
                    "model": "m", "elapsed_s": 1.0},
         "select_filename": "S.pdf"})
     check("a PASS report does not match the UNVERIFIED pattern",
@@ -288,9 +277,9 @@ def test_a_real_verdict_is_not_mistaken_for_unverified():
 
 def test_pass_report_says_so_explicitly():
     """The ticket gets a comment even when it is clean — that is the point of posting."""
-    report = qc_llm.format_report("DSLF-1", {
-        "verdict": qc_llm.PASS,
-        "order": {"verdict": qc_llm.PASS, "findings": [], "delivered": "matches",
+    report = qc.format_report("DSLF-1", {
+        "verdict": qc.PASS,
+        "order": {"verdict": qc.PASS, "findings": [], "delivered": "matches",
                   "model": "m", "elapsed_s": 2.0},
         "order_filename": "order.pdf"})
     check("clean ticket is told so", "Checked and correct" in report, True)
@@ -298,14 +287,14 @@ def test_pass_report_says_so_explicitly():
 
 
 def test_nothing_attached_is_not_a_pass():
-    report = qc_llm.format_report("DSLF-1", {"verdict": qc_llm.UNVERIFIED})
+    report = qc.format_report("DSLF-1", {"verdict": qc.UNVERIFIED})
     check("no PDFs at all is not a pass", "NOT a pass" in report, True)
 
 
 def test_forced_fail_is_disclosed():
-    report = qc_llm.format_report("DSLF-1", {
-        "verdict": qc_llm.FAIL,
-        "select": {"verdict": qc_llm.FAIL, "verdict_forced": True, "blocking_count": 1,
+    report = qc.format_report("DSLF-1", {
+        "verdict": qc.FAIL,
+        "select": {"verdict": qc.FAIL, "verdict_forced": True, "blocking_count": 1,
                    "delivered": "d", "model": "m", "elapsed_s": 1.0,
                    "findings": [{"field": "Client Database", "severity": "WRONG",
                                  "ticket_value": "A", "select_value": "B",
@@ -316,9 +305,9 @@ def test_forced_fail_is_disclosed():
 
 
 def test_fix_section_distinguishes_applied_from_refused():
-    report = qc_llm.format_report("DSLF-1", {
-        "verdict": qc_llm.FAIL,
-        "order": {"verdict": qc_llm.FAIL, "findings": [], "delivered": "d",
+    report = qc.format_report("DSLF-1", {
+        "verdict": qc.FAIL,
+        "order": {"verdict": qc.FAIL, "findings": [], "delivered": "d",
                   "model": "m", "elapsed_s": 1.0},
         "order_filename": "o.pdf",
         "fixes": {"applied": ["mailer_po: (empty) -> CRU 924-105"],
@@ -333,21 +322,21 @@ def test_fix_section_distinguishes_applied_from_refused():
 
 def test_profile_context_carries_the_dollar_cap():
     """Without the cap, every correctly-executed capped pull reads as lost records."""
-    ctx = qc_llm._profile_context({"client_db": "W12D"})
+    ctx = qc._profile_context({"client_db": "W12D"})
     check("cap is in the prompt", "Dollar cap" in ctx, True)
     check("N11D's $99.99 cap reaches the prompt",
-          "$99.99" in qc_llm._profile_context({"client_db": "N11D"}), True)
+          "$99.99" in qc._profile_context({"client_db": "N11D"}), True)
 
 
 def test_profile_context_handles_an_unknown_database():
-    ctx = qc_llm._profile_context({"client_db": "ZZ9D"})
+    ctx = qc._profile_context({"client_db": "ZZ9D"})
     check("unknown db says it cannot verify", "could not be verified" in ctx
           or "cannot confirm" in ctx, True)
-    check("blank db_code handled", isinstance(qc_llm._profile_context({}), str), True)
+    check("blank db_code handled", isinstance(qc._profile_context({}), str), True)
 
 
 def test_select_prompt_keeps_the_rules_the_regex_checker_knew():
-    s = qc_llm._SYSTEM_SELECT
+    s = qc._SYSTEM_SELECT
     for needle, why in (
         ("10.00 THRU 99.99",     "the dollar-cap shape"),
         ("never NARROWER",       "include-set direction"),
@@ -360,7 +349,7 @@ def test_select_prompt_keeps_the_rules_the_regex_checker_knew():
 
 
 def test_order_prompt_keeps_knowledge_mds_rules():
-    s = qc_llm._SYSTEM_ORDER
+    s = qc._SYSTEM_ORDER
     for needle, why in (
         ("N13D",                 "the NPTA wrong-client incident"),
         ("S30D",                 "the SAVE wrong-client incident"),
@@ -376,7 +365,7 @@ def test_order_prompt_does_not_resurrect_the_kap_title_exception():
     """knowledge.md line 161 called `P.O. {DL#} {LIST NAME}` a KAP design. It was a bug,
     fixed in 39d94bc, and 64 tickets carried it. Treating it as design hides a real defect.
     """
-    s = qc_llm._SYSTEM_ORDER
+    s = qc._SYSTEM_ORDER
     check("KAP is not exempted from the title rule",
           "kap tickets are the exception" in s.lower(), False)
     check("the old KAP title shape is called out as wrong",
@@ -387,102 +376,86 @@ def test_order_prompt_does_not_resurrect_the_kap_title_exception():
 
 def test_no_fix_field_leaks_into_the_select_check():
     """A bad pull needs re-running. Editing the ticket to match it erases the evidence."""
-    props = qc_llm._schema(False)["properties"]["findings"]["items"]["properties"]
+    props = qc._schema(False)["properties"]["findings"]["items"]["properties"]
     check("SELECT findings have no fix_field", "fix_field" in props, False)
-    props = qc_llm._schema(True)["properties"]["findings"]["items"]["properties"]
+    props = qc._schema(True)["properties"]["findings"]["items"]["properties"]
     check("ORDER findings do have fix_field", "fix_field" in props, True)
 
 
 # ---------------------------------------------------------------------------
-# 7. The qc_checker.py shim — what keeps the scheduled build green
+# 7. Exit codes — what keeps the scheduled build green
 #
 # The live Jenkins job is a freestyle Execute-shell step whose script lives in the Jenkins
-# config, NOT in this repo's Jenkinsfile, and it calls `python qc_checker.py`. Deleting
-# that file broke the build on 2026-08-31. The shim forwards to qc_llm and fixes one
-# semantic mismatch: qc_llm.main() returns 1 on any FAIL/UNVERIFIED, and under `sh -xe`
-# that would paint the build red every time a ticket legitimately fails QC.
+# config, NOT in this repo's Jenkinsfile, and it calls `python qc_checker.py` under
+# `sh -xe`. A non-zero exit reds the build. A ticket failing QC is a RESULT, not a build
+# error — the rule-based checker this replaced returned None and so always exited 0.
+# Non-zero is reserved for "the scan could not run".
 # ---------------------------------------------------------------------------
 
-def _shim():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "_shim", str(Path(__file__).parent / "qc_checker.py"))
-    m = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(m)
-    return m
-
-
-def test_shim_exits_zero_on_qc_findings():
-    """A QC finding is a result, not a build error. The old checker always exited 0."""
-    saved_argv, saved_main = sys.argv, qc_llm.main
+def test_findings_do_not_fail_the_build():
+    """DSLF-1135 fails QC right now; the cron must still go green."""
+    saved = qc.scan
     try:
-        sys.argv = ["qc_checker.py"]
-        qc_llm.main = lambda: 1          # as if tickets FAILed
-        check("findings do not fail the build", _shim().main(), 0)
+        qc.scan = lambda status, **kw: [
+            {"ticket_key": "DSLF-1", "verdict": qc.FAIL, "report": "r"},
+            {"ticket_key": "DSLF-2", "verdict": qc.UNVERIFIED, "report": "r"},
+        ]
+        sys.argv = ["qc_checker.py", "--dry-run"]
+        check("FAIL and UNVERIFIED still exit 0", qc.main(), 0)
     finally:
-        sys.argv, qc_llm.main = saved_argv, saved_main
+        qc.scan = saved
 
 
-def test_shim_fails_the_build_when_the_scan_cannot_run():
-    """config_guard and argparse both SystemExit — those must still go red."""
-    saved_argv, saved_main = sys.argv, qc_llm.main
+def test_a_scan_that_cannot_run_fails_the_build():
+    """config_guard exits on a bad YAML; argparse exits on bad args. Both must go red."""
+    saved = qc.main
     try:
-        sys.argv = ["qc_checker.py"]
-
         def boom_exit():
             raise SystemExit(1)
-        qc_llm.main = boom_exit
+        qc.main = boom_exit
         try:
-            _shim().main()
-            check("broken config fails the build", "returned", "SystemExit")
+            qc._entry()
+            check("SystemExit fails the build", "returned", "SystemExit")
         except SystemExit as e:
-            check("broken config fails the build", e.code, 1)
+            check("SystemExit fails the build", e.code, 1)
 
         def boom():
             raise RuntimeError("jira exploded")
-        qc_llm.main = boom
-        check("an unexpected crash fails the build", _shim().main(), 1)
+        qc.main = boom
+        check("an unexpected crash fails the build", qc._entry(), 1)
     finally:
-        sys.argv, qc_llm.main = saved_argv, saved_main
+        qc.main = saved
 
 
-def test_shim_posts_by_default_and_caps_the_budget():
-    """Bare `python qc_checker.py` is how the cron calls it."""
-    saved_argv, saved_main = sys.argv, qc_llm.main
-    saved_budget = os.environ.pop("QC_BUDGET_S", None)
+def test_posting_is_the_default_and_dry_run_suppresses_it():
+    """`python qc_checker.py` with no arguments is exactly how the cron invokes it."""
+    saved = qc.scan
     seen = {}
     try:
+        qc.scan = lambda status, **kw: (seen.update(kw), [])[1]
         sys.argv = ["qc_checker.py"]
-        qc_llm.main = lambda: (seen.update(argv=list(sys.argv),
-                                           budget=os.environ.get("QC_BUDGET_S")), 0)[1]
-        _shim().main()
-        check("--post injected for the cron", "--post" in seen["argv"], True)
-        check("budget capped for a 5-minute cron", seen["budget"], "180")
+        qc.main()
+        check("bare call posts", seen["post"], True)
+        check("bare call does not fix", seen["fix"], False)
 
-        # An explicit budget must win over the shim's default.
-        os.environ["QC_BUDGET_S"] = "600"
-        sys.argv = ["qc_checker.py"]
-        _shim().main()
-        check("explicit QC_BUDGET_S respected", seen["budget"], "600")
+        sys.argv = ["qc_checker.py", "--dry-run"]
+        qc.main()
+        check("--dry-run suppresses posting", seen["post"], False)
+        check("--dry-run is passed through", seen["dry_run"], True)
     finally:
-        sys.argv, qc_llm.main = saved_argv, saved_main
-        os.environ.pop("QC_BUDGET_S", None)
-        if saved_budget is not None:
-            os.environ["QC_BUDGET_S"] = saved_budget
+        qc.scan = saved
 
 
-def test_shim_does_not_force_post_when_the_caller_chose():
-    saved_argv, saved_main = sys.argv, qc_llm.main
-    seen = {}
-    try:
-        sys.argv = ["qc_checker.py", "DSLF-1", "--dry-run"]
-        qc_llm.main = lambda: (seen.update(argv=list(sys.argv)), 0)[1]
-        _shim().main()
-        check("--dry-run is not overridden with --post",
-              "--post" in seen["argv"], False)
-        check("ticket key passed through", "DSLF-1" in seen["argv"], True)
-    finally:
-        sys.argv, qc_llm.main = saved_argv, saved_main
+def test_no_budget_cap_exists_any_more():
+    """The cap was removed on request — a queue runs to completion, however long."""
+    check("no QC_BUDGET_S constant", hasattr(qc, "QC_BUDGET_S"), False)
+    check("no per-run spend counter", hasattr(qc, "_spent_s"), False)
+
+
+def test_the_select_parser_lives_here_too():
+    """One QC file: the SELECT regexes moved in when select_pdf.py was deleted."""
+    for name in ("parse_select_pdf", "find_select_attachment", "_parse_shipping_info"):
+        check(f"{name} is importable from qc_checker", hasattr(qc, name), True)
 
 
 def main():

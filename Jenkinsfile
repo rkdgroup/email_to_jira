@@ -8,13 +8,12 @@
 //     python email_scanner/email_scanner.py
 //     python qc_checker.py
 //
-// On 2026-08-31 that last line broke the build, because `qc_checker.py` had been deleted
-// and this Jenkinsfile — updated in the same commit to call `qc_llm.py` — is inert.
-// `qc_checker.py` is now a shim that forwards to qc_llm; see its docstring.
+// That is why qc_checker.py has the name it has: the job hard-codes it. Renaming or
+// splitting that file breaks the cron, which is what happened on 2026-08-31.
 //
-// If this ever becomes the live config, note the shim exists for a reason: qc_llm.main()
-// returns 1 on any FAIL/UNVERIFIED, and under `sh -xe` that reds the build every time a
-// ticket legitimately fails QC. Call qc_checker.py, or replicate its exit-code handling.
+// qc_checker.py also exits 0 when tickets fail QC. Under `sh -xe` a non-zero exit reds the
+// build, and a ticket failing QC is a result, not a build error. Keep that if you ever
+// make this file the live config.
 pipeline {
     agent any
 
@@ -40,9 +39,6 @@ pipeline {
         IBMI_USER         = credentials('DSLF_IBMI_USER')
         IBMI_PASSWORD     = credentials('DSLF_IBMI_PASSWORD')
         IBMI_JT400_JAR    = "${WORKSPACE}/jt400.jar"
-        // Caps the QC stage so it cannot consume the whole build. Tickets
-        // past it come back UNVERIFIED and are re-checked next run.
-        QC_BUDGET_S       = '420'
     }
 
     stages {
@@ -58,7 +54,6 @@ pipeline {
         }
         stage('Scan QC queue') {
             steps {
-                // Via the shim, for its exit-code handling — see the header.
                 sh 'python3 qc_checker.py'
             }
         }

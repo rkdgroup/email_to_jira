@@ -4,7 +4,7 @@ Data Axle / SimioCloud Ship Label tests. No network, no Jira, no PDFs.
     python test_data_axle_ship_label.py      # standalone, prints PASS / ALL PASSED
     pytest test_data_axle_ship_label.py      # also works
 
-Found by qc_llm's ORDER check on its first live run (DSLF-1132, 2026-08-27). The label
+Found by qc_checker's ORDER check on its first live run (DSLF-1132, 2026-08-27). The label
 reads "WWP f/PBC/PO# E23063/Job #54793" and the ticket stored Mailer PO 23063 — the same
 number with its leading E missing.
 

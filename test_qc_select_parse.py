@@ -8,8 +8,8 @@ Only _parse_shipping_info survives here. The dollar-band and time-period compari
 helpers this file also used to pin (_desc_has_dollar / _desc_has_period) were part of the
 rule-based QC checker and went with it — the knowledge they encoded, that a SELECT reading
 "$10-99.99" satisfies an order written "$10+" because $99.99 is that client's contracted
-cap, is now stated in qc_llm's SELECT prompt under DOLLAR BANDS. A prompt cannot be pinned
-with an assert; the rule is asserted instead by test_qc_llm_verdict, which checks the
+cap, is now stated in qc_checker's SELECT prompt under DOLLAR BANDS. A prompt cannot be pinned
+with an assert; the rule is asserted instead by test_qc_checker, which checks the
 prompt still carries it.
 
 DSLF-1070's SELECT states its destination plainly — "FILENAME: CRU 924-105.ZIP" in the
@@ -24,7 +24,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from select_pdf import _parse_shipping_info
+from qc_checker import _parse_shipping_info
 
 _failures = []
 

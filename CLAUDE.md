@@ -15,7 +15,7 @@ There are three other Claude touchpoints; know which is which before changing on
 | Where | Module | Role |
 |-------|--------|------|
 | Live pipeline, every ticket | `tools_polish.py` | structural prose clean, gated, falls back to parser text |
-| Jenkins-scheduled QC | `qc_llm.py` | the only QC. Two checks/ticket: order-vs-ticket (fixable) + ticket-vs-SELECT |
+| Jenkins-scheduled QC | `qc_checker.py` | the only QC. Two checks/ticket: order-vs-ticket (fixable) + ticket-vs-SELECT |
 | Manual create, opt-in | `LLM_writes.py` | Claude extracts **all** fields for an unrecognized broker |
 | Offline, never scheduled | `ai_extract` / `compare_extraction` / `hybrid_create` | see "AI-Assisted Offline Tools" |
 
@@ -44,15 +44,15 @@ Jira, no DB, no PDFs, no network — the QC tests never call the API.
 python test_ship_to_rules.py         # ship-to house rules + KAP FTP-boilerplate false positive
 python test_kap_fields.py            # KAP exchange qty, spaced order #, $-prefixed select
 python test_adstra_list_code.py      # ADSTRA 5-digit list code vs address digits
-python test_qc_select_parse.py       # select_pdf SELECT-PDF parsing (spaced filenames)
-python test_qc_llm_verdict.py        # qc_llm fail-closed, verdict gate, auto-fix whitelist
+python test_qc_select_parse.py       # SELECT-PDF shipping-info parsing (spaced filenames)
+python test_qc_checker.py            # fail-closed verdicts, gate, auto-fix whitelist, exit codes
 python test_dollar_cap_backfill.py   # Dollar Cap placement + no-duplicate re-run
 python test_data_axle_ship_label.py  # Ship Label PO# prefix vs the digit-run fallback
 python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
 ```
 
 Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap.py`,
-`parsers/adstra.py`, `parsers/data_axle.py`, `qc_llm.py`, `select_pdf.py`,
+`parsers/adstra.py`, `parsers/data_axle.py`, `qc_checker.py`, `qc_checker.py`,
 `parse_pipeline._build_adf_description`, or `WO#/work_order.py`. Verified all eight pass
 2026-08-27. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
@@ -76,8 +76,8 @@ authoritative and update README only when a change is user-facing.
 ```bash
 # Scheduled automation (see "Scheduled Automation")
 python email_scanner/email_scanner.py                 # one poll of the shared mailbox
-python qc_llm.py [DSLF-123 ...] [--status S] [--post] [--fix] [--dry-run]
-                 [--order-only|--select-only] [--model M] [--effort E] [--json f]
+python qc_checker.py [DSLF-123 ...] [--status S] [--fix] [--dry-run]
+                     [--order-only|--select-only] [--model M] [--effort E] [--json f]
 python qty_approval_scanner.py [--no-email-scan] [--combined] [--output f] [--email a] [--cc b] [--subject s]
 python ticket_scanner/ticket_scanner.py [--loop N] [--reset] [--learn] [--reporter NAME]
 
@@ -107,7 +107,7 @@ pip install anthropic requests pymupdf pdfminer.six pymupdf4llm python-dotenv ms
 ```
 
 - `requirements.txt` now covers **every** runtime import, including `python-docx` (added in `86d03d0`; needed by `client_profiles.py`, `build_profile_yaml.py`, `verify_configs.py`) and `openpyxl`/`xlrd` for the zip-omit splitter. Jenkins installs from this file *only* (`pip3 install -q -r requirements.txt`), so a new runtime import that isn't added here breaks the scheduled run, not the local one.
-- `anthropic` is imported by the offline AI tools (`ai_extract.py`), by `tools_polish.py` in the live pipeline, and by `qc_llm.py` on the Jenkins cron — so `ANTHROPIC_API_KEY` is load-bearing for scheduled runs twice over. A missing key degrades prose quality and returns `UNVERIFIED` for every QC ticket; it does not break ticket creation.
+- `anthropic` is imported by the offline AI tools (`ai_extract.py`), by `tools_polish.py` in the live pipeline, and by `qc_checker.py` on the Jenkins cron — so `ANTHROPIC_API_KEY` is load-bearing for scheduled runs twice over. A missing key degrades prose quality and returns `UNVERIFIED` for every QC ticket; it does not break ticket creation.
 - `jaydebeapi` + `JPype1` (+ `jt400.jar`) power the IBM i work-order step.
 
 `.env` credentials by consumer:
@@ -117,7 +117,7 @@ pip install anthropic requests pymupdf pdfminer.six pymupdf4llm python-dotenv ms
 | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` | Everything (Jira REST) |
 | `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_SERVICE_ACCOUNT`, `MS_SERVICE_PASSWORD`, `MS_TENANT_ID`, `IMAP_EMAIL` | email + qty scanners (MSAL ROPC auth) |
 | `IBMI_HOST`, `IBMI_USER`, `IBMI_PASSWORD` | work-order creation |
-| `ANTHROPIC_API_KEY` | `tools_polish` (live pipeline) + `qc_llm` (QC) + `LLM_writes` + offline AI tools |
+| `ANTHROPIC_API_KEY` | `tools_polish` (live pipeline) + `qc_checker` (QC) + `LLM_writes` + offline AI tools |
 
 The `JIRA_API_TOKEN` in `.env` **can create and edit tickets** — `tools_jira` uses it to create issues (POST), update fields (`update_ticket_fields`, PUT → 204), comment, and attach. (Verified 2026-07-27: created DSLF-919, updated DSLF-936.) The Atlassian MCP connector is an optional alternative for interactive edits under the user's own account, not a requirement.
 
@@ -164,16 +164,16 @@ Load-bearing behaviors that are easy to get wrong:
 
 ## Scheduled Automation
 
-Four independent entry points share the pipeline and `.env`. **Only `email_scanner` + QC are Jenkins-scheduled** — by a freestyle Execute-shell job whose script lives in the Jenkins config, **not** by this repo's `Jenkinsfile` (see "QC" below). It calls `python qc_checker.py`, which is a shim onto `qc_llm`. `qty_approval_scanner` is run manually / emailed; `ticket_scanner` uses a Windows Task Scheduler `.bat`.
+Four independent entry points share the pipeline and `.env`. **Only `email_scanner` + QC are Jenkins-scheduled** — by a freestyle Execute-shell job whose script lives in the Jenkins config, **not** by this repo's `Jenkinsfile` (see "QC" below). It calls `python qc_checker.py`, which is a shim onto `qc_checker`. `qty_approval_scanner` is run manually / emailed; `ticket_scanner` uses a Windows Task Scheduler `.bat`.
 
 | Tool | Trigger / scope | Behavior |
 |------|-----------------|----------|
 | `email_scanner/email_scanner.py` | Shared-mailbox `List Rental` folder | MSAL ROPC auth → per message: if `conversationId` in `thread_map.json`, add a comment to the existing ticket; else download PDFs (or synthesize one from the body) → `process_pdf(broker_hint=SENDER_BROKER_MAP[domain])` → move mail to `List Rental/Processed` or `/Failed`. `broker_hint` short-circuits fingerprint detection. |
-| `qc_llm.py` | `Needs QC` tickets (`--status` for any other queue) | Two LLM checks per ticket — was it **created** right from the broker order, and did the **SELECT** deliver it. Posts a comment on every ticket checked, pass included. **Never transitions.** `--fix` writes the order check's field corrections back (not enabled on the cron). Verdict is the worse of the two; `UNVERIFIED` means QC did not run and is **not** a pass. See "QC" below. |
+| `qc_checker.py` | `Needs QC` tickets (`--status` for any other queue) | Two LLM checks per ticket — was it **created** right from the broker order, and did the **SELECT** deliver it. Posts a comment on every ticket checked, pass included. **Never transitions.** `--fix` writes the order check's field corrections back (not enabled on the cron). Verdict is the worse of the two; `UNVERIFIED` means QC did not run and is **not** a pass. See "QC" below. |
 | `qty_approval_scanner.py` | `Ready to Send for Qty Approval` tickets | Reads `QTY APPROVAL/<order#>` emails → sets Requested Quantity (`cf[12271]`); SELECT-PDF `TOTAL RECORDS SELECTED` fallback. **Never transitions.** Emails a per-mailer qty digest; single-card subjects prefix the list short code via `resolve_list_code` (from `dslf_list_and_mailer_names.txt`). |
 | `ticket_scanner/ticket_scanner.py` | New DSLF tickets (issue# > saved state) | **Read-only** audit → report under `ticket_scanner/reports/`. `--learn` mines List Name→db_code patterns into `learned_patterns.json` (enrich tier 5). |
 
-Notes: `email_scanner.main()` has **no argparse** — `run_email_scanner.bat --loop` is a silent no-op (single scan). SKIP_DB_CODES emails are deliberately **left in `List Rental`** for manual handling (not moved). `email_scanner.py` and `qc_llm.py` call `config_guard.validate_configs_or_exit()` before doing work.
+Notes: `email_scanner.main()` has **no argparse** — `run_email_scanner.bat --loop` is a silent no-op (single scan). SKIP_DB_CODES emails are deliberately **left in `List Rental`** for manual handling (not moved). `email_scanner.py` and `qc_checker.py` call `config_guard.validate_configs_or_exit()` before doing work.
 
 ### Email scanner specifics
 
@@ -309,14 +309,13 @@ exactly, where this reads it fresh every run. Not scheduled; nothing calls it au
   schema, not open-ended reasoning); `ai_extract`'s own Opus/high defaults are left alone for
   `compare_extraction` and `hybrid_create`. Override with `--model` / `--effort`.
 
-## QC (`qc_llm.py`) — one file, all LLM, both questions
+## QC (`qc_checker.py`) — one file, all LLM, both questions
 
-**There is exactly one QC checker and it makes API calls.** The 14 rule-based checks in
-`qc_checker.run_qc_checks()` are gone; `qc_checker.py` is deleted. Its SELECT-PDF regexes
-survive in `select_pdf.py`, which reads printed values and makes **no judgements** — do not
-grow a comparison back into it.
+**There is exactly one QC file and it makes API calls.** `qc_checker.py` and `qc_checker.py` are
+gone; everything lives in `qc_checker.py`. **The name is load-bearing** — the live Jenkins
+job hard-codes `python qc_checker.py`, so renaming or splitting it breaks the cron.
 
-`qc_llm.py` asks two questions about the same ticket, in one run, with one LLM call each:
+It asks two questions about the same ticket, in one run, with one LLM call each:
 
 | | ORDER check | SELECT check |
 |---|---|---|
@@ -330,13 +329,13 @@ The ticket verdict is the **worse** of the two, and `UNVERIFIED` outranks `FAIL`
 knowing is worse than knowing it failed.
 
 ```bash
-python qc_llm.py                              # scan Needs QC, print only
-python qc_llm.py DSLF-1075 DSLF-1082          # named tickets
-python qc_llm.py --status "Needs Assignment"  # the creation-check queue
-python qc_llm.py --post                       # comment on every ticket checked
-python qc_llm.py --post --fix                 # also write the order-check corrections
-python qc_llm.py --order-only | --select-only | --dry-run
-python qc_llm.py --model M --effort low|medium|high|xhigh|max --json FILE
+python qc_checker.py                              # scan Needs QC and POST the verdicts
+python qc_checker.py DSLF-1075 DSLF-1082          # named tickets
+python qc_checker.py --status "Needs Assignment"  # the creation-check queue
+python qc_checker.py --dry-run                    # print only, write nothing
+python qc_checker.py --fix                        # also write the order-check corrections
+python qc_checker.py --order-only | --select-only
+python qc_checker.py --model M --effort low|medium|high|xhigh|max --json FILE
 ```
 
 - **⚠ The `Jenkinsfile` in this repo is NOT what runs.** The live job "DSLF-Email-Scanner"
@@ -348,27 +347,20 @@ python qc_llm.py --model M --effort low|medium|high|xhigh|max --json FILE
   drives a build before assuming the repo file does** — deleting `qc_checker.py` on
   2026-08-27 broke the cron on 2026-08-31 while the Jenkinsfile edit in the same commit did
   nothing. (This also explains the old "credential gap" note: the job `cp`s a full `.env`,
-  which is why MS_CLIENT_SECRET etc. are present despite not being in the Jenkinsfile.)
-- **`qc_checker.py` is a shim, not the checker.** It forwards to `qc_llm` and fixes one
-  semantic mismatch that would otherwise red the build: **`qc_llm.main()` returns 1 on any
-  FAIL/UNVERIFIED**, and the job runs under `sh -xe`. A QC finding is a result, not a build
-  error — the old rule-based `main()` returned `None` and so always exited 0. The shim
-  preserves that, while still failing the build on `SystemExit` (broken config, bad args)
-  or an unexpected exception, i.e. when the scan genuinely did not run. It also injects
-  `--post` for the bare cron call and defaults `QC_BUDGET_S=180`. Delete it once the
-  Jenkins job config is changed to `QC_BUDGET_S=180 python qc_llm.py --post`.
-- **Budget the cron.** Two LLM calls per ticket, measured **50.7s** for one ORDER check on
-  DSLF-1132 (opus-5 @ high), so ~100s per ticket for both. `QC_BUDGET_S=180` is about two
-  tickets per five-minute tick; anything past it comes back `UNVERIFIED` and is **retried
-  next run** rather than skipped, because `_last_qc_comment_time` does not count an
-  UNVERIFIED comment as checked. `--fix` is deliberately **not** on the cron.
-
-- **First live run (2026-08-27, DSLF-1132) found a real parser defect**: Mailer PO stored
-  as `23063` where the Ship Label reads `PO# E23063` — the leading letter was dropped. The
-  ORDER check proposed `mailer_po: 23063 -> E23063` and `--fix --dry-run` validated it.
-  That is a `SimioCloudParser`/`DataAxleParser` Ship-Label bug, not a QC bug — the parser
-  fell through to the "first 4+ digit run in the label" branch instead of taking the `PO#`
-  value whole.
+  which is why `MS_CLIENT_SECRET` etc. are present despite not being in the Jenkinsfile.)
+- **Posting is the DEFAULT, `--dry-run` suppresses it.** The cron calls the script bare, so
+  a bare call has to post — same as the rule-based checker it replaced. `--fix` stays
+  opt-in.
+- **`main()` returns 0 even when tickets fail.** The job runs under `sh -xe`, so a non-zero
+  exit reds the build, and a ticket failing QC is a *result*, not a build error. Non-zero is
+  reserved for "the scan could not run": `config_guard` exiting on a bad YAML, argparse
+  exiting on bad arguments, or an unexpected exception (`_entry` catches those and returns
+  1). The old rule-based `main()` returned `None` and so always exited 0; this preserves it.
+  `test_qc_checker.py` pins all three paths.
+- **There is no run budget.** A queue runs to completion however long it takes — measured
+  ~50s per check, so ~100s per ticket for both. Removed on request 2026-08-31; if the build
+  starts timing out, raise the Jenkins job's timeout rather than reintroducing a cap that
+  silently leaves tickets unchecked.
 - **A comment is posted on every ticket checked, pass included** — a clean ticket ends with
   "Checked and correct — no action needed." Silence used to mean "clean"; now it means
   "not checked".
@@ -383,18 +375,16 @@ python qc_llm.py --model M --effort low|medium|high|xhigh|max --json FILE
   unchanged.
 - **Three verdicts and the third is the point.** `PASS`/`FAIL` are the model's;
   **`UNVERIFIED` is the code's** and is returned by every failure path — no API key,
-  timeout, exhausted budget, API error, refusal, unreadable or oversize PDF, failed Jira
-  read, and a prompt that could not be assembled. `UNVERIFIED` is **not a pass**: QC did
-  not run. `test_qc_llm_verdict.py` pins every path.
+  timeout, API error, refusal, unreadable or oversize PDF, failed Jira read, and a prompt
+  that could not be assembled. `UNVERIFIED` is **not a pass**: QC did not run.
 - **An `UNVERIFIED` comment does not count as "already checked".** `_last_qc_comment_time`
-  returns `None` when the last QC comment reads `VERDICT: UNVERIFIED`, so a ticket the
-  budget cut off comes back next run. Without that, the re-run guard would see an unchanged
+  returns `None` when the last QC comment reads `VERDICT: UNVERIFIED`, so a ticket whose
+  check failed comes back next run. Without that, the re-run guard would see an unchanged
   ticket carrying a QC comment and skip it forever. The guard greps the report text, so
   `format_report` and `_last_qc_comment_time` are coupled — a test pins them together.
 - **The gate overrides the model, not the reverse.** `_reconcile()` forces `FAIL` whenever
   any finding is `WRONG` or `BLOCKING-BLANK`, whatever the model wrote in `verdict`, and
-  records `verdict_forced`. `NOTE` never forces a fail. Same philosophy as
-  `tools_polish._validate`.
+  records `verdict_forced`. `NOTE` never forces a fail.
 - **`_profile_context()` sends the client's `dollar_cap` and it is load-bearing.** `$10+` on
   an order is **not** an open-ended floor — it means $10 through *that client's* contracted
   cap (60 clients at `$99.99`, 48 at `$49.99`, a tail at `$249.99`/`$499.99`/`$999.99`, some
@@ -406,7 +396,12 @@ python qc_llm.py --model M --effort low|medium|high|xhigh|max --json FILE
   unverifiable rather than wrong. The cap is now also written onto the ticket itself — see
   Field Rules.
 - **`claude-opus-5` @ high effort.** A wrong database sends the wrong donor file to the
-  wrong company, so accuracy beats speed and cost. `QC_BUDGET_S` defaults to 900s locally.
+  wrong company, so accuracy beats speed and cost.
+- **The SELECT-report regexes live in the same file and make no judgements.**
+  `parse_select_pdf` / `find_select_attachment` / `_parse_shipping_info` survive from the
+  rule-based era because `qty_approval_scanner` needs a record count and `check_ticket`
+  needs to pick which PDF to send. A value read there belongs in a prompt as evidence, never
+  in an if-statement that decides PASS or FAIL.
 - Both prompts carry a **do-not-report list** for the known-correct-by-design cases
   (billable-vs-Client-DB prefix mismatch, house-rule ASCII Fixed/FTP, auto STATE OMITS,
   blank Mail Date/File Format/Other Fees/Key Code, qty mismatch under All Available,
@@ -424,7 +419,7 @@ threshold meant different things on different tickets. That is why it is gone ra
 patched.
 
 Everything below it knew is now prompt text in `_SYSTEM_SELECT`, and
-`test_qc_llm_verdict.py` asserts each one is still present:
+`test_qc_checker.py` asserts each one is still present:
 
 - a completed SELECT can never legitimately return **0 records**
 - **Nth** means the count must not exceed the requested quantity; **All Available** skips
@@ -478,7 +473,7 @@ job is now the ORDER check: its field map, severities, broker PO table, requesto
 known-missing-Jira-options list and both wrong-client incidents live in `_SYSTEM_ORDER`. Its
 line-161 claim that KAP titles are `P.O. {DL#} {LIST NAME}` "by design" was **not** carried
 over — that was a bug fixed in `39d94bc` which 64 tickets carried, and
-`test_qc_llm_verdict.py` asserts the exemption never comes back.
+`test_qc_checker.py` asserts the exemption never comes back.
 
 ## AI-Assisted Offline Tools
 
@@ -496,7 +491,7 @@ Auxiliary, **not part of the live pipeline**. All require `ANTHROPIC_API_KEY` an
 
 - **Title**: `{LIST NAME} - {MAILER NAME} - {MANAGER ORDER NUMBER}` (never Mailer PO). e.g. `JUDICIAL WATCH DONORS - HERITAGE FOUNDATION - W74926JW`
 - **Description**: an **ADF document** of `segment_criteria` (selection/select portion of the PDF) plus the client profile's `Select By`, `Dollar Cap`, `Standard Suppressions`, and `Special Instructions`. It is **not** the raw PDF text — the raw order text is passed separately as `create_jira_ticket(order_text=…)` and used only for the Saturn ship-to rule; the PDF itself is attached.
-  - **`Dollar Cap:` is written on every ticket that has one on file**, immediately after `Select By:`, verbatim from the profile's `dollar_cap` (`$99.99`, `NO CAP`, `VARIES PER ORDER`, … — never normalised, each means something different). Without it neither a human nor `qc_llm` can tell a correct capped pull (`10.00 THRU 99.99` against a `$10+` order) from one that quietly lost every donor above the cap. Tickets created before this ran are corrected by `backfill_dollar_cap.py`; a client with no cap recorded gets no line.
+  - **`Dollar Cap:` is written on every ticket that has one on file**, immediately after `Select By:`, verbatim from the profile's `dollar_cap` (`$99.99`, `NO CAP`, `VARIES PER ORDER`, … — never normalised, each means something different). Without it neither a human nor `qc_checker` can tell a correct capped pull (`10.00 THRU 99.99` against a `$10+` order) from one that quietly lost every donor above the cap. Tickets created before this ran are corrected by `backfill_dollar_cap.py`; a client with no cap recorded gets no line.
   - **Indentation in `segment_criteria` is structural, not cosmetic.** In `_build_adf_description` a run of indented lines becomes an ADF `bulletList` under the paragraph above it — the same shape the profile blocks use. This is the contract `tools_polish` writes to when it labels a `Selects:` group. Jira's renderer collapses leading whitespace, so an indent that stays a plain string is invisible in the UI; it has to become real ADF structure.
 - **Omission Description** (`cf[12270]`, ADF): what is omitted/suppressed — flags, states, zips/SCFs, "OMIT PREVIOUS ORDER", "1 PER HOUSEHOLD", plus profile `FLAG OMITS:`. Accepts a pre-built ADF dict **or** a plain string; a plain string is split into **one paragraph per line** so criteria don't render as a run-on blob.
 - **List Manager** = one of these exact values: ADSTRA, AALC, AMLC, CELCO, CONRAD, DATA-AXLE, KAP, MARY E GRANGER, NEGEV, NAMES IN THE NEWS, RKD, RMI, WASHINGTON LISTS, WE ARE MOORE

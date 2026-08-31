@@ -1,6 +1,6 @@
 """Startup config validation — fail fast if any config/*.yaml is malformed.
 
-Called at the top of the Jenkins entry points (email_scanner, qc_llm) so a
+Called at the top of the Jenkins entry points (email_scanner, qc_checker) so a
 bad hand-edit to a config YAML aborts the whole run LOUDLY (exit 1 -> Jenkins
 build FAILED) instead of silently failing every message. This is a cheap syntax
 gate only; see verify_configs.py for deeper content audits.

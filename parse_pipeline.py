@@ -576,7 +576,7 @@ def _build_adf_description(result, profile_data: dict = None, select_by: str = "
 
     # Dollar cap from the profile, stated verbatim. "$10+" on an order is not an
     # open-ended floor — it means $10 through THIS client's contracted cap, and without
-    # the cap on the ticket neither a human nor qc_llm can tell a correct pull
+    # the cap on the ticket neither a human nor qc_checker can tell a correct pull
     # ("10.00 THRU 99.99") from one that lost records. Printed as recorded, never
     # normalised: the profiles say "$99.99", "NO CAP", "VARIES PER ORDER" and
     # "No transaction $ available", and each means something different.

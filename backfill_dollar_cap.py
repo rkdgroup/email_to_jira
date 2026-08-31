@@ -9,7 +9,7 @@ Why the cap has to be on the ticket at all: "$10+" on an order is not an open-en
 It means $10.00 through THIS client's contracted cap, recorded per client in
 config/client_profiles.yaml (60 clients at $99.99, 48 at $49.99, a tail at $249.99 /
 $499.99 / $999.99, some NO CAP, 37 VARIES PER ORDER). Without the cap written down, neither
-a human nor qc_llm can tell a correct pull ("RECENT PAYMENT AMT. = 10.00 THRU 99.99") from
+a human nor qc_checker can tell a correct pull ("RECENT PAYMENT AMT. = 10.00 THRU 99.99") from
 one that quietly lost every donor above $99.99.
 
     python backfill_dollar_cap.py                      # DRY RUN over Needs Assignment

@@ -30,7 +30,7 @@ load_dotenv(Path(__file__).parent / ".env")
 
 sys.path.insert(0, str(Path(__file__).parent))
 from tools_pdf import extract_pdf_text
-from select_pdf import parse_select_pdf
+from qc_checker import parse_select_pdf
 
 JIRA_BASE_URL  = os.getenv("JIRA_BASE_URL", "https://rkdgroup.atlassian.net")
 JIRA_EMAIL     = os.getenv("JIRA_EMAIL")
@@ -237,7 +237,7 @@ def _get_select_qty(attachments: list) -> tuple[int | None, str]:
     if not select_atts:
         return None, ""
     # Multiple SELECT PDFs (list re-selected) → use the most recently uploaded,
-    # matching select_pdf. The first attachment can be a stale earlier count.
+    # matching qc_checker. The first attachment can be a stale earlier count.
     select_att = max(select_atts, key=lambda a: a.get("created", ""))
 
     filename    = select_att["filename"]
