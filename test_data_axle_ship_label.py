@@ -197,6 +197,67 @@ def test_label_with_no_number_yields_nothing_so_the_caller_falls_back():
         check(f"no PO in {label[:32]!r}", _ship_label_po(label), "")
 
 
+# ---------------------------------------------------------------------------
+# Key Code. The Order # suffix was a third fallback and was wrong every time: across the
+# 30 most recent Data Axle / WE ARE MOORE orders, 20 carried one and all 20 were a rep
+# name ("MNay" x18 = Michelle Nay, "Laura" x2), zero were a key code. It put "MNay" into
+# Key Code on 14 live tickets. Blank is the right answer — Key Code is optional.
+# ---------------------------------------------------------------------------
+
+def _kc_order(order_no: str, ship_label: str, key_code_field: str = "") -> str:
+    return f"""Exchange/Rental Order
+SimioCloud
+Order # {order_no}
+Mailer:
+PUBLIC BROADCASTING CONSORTIUM
+List:
+WOUNDED WARRIOR PROJECT
+Ship Label: {ship_label}
+Key Code: {key_code_field}
+Order Quantity: 1,000 All Available
+"""
+
+
+def _kc(order_no, ship_label, key_code_field=""):
+    return PARSER_REGISTRY["simiocloud"].parse(
+        _kc_order(order_no, ship_label, key_code_field)).key_code
+
+
+def test_the_rep_name_in_the_order_number_is_not_a_key_code():
+    """DSLF-1132/1131 and twelve others stored "MNay"."""
+    check("MNay suffix does not become a Key Code",
+          _kc("71018-MNay", "WWP f/PBC/PO# E23063/Job #54793"), "")
+    check("Laura suffix does not become a Key Code either",
+          _kc("2341064-Laura", "SHLM/Qty"), "")
+
+
+def test_an_explicit_key_code_field_wins_over_everything():
+    """The two orders that really had one were always read correctly — from this field."""
+    check("SHLMR3 read from the Key Code line",
+          _kc("2341064-Laura", "SHLM/Qty", "SHLMR3"), "SHLMR3")
+    check("a hyphenated key code survives",
+          _kc("2341801-Laura", "KD/Qty", "222027-KD"), "222027-KD")
+
+
+def test_ship_label_key_is_read_when_the_field_is_blank():
+    for label, want in (("WWP/Key W00G/Qty",               "W00G"),
+                        ("WWP f/SO/PO#/CLU96/Key S98/Qty", "S98"),
+                        ("WWP/Qty/Key ACF/CRS/CLL76",      "ACF"),
+                        ("WWP f/WTTW/PO#2337780/Key WWP",  "WWP")):
+        check(f"Key from {label[:34]!r}", _kc("70238-MNay", label), want)
+
+
+def test_underscore_ends_the_key_like_a_slash_does():
+    """DSLF-1130: "_Qty" was swallowed into the value, giving "S67_Qty"."""
+    check("Key S67_Qty yields S67",
+          _kc("70853-", "FA_Wounded Warrior_69715_Key S67_Qty"), "S67")
+
+
+def test_no_key_anywhere_leaves_it_blank():
+    check("blank when the order states none",
+          _kc("66995-", "MOWP E20467/QTY/WWP/JOB 54634"), "")
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),

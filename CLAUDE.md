@@ -618,8 +618,21 @@ From db_code (e.g., F41D): Billable Account = db_code without suffix (F41); Clie
 | Broker | Source |
 |--------|--------|
 | Conrad Direct | Text after "And"/"&" on MATERIAL line (not always present). e.g. "...PO# L50278HF & HF Thirteen Star Flag #2215A" → Key Code = "HF Thirteen Star Flag #2215A" |
-| Data Axle | "Key Code:" field or Order# suffix |
+| Data Axle / SimioCloud | The order's `Key Code:` field, else a `Key <value>` segment in the Ship Label. **Never the Order # suffix** — see below. |
 | Others | Extracted from order if present |
+
+**The Order # suffix is a rep name, not a key code.** `Order # 70853-MNay` /
+`2341064-Laura` — the trailing token is whoever keyed the order (Michelle Nay; the Data Axle
+rep). It was the third fallback in `DataAxleParser` until 2026-08-31 and it was wrong every
+time: over the 30 most recent Data Axle / WE ARE MOORE orders, **20 carried a suffix, all 20
+were a rep name, none was a key code**, and it wrote `MNay` into Key Code on 14 live
+tickets. The two orders that genuinely had one (`SHLMR3`, `222027-KD`) both carried a
+`-Laura` suffix as well and were read correctly from the `Key Code:` field — when a key code
+exists, the order states it. Blank is the right answer otherwise; Key Code is optional.
+
+**Underscore ends a Ship Label field just as `/` does.** `FA_Wounded Warrior_69715_Key
+S67_Qty` means Key = `S67`; stopping only at `/` and whitespace swallowed the trailing
+`_Qty` and stored `S67_Qty` (DSLF-1130). `test_data_axle_ship_label.py` pins both rules.
 
 ## Supported Brokers (12) & Detection
 

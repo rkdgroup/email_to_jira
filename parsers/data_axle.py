@@ -68,8 +68,10 @@ class DataAxleParser(BaseBrokerParser):
         """Parse Data Axle rental/exchange order PDF text."""
 
         # --- Order number ---
+        # The Order # carries a trailing "-<rep>" on most of these orders ("70853-MNay",
+        # "2341064-Laura"). That suffix is the BROKER REP who keyed the order, never a key
+        # code — see the Key Code block below.
         manager_order_number = self._find(text, r"Order\s*#\s*(\d+)")
-        key_code_from_order = self._find(text, r"Order\s*#\s*\d+-(\S+)")
 
         # --- Mailer PO from the Ship Label --- see _ship_label_po for the rules
         ship_label = self._find(text, r"Ship\s*Label[:\s]*([^\n]+)")
@@ -81,16 +83,25 @@ class DataAxleParser(BaseBrokerParser):
         if not mailer_po:
             mailer_po = manager_order_number
 
-        # --- Explicit Key Code ---
+        # --- Key Code: the order's own field, else a "Key <value>" in the Ship Label ---
+        #
+        # There is deliberately NO third fallback to the Order # suffix. It used to be one,
+        # and it was wrong every time: across the 30 most recent Data Axle / WE ARE MOORE
+        # orders, 20 carried a suffix and all 20 were a rep name — "MNay" (Michelle Nay) on
+        # 18, "Laura" on 2 — while zero were a key code. It put "MNay" in Key Code on 14
+        # live tickets. The two orders that did state a real key code ("SHLMR3",
+        # "222027-KD") both had a "-Laura" suffix as well and were read correctly from the
+        # Key Code: field, which is the point: when a key code exists the order says so.
+        # Blank is the right answer when it doesn't — Key Code is optional.
         key_code_raw = self._find(text, r"Key\s*Code:[ \t\",]*([^\n]+)")
         key_code = self._clean_nextmark_text(key_code_raw)
-        # Try Ship Label Key: field before falling back to order suffix
         if not key_code and ship_label:
-            km = re.search(r"Key[:/\s]+([^/\s]+)", ship_label, re.IGNORECASE)
+            # Underscore is a field separator in these labels just as much as "/" is:
+            # "FA_Wounded Warrior_69715_Key S67_Qty" means Key=S67, and stopping only at
+            # "/" and whitespace swallowed the trailing "_Qty" into the value (DSLF-1130).
+            km = re.search(r"Key[:/\s]+([^/\s_]+)", ship_label, re.IGNORECASE)
             if km:
                 key_code = km.group(1).strip()
-        if not key_code:
-            key_code = key_code_from_order
 
         # --- Order type ---
         order_type = ""
