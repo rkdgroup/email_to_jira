@@ -36,8 +36,8 @@ python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 `--dry-run` and `--verbose` are the **only** two CLI flags for `parse_pipeline.py`. `broker_hint` is a function argument (used by the email scanner), not a flag.
 
 **Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
-protect you if you run them. Eight regression files, each a standalone runner that prints
-`PASS` lines and `ALL PASSED` (also collectible by pytest). All eight are hermetic: no
+protect you if you run them. Nine regression files, each a standalone runner that prints
+`PASS` lines and `ALL PASSED` (also collectible by pytest). All nine are hermetic: no
 Jira, no DB, no PDFs, no network — the QC tests never call the API.
 
 ```bash
@@ -47,14 +47,15 @@ python test_adstra_list_code.py      # ADSTRA 5-digit list code vs address digit
 python test_qc_select_parse.py       # SELECT-PDF shipping-info parsing (spaced filenames)
 python test_qc_checker.py            # fail-closed verdicts, gate, auto-fix whitelist, exit codes
 python test_dollar_cap_backfill.py   # Dollar Cap placement + no-duplicate re-run
-python test_data_axle_ship_label.py  # Ship Label PO# prefix vs the digit-run fallback
+python test_data_axle_ship_label.py  # Ship Label PO# forms, JOB exclusion, Key Code
+python test_rmi_fields.py            # RMI MGT prefix stripped from Manager Order #
 python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
 ```
 
 Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap.py`,
 `parsers/adstra.py`, `parsers/data_axle.py`, `qc_checker.py`, `qc_checker.py`,
-`parse_pipeline._build_adf_description`, or `WO#/work_order.py`. Verified all eight pass
-2026-08-27. Everything else is tested manually via `--dry-run --verbose` against real
+`parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`, or
+`WO#/work_order.py`. Verified all nine pass 2026-08-31. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
 in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
@@ -516,7 +517,7 @@ Run at the top of `create_jira_ticket` and **override** whatever the parser prod
 | Broker | Mailer PO source | Manager Order # source |
 |--------|-----------------|----------------------|
 | ADSTRA | `Broker PO:` — 6-digit, BRK-prefixed, or slashed (`B/19217`); **the value can sit on the line below the label** | J-prefix or I-prefix |
-| RMI | Broker PO# field | MGT# |
+| RMI | Broker PO# field | MGT# — **the number only, prefix stripped**: `MGT26-01658` on the order becomes `26-01658` |
 | WE ARE MOORE | Ship Label number | Order# |
 | Data Axle | Ship Label PO: with suffix (58364-RN) | Order# (2316747) |
 | WASHINGTON LISTS | Client Reference with suffix | Order Number |
@@ -526,6 +527,17 @@ Run at the top of `create_jira_ticket` and **override** whatever the parser prod
 | CELCO | ORDER # | ORDER # |
 | SimioCloud | Ship Label, by `_ship_label_po` — see the note below | Order# (inherits `DataAxleParser.parse`) |
 | RKD / AMLC | `Client P.O.:` — in AMLC's columnar layout the value can sit up to 25 lines *below* its label | first 5-6 digit number in the first 10 lines (Service Bureau No. / Purchase Order No.) |
+
+**RMI: `MGT` is the field label, not part of the number.** The order prints `MGT26-01658`;
+the ticket's Manager Order # is `26-01658`. The prefix leaked into three fields at once,
+because `ParseResult` builds the title from the manager order number and
+`create_jira_ticket` forces Seed Tracking Number to equal it — so six tickets carried `MGT`
+in the title, the Manager Order # and Seed Tracking. Four of the ten RMI tickets on file
+already had the bare form, which is what settled it: the parser disagreed with itself.
+Fixed 2026-08-31 by moving the capture group inside the prefix (`MGT(\d{2}-\d+)`); the
+line-matching further down still looks for the whole `MGT26-…` token, because that is how
+the line is located on the page. Re-parsed against all ten real orders: six corrected, the
+four already-correct ones byte-identical.
 
 **A truncated Mailer PO poisons the duplicate check.** ADSTRA prints some Broker POs as
 `B/19217` on the line *below* the label. A character class without `/` stopped at the slash

@@ -21,7 +21,13 @@ class RmiDirectParser(BaseBrokerParser):
         #   end values (mailer, offer, list name before the day-of-week)
 
         # --- MGT number (line 4 in both samples) ---
-        manager_order_number = self._find(text, r"(MGT\d{2}-\d+)")
+        # The "MGT" prefix is RMI's label for the field, not part of the number, and it
+        # does not belong on the ticket: the Manager Order # is 26-01658, not MGT26-01658.
+        # Four of the ten RMI tickets on file already carried the bare form, so this only
+        # brings the parser in line with what the correct ones look like. The capture is
+        # inside the prefix; the line-matching further down still looks for the whole
+        # "MGT26-…" token because that is how the line is found on the page.
+        manager_order_number = self._find(text, r"MGT(\d{2}-\d+)")
         # mailer_po comes from "Broker PO#" field, resolved below
         mailer_po = ""
 
