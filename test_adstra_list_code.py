@@ -96,6 +96,75 @@ def test_zip_in_the_block_is_not_a_list_code():
     check("address digits ignored, real code found", r.adstra_list_code, "00532")
 
 
+# ---------------------------------------------------------------------------
+# Broker PO. ADSTRA prints some of these as "B/19217" on the line BELOW the label. A
+# character class without "/" stopped at the slash and stored a bare "B" — and because the
+# duplicate check keys on Mailer PO, three tickets carrying "B" (DSLF-722/723/724) then
+# matched every later B-order as a duplicate. J4344 was refused a ticket on 2026-08-31 and
+# its email was moved to the Failed folder.
+# ---------------------------------------------------------------------------
+
+def _po_order(broker_po_block: str) -> str:
+    return f"""Purchase Order
+      750 College Road East, Princeton NJ 08540
+Order Date:
+08/13/26
+Mailer:
+PAWS OF HONOR
+Adstra order#:
+J3742  RENTAL
+Broker:
+VERADATA
+Broker PO: {broker_po_block}
+List:
+NLEOMF DONORS (49210)
+Price
+$75.00/M
+Quantity:
+3,500 OR ALL AVAILABLE
+"""
+
+
+def _po(block):
+    return PARSER_REGISTRY["adstra"].parse(_po_order(block)).mailer_po
+
+
+def test_slashed_broker_po_is_read_whole():
+    """The real DSLF-722 shape: label on one line, "B/19217" on the next."""
+    check("B/19217 read whole", _po("\nB/19217    "), "B/19217")
+    check("a different slashed PO is distinct", _po("\nB/19223    "), "B/19223")
+
+
+def test_the_common_shapes_are_unchanged():
+    """20 of 20 recent ADSTRA orders must come out byte-identical."""
+    for block, want in ((" 672206", "672206"),
+                        (" BRK2601510", "BRK2601510"),
+                        (" BK2601514", "BK2601514"),
+                        (" 2354956", "2354956"),
+                        (" D01-122363", "D01-122363"),
+                        (" 65803-AJ", "65803-AJ"),
+                        (" E20245", "E20245"),
+                        ("\n672206", "672206")):
+        check(f"unchanged: {want}", _po(block), want)
+
+
+def test_an_empty_broker_po_does_not_run_down_the_page():
+    """_find passes re.DOTALL and \\s crosses blank lines, so the old \\s* pattern would
+    take whatever token it met further down. At most one newline is allowed now."""
+    check("blank Broker PO does not reach a distant token", _po("\n\n\nVERADATA"), "")
+
+
+def test_a_neighbouring_label_on_the_next_line_is_not_a_po():
+    """Allowing the next line is what reads B/19217, but a blank Broker PO would then
+    take the following field. Every real PO carries a digit; an all-letter match does not."""
+    check("VERADATA is not a Broker PO", _po("\nVERADATA"), "")
+    check("but a digit-bearing next-line value still is", _po("\nB/19217"), "B/19217")
+
+
+def test_a_value_cannot_start_with_punctuation():
+    check("leading slash is not a PO", _po("\n/19217"), "")
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),

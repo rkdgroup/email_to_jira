@@ -515,7 +515,7 @@ Run at the top of `create_jira_ticket` and **override** whatever the parser prod
 
 | Broker | Mailer PO source | Manager Order # source |
 |--------|-----------------|----------------------|
-| ADSTRA | 6-digit or BRK-prefixed | J-prefix or I-prefix |
+| ADSTRA | `Broker PO:` — 6-digit, BRK-prefixed, or slashed (`B/19217`); **the value can sit on the line below the label** | J-prefix or I-prefix |
 | RMI | Broker PO# field | MGT# |
 | WE ARE MOORE | Ship Label number | Order# |
 | Data Axle | Ship Label PO: with suffix (58364-RN) | Order# (2316747) |
@@ -526,6 +526,17 @@ Run at the top of `create_jira_ticket` and **override** whatever the parser prod
 | CELCO | ORDER # | ORDER # |
 | SimioCloud | Ship Label, by `_ship_label_po` — see the note below | Order# (inherits `DataAxleParser.parse`) |
 | RKD / AMLC | `Client P.O.:` — in AMLC's columnar layout the value can sit up to 25 lines *below* its label | first 5-6 digit number in the first 10 lines (Service Bureau No. / Purchase Order No.) |
+
+**A truncated Mailer PO poisons the duplicate check.** ADSTRA prints some Broker POs as
+`B/19217` on the line *below* the label. A character class without `/` stopped at the slash
+and stored a bare `B`, which DSLF-722/723/724 still carry — and since the duplicate check
+keys on `cf[12193]` Mailer PO, every later order that also truncated to `B` matched all
+three as duplicates. J4344 was refused a ticket on 2026-08-31 and its email was moved to
+`List Rental/Failed`. Fixed in `parsers/adstra.py`: `/` is part of the value, the gap to the
+value is at most one newline (`_find` passes `re.DOTALL`, so the old `\s*` could run down
+the page), and an all-letter match is rejected because every real PO carries a digit.
+Re-parsed, the three read `B/19217` / `B/19219` / `B/19223` — distinct, so the collision
+disappears. `test_adstra_list_code.py` pins it.
 
 ### The Ship Label is a jumble and only one number in it is ours
 

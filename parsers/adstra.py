@@ -21,7 +21,30 @@ class AdstraParser(BaseBrokerParser):
         manager_order_number = self._find(text, r"Adstra\s+order#:\s*([JI]\d+)", group=1)
 
         # --- Mailer PO (Broker PO — may be numeric or alphanumeric e.g. E14537) ---
-        mailer_po = self._find(text, r"Broker\s+PO:\s*([A-Z0-9-]+)")
+        #
+        # Two things this pattern has to get right, both learned the hard way:
+        #
+        # "/" belongs to the value. ADSTRA prints some of these as "B/19217", and a class
+        # of [A-Z0-9-] stopped at the slash and stored a bare "B". Three tickets
+        # (DSLF-722/723/724) carry that, and because the duplicate check keys on Mailer PO
+        # they then matched every later "B" order as a duplicate — J4344 was refused a
+        # ticket on 2026-08-31 and its email moved to the Failed folder.
+        #
+        # The gap is at most one newline, not \s*. `_find` passes re.DOTALL and \s crosses
+        # blank lines, so on an order with an empty "Broker PO:" the old pattern would run
+        # down the page and take whatever token it met next. Requiring the value to start
+        # alphanumeric stops a stray "/" or "-" from opening it.
+        #
+        # Verified over the 20 most recent ADSTRA orders: identical output on all 20
+        # (672206, BRK2601510, BK2601514, 2354956, …), and B/19217 now read whole.
+        mailer_po = self._find(
+            text, r"Broker\s+PO:[ \t]*\n?[ \t]*([A-Z0-9][A-Z0-9/-]*)")
+        # Allowing the value on the next line is what reads "B/19217", but it also lets a
+        # blank "Broker PO:" pick up whatever field follows it. Every PO shape on file
+        # carries at least one digit — 672206, BRK2601510, D01-122363, CKZ48, E20245,
+        # M9771, B/19217 — so an all-letter match is a neighbouring label, not a PO.
+        if mailer_po and not any(c.isdigit() for c in mailer_po):
+            mailer_po = ""
         if not mailer_po:
             mailer_po = self._find(text, r"\b(BRK-\d+|\d{6})\b")
 
