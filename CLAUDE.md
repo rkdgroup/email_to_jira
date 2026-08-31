@@ -164,7 +164,7 @@ Load-bearing behaviors that are easy to get wrong:
 
 ## Scheduled Automation
 
-Four independent entry points share the pipeline and `.env`. **Only `email_scanner` + `qc_llm` are Jenkins-scheduled** (Jenkinsfile, cron `H/5 * * * *`, **15-min** timeout, `QC_BUDGET_S=420`). `qty_approval_scanner` is run manually / emailed; `ticket_scanner` uses a Windows Task Scheduler `.bat`.
+Four independent entry points share the pipeline and `.env`. **Only `email_scanner` + QC are Jenkins-scheduled** — by a freestyle Execute-shell job whose script lives in the Jenkins config, **not** by this repo's `Jenkinsfile` (see "QC" below). It calls `python qc_checker.py`, which is a shim onto `qc_llm`. `qty_approval_scanner` is run manually / emailed; `ticket_scanner` uses a Windows Task Scheduler `.bat`.
 
 | Tool | Trigger / scope | Behavior |
 |------|-----------------|----------|
@@ -339,14 +339,30 @@ python qc_llm.py --order-only | --select-only | --dry-run
 python qc_llm.py --model M --effort low|medium|high|xhigh|max --json FILE
 ```
 
-- **Jenkins runs `python3 qc_llm.py --post`**, not `--fix`. Two LLM calls per ticket:
-  measured **50.7s** for one ORDER check on DSLF-1132 (opus-5 @ high), so budget ~100s per
-  ticket for both. The build timeout went **4 min → 15 min** and the Jenkinsfile sets
-  `QC_BUDGET_S=420`, which is about **4 tickets per run** — enough for a normal cron tick,
-  and anything past it comes back `UNVERIFIED` and is retried next run rather than being
-  skipped. The cap also stops QC starving the email scanner queued behind it in the same
-  build. `disableConcurrentBuilds()` means an overrunning build makes the next cron tick
-  skip, not pile up.
+- **⚠ The `Jenkinsfile` in this repo is NOT what runs.** The live job "DSLF-Email-Scanner"
+  is a **freestyle Execute-shell step** whose script lives in the Jenkins job config. Its
+  log opens `/bin/sh -xe /tmp/jenkins….sh`, then `rm -rf email_to_jira && git clone …` into
+  a subdirectory, `python3.11 -m venv env`, `pip3 install -r requirements.txt`,
+  `cp <credential> .env`, and finally `python email_scanner/email_scanner.py` +
+  `python qc_checker.py`. Editing the Jenkinsfile changes nothing. **Verify which config
+  drives a build before assuming the repo file does** — deleting `qc_checker.py` on
+  2026-08-27 broke the cron on 2026-08-31 while the Jenkinsfile edit in the same commit did
+  nothing. (This also explains the old "credential gap" note: the job `cp`s a full `.env`,
+  which is why MS_CLIENT_SECRET etc. are present despite not being in the Jenkinsfile.)
+- **`qc_checker.py` is a shim, not the checker.** It forwards to `qc_llm` and fixes one
+  semantic mismatch that would otherwise red the build: **`qc_llm.main()` returns 1 on any
+  FAIL/UNVERIFIED**, and the job runs under `sh -xe`. A QC finding is a result, not a build
+  error — the old rule-based `main()` returned `None` and so always exited 0. The shim
+  preserves that, while still failing the build on `SystemExit` (broken config, bad args)
+  or an unexpected exception, i.e. when the scan genuinely did not run. It also injects
+  `--post` for the bare cron call and defaults `QC_BUDGET_S=180`. Delete it once the
+  Jenkins job config is changed to `QC_BUDGET_S=180 python qc_llm.py --post`.
+- **Budget the cron.** Two LLM calls per ticket, measured **50.7s** for one ORDER check on
+  DSLF-1132 (opus-5 @ high), so ~100s per ticket for both. `QC_BUDGET_S=180` is about two
+  tickets per five-minute tick; anything past it comes back `UNVERIFIED` and is **retried
+  next run** rather than skipped, because `_last_qc_comment_time` does not count an
+  UNVERIFIED comment as checked. `--fix` is deliberately **not** on the cron.
+
 - **First live run (2026-08-27, DSLF-1132) found a real parser defect**: Mailer PO stored
   as `23063` where the Ship Label reads `PO# E23063` — the leading letter was dropped. The
   ORDER check proposed `mailer_po: 23063 -> E23063` and `--fix --dry-run` validated it.

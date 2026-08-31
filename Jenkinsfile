@@ -1,3 +1,20 @@
+// ⚠ THIS FILE IS NOT WHAT RUNS. Editing it changes nothing.
+//
+// The live job "DSLF-Email-Scanner" is a FREESTYLE "Execute shell" step whose script is
+// stored in the Jenkins job config, not here. Its build log opens with
+// `/bin/sh -xe /tmp/jenkins….sh` and it does `rm -rf email_to_jira && git clone …` into a
+// subdirectory, builds a venv, copies a credential file to .env, then runs:
+//
+//     python email_scanner/email_scanner.py
+//     python qc_checker.py
+//
+// On 2026-08-31 that last line broke the build, because `qc_checker.py` had been deleted
+// and this Jenkinsfile — updated in the same commit to call `qc_llm.py` — is inert.
+// `qc_checker.py` is now a shim that forwards to qc_llm; see its docstring.
+//
+// If this ever becomes the live config, note the shim exists for a reason: qc_llm.main()
+// returns 1 on any FAIL/UNVERIFIED, and under `sh -xe` that reds the build every time a
+// ticket legitimately fails QC. Call qc_checker.py, or replicate its exit-code handling.
 pipeline {
     agent any
 
@@ -41,7 +58,8 @@ pipeline {
         }
         stage('Scan QC queue') {
             steps {
-                sh 'python3 qc_llm.py --post'
+                // Via the shim, for its exit-code handling — see the header.
+                sh 'python3 qc_checker.py'
             }
         }
     }

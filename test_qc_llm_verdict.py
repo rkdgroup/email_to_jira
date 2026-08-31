@@ -393,6 +393,98 @@ def test_no_fix_field_leaks_into_the_select_check():
     check("ORDER findings do have fix_field", "fix_field" in props, True)
 
 
+# ---------------------------------------------------------------------------
+# 7. The qc_checker.py shim — what keeps the scheduled build green
+#
+# The live Jenkins job is a freestyle Execute-shell step whose script lives in the Jenkins
+# config, NOT in this repo's Jenkinsfile, and it calls `python qc_checker.py`. Deleting
+# that file broke the build on 2026-08-31. The shim forwards to qc_llm and fixes one
+# semantic mismatch: qc_llm.main() returns 1 on any FAIL/UNVERIFIED, and under `sh -xe`
+# that would paint the build red every time a ticket legitimately fails QC.
+# ---------------------------------------------------------------------------
+
+def _shim():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_shim", str(Path(__file__).parent / "qc_checker.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_shim_exits_zero_on_qc_findings():
+    """A QC finding is a result, not a build error. The old checker always exited 0."""
+    saved_argv, saved_main = sys.argv, qc_llm.main
+    try:
+        sys.argv = ["qc_checker.py"]
+        qc_llm.main = lambda: 1          # as if tickets FAILed
+        check("findings do not fail the build", _shim().main(), 0)
+    finally:
+        sys.argv, qc_llm.main = saved_argv, saved_main
+
+
+def test_shim_fails_the_build_when_the_scan_cannot_run():
+    """config_guard and argparse both SystemExit — those must still go red."""
+    saved_argv, saved_main = sys.argv, qc_llm.main
+    try:
+        sys.argv = ["qc_checker.py"]
+
+        def boom_exit():
+            raise SystemExit(1)
+        qc_llm.main = boom_exit
+        try:
+            _shim().main()
+            check("broken config fails the build", "returned", "SystemExit")
+        except SystemExit as e:
+            check("broken config fails the build", e.code, 1)
+
+        def boom():
+            raise RuntimeError("jira exploded")
+        qc_llm.main = boom
+        check("an unexpected crash fails the build", _shim().main(), 1)
+    finally:
+        sys.argv, qc_llm.main = saved_argv, saved_main
+
+
+def test_shim_posts_by_default_and_caps_the_budget():
+    """Bare `python qc_checker.py` is how the cron calls it."""
+    saved_argv, saved_main = sys.argv, qc_llm.main
+    saved_budget = os.environ.pop("QC_BUDGET_S", None)
+    seen = {}
+    try:
+        sys.argv = ["qc_checker.py"]
+        qc_llm.main = lambda: (seen.update(argv=list(sys.argv),
+                                           budget=os.environ.get("QC_BUDGET_S")), 0)[1]
+        _shim().main()
+        check("--post injected for the cron", "--post" in seen["argv"], True)
+        check("budget capped for a 5-minute cron", seen["budget"], "180")
+
+        # An explicit budget must win over the shim's default.
+        os.environ["QC_BUDGET_S"] = "600"
+        sys.argv = ["qc_checker.py"]
+        _shim().main()
+        check("explicit QC_BUDGET_S respected", seen["budget"], "600")
+    finally:
+        sys.argv, qc_llm.main = saved_argv, saved_main
+        os.environ.pop("QC_BUDGET_S", None)
+        if saved_budget is not None:
+            os.environ["QC_BUDGET_S"] = saved_budget
+
+
+def test_shim_does_not_force_post_when_the_caller_chose():
+    saved_argv, saved_main = sys.argv, qc_llm.main
+    seen = {}
+    try:
+        sys.argv = ["qc_checker.py", "DSLF-1", "--dry-run"]
+        qc_llm.main = lambda: (seen.update(argv=list(sys.argv)), 0)[1]
+        _shim().main()
+        check("--dry-run is not overridden with --post",
+              "--post" in seen["argv"], False)
+        check("ticket key passed through", "DSLF-1" in seen["argv"], True)
+    finally:
+        sys.argv, qc_llm.main = saved_argv, saved_main
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),
