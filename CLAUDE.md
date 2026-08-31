@@ -228,6 +228,21 @@ On every **live** create, `_create_and_link_work_order()` imports `WO#/work_orde
   on one connection; it also reads the shop's `PEPBK#` counter as an allocation floor (read
   only — the ARWRKSCH trigger advances it) so it won't take a number order-entry reserved
   ahead of the committed MAX. `WO#/test_work_order_allocation.py` pins this loop.
+- **⚠ WO failures are silent by design, so the log line is the only evidence.** Since
+  2026-08-31 `_create_and_link_work_order` logs `%r` + `exc_info=True`; before that it
+  logged bare `str(e)`, and a JPype-wrapped Java exception rendered as just
+  `java.lang.ArrayIndexOutOfBoundsException: Index 0 out of bounds for length 0` with no
+  clue whether it came from the connect, the scan or the INSERT.
+- **Open incident: DSLF-1139 through -1142 have no Work Order** (created 2026-08-31).
+  DSLF-1138 / WO 466554 is the last successful allocation. Ruled out by evidence: it is not
+  the billable account (S15 both worked and failed), not number-space exhaustion
+  (`_WO_MAX = 500_000`, at 466554), and not the INSERT parameter count (8 markers, 8
+  values). The exception is thrown inside the **jt400 Java driver**, not Python. Prime
+  suspect is the environment rather than the code, because **`requirements.txt` has no
+  version pins** and the Jenkins job does `rm -rf` + fresh clone + fresh venv +
+  `pip3 install -r requirements.txt` on **every 5-minute tick** — so `JPype1`,
+  `jaydebeapi` and the rest can change under a scheduled run with no commit. Cannot be
+  reproduced locally: JPype is blocked on the dev machine by Application Control policy.
 - **`jt400.jar` is auto-discovered, not configured** (`WO#/base.py:_resolve_jt400`): `IBMI_JT400_JAR`
   first, then `/opt/jt400/jt400.jar`, the Jenkins workspace
   `/var/lib/jenkins/workspace/DSLF-Email-Scanner/jt400.jar`, the project root, and finally a

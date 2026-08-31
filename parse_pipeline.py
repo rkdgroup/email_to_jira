@@ -498,7 +498,14 @@ def _create_and_link_work_order(
 
         return wo.wo_number
     except Exception as e:
-        log.warning("Work order creation failed for %s: %s", ticket_key, e)
+        # Log the traceback, not just str(e). The WO step swallows its failures by design
+        # (the ticket must still succeed), which means the log line is the ONLY record of
+        # what went wrong — and "%s" of a JPype-wrapped Java exception gives just
+        # "java.lang.ArrayIndexOutOfBoundsException: Index 0 out of bounds for length 0"
+        # with no indication of which call threw it. That cost a diagnosis on 2026-08-31,
+        # when DSLF-1139 through -1142 were created with no work order and the one-line
+        # message could not distinguish a connect failure from a scan or an INSERT.
+        log.warning("Work order creation failed for %s: %r", ticket_key, e, exc_info=True)
         return None
 
 
