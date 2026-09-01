@@ -188,6 +188,67 @@ def test_kap_ignores_ftp_boilerplate():
           r.ship_to_email, "TapeLibrarian@directmail.com")
 
 
+# ---------------------------------------------------------------------------
+# IN-HOUSE: anything at data-management.com is our own address.
+#
+# "Any time you see ship to data-management, even if it says FTP, it will always be an
+# inhouse order and shipped to tlibrarian@data-management.com" (Suvam, 2026-09-01, restating
+# an earlier instruction). Settled by the live data too: of 440 tickets shipping there, 439
+# use tlibrarian@ and 418 carry Email. The 7 carrying FTP were the defect.
+#
+# This rule runs LAST in apply_ship_to_rules so it overrides the Saturn and Data Axle FTP
+# forcing. The tests below pin both halves: in-house wins, and nothing else moves.
+# ---------------------------------------------------------------------------
+
+def test_data_management_is_always_in_house_even_when_the_order_says_ftp():
+    """DSLF-1152 came out FTP NOTIFY: tlibrarian@... from a KAP order printing FTP."""
+    check("FTP is overridden to in-house Email",
+          apply_ship_to_rules("FTP NOTIFY: tlibrarian@data-management.com", "", "FTP"),
+          ("tlibrarian@data-management.com", "", "Email"))
+
+
+def test_any_dmi_mailbox_normalises_to_the_tape_library():
+    check("smondal@ becomes tlibrarian@",
+          apply_ship_to_rules("smondal@data-management.com", "", "FTP"),
+          ("tlibrarian@data-management.com", "", "Email"))
+    check("upper case handled",
+          apply_ship_to_rules("TLIBRARIAN@DATA-MANAGEMENT.COM", "", "Email"),
+          ("tlibrarian@data-management.com", "", "Email"))
+
+
+def test_in_house_wins_over_the_saturn_and_data_axle_forcing():
+    """Both of those force FTP earlier in the function; in-house must still win."""
+    check("saturn body text does not keep it on FTP",
+          apply_ship_to_rules("tlibrarian@data-management.com", "", "Email",
+                              "PLACE ON SATURN'S FTP SITE")[2], "Email")
+    check("and the destination stays the tape library",
+          apply_ship_to_rules("tlibrarian@data-management.com", "", "Email",
+                              "PLACE ON SATURN'S FTP SITE")[0],
+          "tlibrarian@data-management.com")
+
+
+def test_the_other_house_rules_are_unaffected():
+    """Regression guard: only data-management.com destinations may change."""
+    check("saturn still forces FTP + ASCII Fixed",
+          apply_ship_to_rules("convert@saturncorp.com", "", "Email"),
+          ("FTP NOTIFY: convert@saturncorp.com", "ASCII Fixed", "FTP"))
+    check("data-axle drop-box still forces FTP + ASCII Fixed",
+          apply_ship_to_rules("incoming.files@data-axle.com", "", "Email"),
+          ("FTP NOTIFY: incoming.files@data-axle.com", "ASCII Fixed", "FTP"))
+    check("fixed-format house still ASCII Fixed over Email",
+          apply_ship_to_rules("TapeLibrarian@directmail.com", "", "Email"),
+          ("TapeLibrarian@directmail.com", "ASCII Fixed", "Email"))
+    check("plain order still untouched",
+          apply_ship_to_rules("mercy@mmidirect.com", "", "Email"),
+          ("mercy@mmidirect.com", "", "Email"))
+
+
+def test_a_lookalike_domain_is_not_in_house():
+    """The match is on @data-management.com, not on the words."""
+    check("data-management.co.uk is not us",
+          apply_ship_to_rules("x@data-management.co.uk", "", "FTP")[2], "FTP")
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),

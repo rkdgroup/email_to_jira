@@ -529,6 +529,7 @@ Run at the top of `create_jira_ticket` and **override** whatever the parser prod
 1. **Saturn** — `"saturn"` in `ship_to_email` OR `order_text` → force File Format = ASCII Fixed, Method = FTP, rewrite ship-to to `FTP NOTIFY: … (SATURN CORP)`. (`order_text` is passed in specifically so a body-only Saturn mention still fires.)
 2. **data-axle.com** ship-to → ASCII Fixed + FTP + `FTP NOTIFY:` prefix (never emailed).
 3. `_FIXED_FORMAT_EMAILS` (data@trylondm.com, data@talonmm.com, data@rkdgroup.com, tisdata@trinitydirect.net, tapelibrarian@directmail.com) → ASCII Fixed but delivery stays **Email**.
+4. **IN-HOUSE — runs LAST and overrides 1 and 2.** Any ship-to at `data-management.com` is our own address, so the order is in-house: destination forced to `tlibrarian@data-management.com` and Shipping Method to **Email**, **even when the order says FTP**. Any DMI mailbox (`smondal@`) normalises to `tlibrarian@`. `file_format` is deliberately left alone — `create_jira_ticket` already defaults it to ASCII Delimited. Measured: of 440 tickets shipping to data-management.com, 439 use `tlibrarian@` and 418 carry Email; the 7 on FTP were the defect (DSLF-1152). Put destination rules here, never in a parser — this function runs at the top of `create_jira_ticket` and covers all twelve brokers at once.
 
 ## Mailer PO and Manager Order # by Broker
 

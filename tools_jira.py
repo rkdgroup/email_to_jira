@@ -86,6 +86,10 @@ def _get_field_option_id(field_id: str, label: str) -> str | None:
 # are others; do not widen this back to a domain match.
 _DATA_AXLE_DROPBOXES = ("incoming.files@data-axle.com",)
 
+# Our own tape library. Anything shipping to data-management.com is in-house and goes
+# here — see the IN-HOUSE rule at the end of apply_ship_to_rules.
+_INHOUSE_EMAIL = "tlibrarian@data-management.com"
+
 # Fixed-format processing houses (CREAT 4300 TAPE, DON'T TOP LOAD): files sent to these
 # addresses are ALWAYS fixed-length ASCII. Delivery stays Email — these are emailed, unlike
 # the Saturn / Data Axle FTP uploads. See fixed_format_ship_to_emails.
@@ -133,6 +137,26 @@ def apply_ship_to_rules(ship_to_email: str, file_format: str, shipping_method: s
 
     if ship_to_email and any(a in ship_to_email.lower() for a in _FIXED_FORMAT_EMAILS):
         file_format = "ASCII Fixed"
+
+    # IN-HOUSE rule, and it wins over everything above it.
+    #
+    # Any ship-to at data-management.com is OUR OWN address: the file never leaves the
+    # building, so it is an in-house order delivered to tlibrarian@data-management.com —
+    # "even if it says FTP" (Suvam, 2026-09-01, restating an earlier instruction). An order
+    # that names an FTP site and a data-management destination is describing how the broker
+    # would have sent it to an outside bureau, not how we ship it to ourselves.
+    #
+    # Settled by the live data rather than by reading the orders: of 440 tickets shipping to
+    # data-management.com, 439 use tlibrarian@ and 418 carry Email. The 7 that carry FTP are
+    # the defect this rule removes, DSLF-1152 among them.
+    #
+    # Deliberately last, so it overrides the Saturn and data-axle FTP forcing above. Also
+    # deliberately does NOT touch file_format: the instruction covers the destination and
+    # the delivery, and create_jira_ticket already defaults format to ASCII Delimited, which
+    # is what 439 of these 440 tickets carry.
+    if ship_to_email and "@data-management.com" in ship_to_email.lower():
+        ship_to_email = _INHOUSE_EMAIL
+        shipping_method = "Email"
 
     return ship_to_email, file_format, shipping_method
 
