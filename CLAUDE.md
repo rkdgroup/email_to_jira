@@ -519,6 +519,9 @@ Auxiliary, **not part of the live pipeline**. All require `ANTHROPIC_API_KEY` an
 - **Special Seed Instructions**: only "Insert:" lines. Never FTP/email info. Blank for most orders.
 - **Status on creation**: Always "Needs Assignment". Never transition on creation.
 
+
+**KAP: only the Ship To block decides the destination, and it can be 15 lines below the label.** `_ship_block` is capped at 260 chars for reading the Via/format tokens, but the address hunt now runs over everything from `Ship To:` to the end of the page and never above it. DSLF-1152 printed `Email: BCRABTREE@RKDGROUP.COM` (the broker's own rep) near the top and the real drop point in prose further down — the old page-wide `Email:` fallback took the rep. Same family as DSLF-1022 and DSLF-1029. `send an email to X and Y` takes X; Y is the broker being copied. Verified on the 16 most recent KAP orders: only DSLF-1152 changed.
+
 ## Ship-To House Rules (tools_jira.py)
 
 Run at the top of `create_jira_ticket` and **override** whatever the parser produced:
@@ -613,7 +616,7 @@ digit run. Ask before extending the token forms to cover these.
 | ADSTRA | BOBBI DURRETT | BOBBI.DURRETT@ADSTRADATA.COM |
 | RMI | ALICIA GALLAGHER | AGALLAGHER@RMIDIRECT.COM |
 | WE ARE MOORE | MICHELLE NAY | MNAY@WEAREMOORE.COM |
-| KAP | JENNY GOMEZ | jgomez@keyacquisition.com |
+| KAP | JENNY GOMEZ | jgomez@keyacquisition.com — house default only. The order's own `contact <Name> at\|@ Email: <addr>` line wins, and the captured address is pinned to `@keyacquisition.com`: "Please" is optional, so a domain-agnostic pattern could take the FTP-setup address (`eftaccountsetup@igxfer.com`, DSLF-1141) instead. |
 | CONRAD DIRECT | Brenda Gundlah | bgundlah@conraddirect.com |
 
 ## DSLF Custom Field IDs

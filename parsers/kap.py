@@ -212,7 +212,20 @@ class KapParser(BaseBrokerParser):
         # Fallback: any @keyacquisition.com email in the text (e.g. email-only orders)
         requestor_name = ""
         requestor_email = ""
-        m = re.search(r"Please contact\s+(.+?)\s+at\s+Email:\s*([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
+        # Three variants of the same sentence, all seen on live orders:
+        #   "Please contact Robin Wojack at Email: rwojack@keyacquisition.com"
+        #   "Please contact Robin Wojack @ Email:  rwojack@..."   (DSLF-1152)
+        #   "contact Robin Wojack at Email: rwojack@..."          (DSLF-1141, no "Please")
+        # An "at"-only, Please-required pattern missed the latter two, leaving Requestor
+        # Name blank while the keyacquisition fallback below still found the address.
+        #
+        # The captured address is pinned to KAP's own domain rather than any address. That
+        # is the requestor rule this parser already states further down -- the requestor is
+        # the LIST MANAGER's contact, never the mailer's -- and it is what makes dropping
+        # "Please" safe: DSLF-1141 also carries "contact eftaccountsetup@igxfer.com" for
+        # FTP setup, which a domain-agnostic pattern could have taken instead.
+        m = re.search(r"(?:Please\s+)?contact\s+(.+?)\s*(?:\bat\b|@)\s*(?:Email:)?\s*"
+                      r"([\w.+-]+@keyacquisition(?:partners)?\.com)", text, re.IGNORECASE)
         if m:
             requestor_name = m.group(1).strip()
             requestor_email = m.group(2).strip()
@@ -247,14 +260,28 @@ class KapParser(BaseBrokerParser):
         # first such match is the mailer/broker contact — that is how the Data-Axle rep's
         # address reached ship_to_email on DSLF-1022 and the mailer's own contact reached it
         # on DSLF-1029. See also DSLF-802.
+        # Everything from the Ship To label to the end of the page. _ship_block is capped at
+        # 260 chars, which is right for reading the Via/format tokens that sit immediately
+        # after the labels, but the destination can be much further down in prose — on
+        # DSLF-1152 it was ~15 lines past the label. Searching for an address must never
+        # look ABOVE this point: the first "Email:" on a KAP order is the mailer/broker
+        # contact, and reading the whole page is precisely how BCRABTREE@RKDGROUP.COM (the
+        # broker's own rep) became the ship-to on DSLF-1152, LKA on DSLF-1022 and the
+        # mailer's contact on DSLF-1029.
+        _ship_tail = text[_m_block.start():] if _m_block else ""
+
         ship_to_email = ""
         m = re.search(r"(incoming\.files@data-axle\.com)", text, re.IGNORECASE)
         if not m:
             m = re.search(r"([\w.+-]+@[\w.-]+\.\w+)", _ship_block)
         if not m:
-            m = re.search(r"Email\s+to:[^\n@]*?([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
+            # "Email to:", "send an email to X and Y", "email the file to X". The FIRST
+            # address is the destination; a second one after "and" is the broker being
+            # copied, which belongs in Shipping Instructions rather than Ship To.
+            m = re.search(r"e-?mail\s+(?:the\s+\w+\s+)?to:?[^\n@]*?([\w.+-]+@[\w.-]+\.\w+)",
+                          _ship_tail, re.IGNORECASE)
         if not m:
-            m = re.search(r"Email:\s*([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
+            m = re.search(r"Email:\s*([\w.+-]+@[\w.-]+\.\w+)", _ship_tail, re.IGNORECASE)
         if m:
             ship_to_email = m.group(1)
 

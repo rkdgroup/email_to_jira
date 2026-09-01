@@ -299,6 +299,95 @@ def test_kap_order_may_use_a_dm_prefix():
           r.summary, "AID FOR STARVING CHILDREN - KIDS WISH NETWORK - DM022")
 
 
+# DSLF-1152: the destination sits ~15 lines below the "Ship To:" label, in prose, while the
+# broker rep's address is printed near the TOP of the page. _ship_block is capped at 260
+# chars so it did not reach the prose, and the last-resort fallback searched the WHOLE page
+# and took the rep. Only the Ship To block decides the destination.
+_DL_RKD = """Order Date:
+KAP Order:
+9943  RW
+DM054
+08/29/26
+Purchase Order
+List rental
+Mailer:
+MARINE TOYS FOR TOTS
+Broker order:
+Wanted By:
+ Email: BCRABTREE@RKDGROUP.COM
+ Contact:BRENDA CRABTREE  BCRABTREE@RKDGROUP.COM
+Mail Date:
+RKD GROUP
+132700
+08/30/26
+10/06/26
+Broker:
+List:
+Price:
+AID FOR STARVING CHILDREN
+$10 + L18 MO
+$ 95.00 /M
+Rental Qty:
+5,000
+Nth select
+Material:
+Price:
+Ship To:
+Via:
+Contact:
+FTP
+$100.00
+FTP
+Attn: DATA-MANAGEMENT.COM
+Please note these will ship to DMI.
+Go to:  www.data-management.com
+Once file has posted, send an email to  tlibrarian@data-management.com  and  bcrabtree@rkdgroup.com
+contact Robin Wojack at Email: rwojack@keyacquisition.com.
+"""
+
+
+def test_the_broker_rep_above_the_ship_to_block_is_not_the_destination():
+    """DSLF-1152 shipped to BCRABTREE@RKDGROUP.COM, the broker's own rep."""
+    r = PARSER_REGISTRY["kap"].parse(_DL_RKD)
+    check("destination is the DMI drop point",
+          r.ship_to_email, "FTP NOTIFY: tlibrarian@data-management.com")
+    check("the broker rep is not the destination",
+          "RKDGROUP" in r.ship_to_email.upper(), False)
+
+
+def test_send_an_email_to_x_and_y_takes_the_first():
+    """The second address after "and" is the broker being copied, not the destination."""
+    r = PARSER_REGISTRY["kap"].parse(_DL_RKD)
+    check("first address wins", "tlibrarian@data-management.com" in r.ship_to_email, True)
+    check("second address excluded", "bcrabtree" in r.ship_to_email.lower(), False)
+
+
+def test_requestor_name_survives_all_three_phrasings():
+    """Please...at (DL984), Please...@ (DSLF-1152), and no-Please...at (DSLF-1141)."""
+    for phrase, tag in (
+        ("Please contact Robin Wojack at Email: rwojack@keyacquisition.com", "Please + at"),
+        ("Please contact Robin Wojack @ Email:  rwojack@keyacquisition.com", "Please + @"),
+        ("contact Robin Wojack at Email: rwojack@keyacquisition.com.",       "no Please"),
+    ):
+        r = PARSER_REGISTRY["kap"].parse(_DL_RKD.replace(
+            "contact Robin Wojack at Email: rwojack@keyacquisition.com.", phrase))
+        check(f"requestor name read [{tag}]", r.requestor_name, "Robin Wojack")
+        check(f"requestor email read [{tag}]", r.requestor_email,
+              "rwojack@keyacquisition.com")
+
+
+def test_a_non_kap_address_is_never_the_requestor():
+    """Dropping the required "Please" widened the pattern, so the captured address is
+    pinned to KAP's domain. DSLF-1141 also carries "contact eftaccountsetup@igxfer.com"."""
+    r = PARSER_REGISTRY["kap"].parse(_DL_RKD.replace(
+        "contact Robin Wojack at Email: rwojack@keyacquisition.com.",
+        "To set up your FTP login, contact eftaccountsetup@igxfer.com for help."))
+    check("igxfer setup address is not the requestor",
+          "igxfer" in (r.requestor_email or "").lower(), False)
+    check("falls back to the KAP house requestor", r.requestor_email,
+          "jgomez@keyacquisition.com")
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),
