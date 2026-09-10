@@ -64,7 +64,28 @@
       "WebFetch(domain:pypi.org)",
       "PowerShell(Remove-Item *)",
       "PowerShell(Get-CimInstance *)",
-      "Skill(claude-api)"
+      "Skill(claude-api)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; foreach \\($t in @\\(\"test_adstra_list_code.py\",\"test_kap_fields.py\",\"test_qc_select_parse.py\",\"test_ship_to_rules.py\"\\)\\) { \"=== $t ===\"; python $t 2>&1 | Select-Object -Last 4 })",
+      "PowerShell(git show HEAD:knowledge.md | Select-Object -First 30; \"=== SIZE ===\"; \\(git show HEAD:knowledge.md | Measure-Object -Line\\).Lines)",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; python \"C:\\\\Users\\\\suvam\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-suvam-Desktop-git-suvam-Jira-automation\\\\c5d3f283-e78e-40c5-9e79-b14121378065\\\\scratchpad\\\\audit_open.py\" 2>&1)",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; python \"C:\\\\Users\\\\suvam\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-suvam-Desktop-git-suvam-Jira-automation\\\\c5d3f283-e78e-40c5-9e79-b14121378065\\\\scratchpad\\\\detail.py\" DSLF-1077 DSLF-1075 DSLF-1081 DSLF-1073 2>&1)",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; python test_kap_fields.py 2>&1 | Select-Object -Last 12)",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; foreach \\($t in @\\(\"test_ship_to_rules.py\",\"test_adstra_list_code.py\",\"test_qc_select_parse.py\",\"WO#/test_work_order_allocation.py\"\\)\\) { \"=== $t ===\"; python $t 2>&1 | Select-Object -Last 2 })",
+      "Bash(git show *)",
+      "Read(//tmp/**)",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; python \"$env:TEMP\\\\qcfind.py\" 2>&1 | Select-Object -First 32)",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; python test_qc_llm_verdict.py 2>&1 | Select-String -NotMatch \"WARNING|CategoryInfo|FullyQualified|char:|^\\\\+\")",
+      "PowerShell($p=\"$env:TEMP\\\\qc_run.txt\"; if \\(Test-Path $p\\) { \"lines: \" + \\(Get-Content $p | Measure-Object -Line\\).Lines; Get-Content $p | Select-String \"VERDICT|QC CHECK RESULTS|UNVERIFIED|FINDINGS\" } else { \"not yet\" })",
+      "PowerShell(Get-Content *)",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; foreach \\($t in @\\(\"test_qc_llm_verdict.py\",\"test_qc_select_parse.py\",\"test_ship_to_rules.py\",\"test_kap_fields.py\",\"test_adstra_list_code.py\",\"WO#/test_work_order_allocation.py\"\\)\\) { $r = python $t 2>&1 | Select-String \"ALL PASSED|FAILURES\"; \"{0,-38} {1}\" -f $t, $r })",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; python test_qc_llm_verdict.py 2>&1 | Select-String \"PASS: \\(cap|named|N11D|absence|steers|blank|band|says|correct case|lower|header\\)|ALL PASSED|FAIL\")",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; python qc_llm.py DSLF-1077 2>&1 | Select-String -NotMatch \"CategoryInfo|FullyQualified|char:|^\\\\+|RemoteException\")",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; python -c \"import qc_checker, qc_llm, inspect; print\\('imports OK'\\); print\\('qc_llm referenced in qc_checker:', 'qc_llm' in inspect.getsource\\(qc_checker\\)\\)\" 2>&1; python test_qc_select_parse.py 2>&1 | Select-String \"ALL PASSED|FAILURES\")",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; python \"C:\\\\Users\\\\suvam\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-suvam-Desktop-git-suvam-Jira-automation\\\\c5d3f283-e78e-40c5-9e79-b14121378065\\\\scratchpad\\\\measure_threshold.py\" 30 2>&1 | Select-String -NotMatch \"CategoryInfo|FullyQualified|char:|^\\\\+|RemoteException\")",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; python \"C:\\\\Users\\\\suvam\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-suvam-Desktop-git-suvam-Jira-automation\\\\c5d3f283-e78e-40c5-9e79-b14121378065\\\\scratchpad\\\\measure_threshold.py\" 30 2>&1 | Select-String -NotMatch \"CategoryInfo|FullyQualified|char:|^\\\\+|RemoteException|WARNING\" | Select-Object -Last 20)",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; foreach \\($t in @\\(\"test_qc_select_parse.py\",\"test_qc_llm_verdict.py\",\"test_ship_to_rules.py\",\"test_kap_fields.py\",\"test_adstra_list_code.py\",\"WO#/test_work_order_allocation.py\"\\)\\) { $r = python $t 2>&1 | Select-String \"ALL PASSED|FAILURES\"; \"{0,-38} {1}\" -f $t, $r })",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; python test_qc_select_parse.py 2>&1)"
     ]
   }
 }

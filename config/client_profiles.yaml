@@ -1902,7 +1902,7 @@ N11D:
   - NEW TO FILE (NTF) :- PULL BY FIRST PAYMENT DATE
   - 1X DONORS :- PULL BY NUMBER OF ACCUM. TRANSACTIONS
 N15:
-  select_by: SEE SPECIAL INSTRUCTIONS
+  select_by: TRANSACTION $ AND DATE
   flags: R, $, !
   dollar_cap: NO CAP
   standard_suppressions:
