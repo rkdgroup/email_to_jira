@@ -54,6 +54,7 @@ FIELDS = [
     "customfield_12192",  # Manager Order Number
     "customfield_12193",  # Mailer PO
     "customfield_12194",  # Mailer Name
+    "customfield_12233",  # Requestor Email — printed in the email body
     "customfield_12234",  # List Name
     "customfield_12271",  # Requested Quantity (fallback)
 ]
@@ -283,6 +284,7 @@ def fetch_queue() -> list[dict]:
                 "manager_order": f.get("customfield_12192") or "",
                 "mailer_po":     f.get("customfield_12193") or "",
                 "mailer_name":   f.get("customfield_12194") or "",
+                "requestor_email": f.get("customfield_12233") or "",
                 "list_name":     f.get("customfield_12234") or "",
                 "req_qty":       f.get("customfield_12271"),
                 "attachments":   f.get("attachment") or [],
@@ -330,6 +332,40 @@ def _abbrev_list_name(name: str) -> str:
     return name
 
 
+# Words the names file leaves out of a derived acronym, read off its own entries:
+# "AMERICAN ACTION FUND FOR BLIND" -> AAFB (no F for FOR), "BAYLOR COLLEGE OF MEDICINE"
+# -> BCM, "HELP ME SEE INC" -> HMS, "LITTLETON COIN CO" -> LC.
+_ACRONYM_STOPWORDS = {"OF", "FOR", "THE", "AND", "A", "AN", "TO", "IN"}
+_ACRONYM_SUFFIXES  = {"INC", "LLC", "CO", "LTD", "CORP", "INCORPORATED"}
+
+
+def _derive_acronym(name: str) -> str:
+    """Initials of a name, by the same rule the names file used for its own entries.
+
+    dslf_list_and_mailer_names.txt marks entries with `*` as "derived acronym from
+    initials", so this is the project's existing convention rather than a new one — which
+    matters because the recipient reads these codes across many emails and a name that
+    later lands in the file must keep the code it already had. Reproducing this rule
+    against the file's 133 starred entries gives 129; the four it misses are two
+    dollar-amount rows that are not really names ("Judicial Watch-$100-999.99") and two
+    "U.S." initialisms the file collapses further (UMR, not USMR).
+
+    Digits lead their own token ("21st Century Conservative Donors" -> 21CCD), an
+    apostrophe does not split a word ("NATIONAL SHERIFF'S ASSOCIATION" -> NSA), and a
+    parenthesised suffix is dropped ("Guiding Light Mission Inc (#2310077)" -> GLM), which
+    is common on live mailer names.
+    """
+    name = re.sub(r'\([^)]*\)', ' ', name or "")
+    out: list[str] = []
+    for tok in re.split(r"[^A-Za-z0-9']+", name.upper()):
+        tok = tok.strip("'")
+        if not tok or tok in _ACRONYM_STOPWORDS or tok in _ACRONYM_SUFFIXES:
+            continue
+        digits = re.match(r'\d+', tok)
+        out.append(digits.group(0) if digits else tok[0])
+    return "".join(out)
+
+
 def _load_mailer_abbrevs() -> dict[str, str]:
     path = Path(__file__).parent / "dslf_list_and_mailer_names.txt"
     result = {}
@@ -354,7 +390,15 @@ _MAILER_ABBREVS = _load_mailer_abbrevs()
 
 
 def _abbrev_mailer(name: str) -> str:
-    return _MAILER_ABBREVS.get(name.strip().upper(), name)
+    """The mailer's short code — the known one, else derived. Never the full name.
+
+    The names file is a 2026-06-17 snapshot, so mailers new since then are simply absent:
+    "SISTERS OF MARY - WORLD VILLAGES FOR CHILDREN" is in the live queue and not in the
+    file, and returning the name unchanged left its email with no code in the subject at
+    all.
+    """
+    name = (name or "").strip()
+    return _MAILER_ABBREVS.get(name.upper()) or _derive_acronym(name)
 
 
 def _load_list_short_codes() -> tuple[dict[str, str], dict[str, str]]:
@@ -383,10 +427,11 @@ _LIST_SHORT_CODES, _CODE_BY_DESC = _load_list_short_codes()
 
 
 def resolve_list_code(name: str) -> str:
-    """Resolve a list name to its short code for the subject prefix, or "" to omit.
+    """Resolve a list name to its short code for the subject prefix.
 
     Order: existing regex (3-CODE / CODE- / bare code) -> exact '[Short:]' map ->
-    Section 1 description->code reverse map -> "". Only ever returns a space-free code.
+    Section 1 description->code reverse map -> derived initials. Only ever returns a
+    space-free code, and only "" for a blank name.
     """
     n = (name or "").strip()
     if not n:
@@ -395,7 +440,7 @@ def resolve_list_code(name: str) -> str:
     if cand and " " not in cand:
         return cand
     u = n.upper()
-    return _LIST_SHORT_CODES.get(u) or _CODE_BY_DESC.get(u) or ""
+    return _LIST_SHORT_CODES.get(u) or _CODE_BY_DESC.get(u) or _derive_acronym(n)
 
 
 
@@ -468,12 +513,21 @@ def build_report(waiting: list[dict], processed: list[dict]) -> str:
 
 def build_mailer_report(mailer: str, processed: list[dict], waiting: list[dict]) -> str:
     """
-    Body is just '<order#> = <qty>' lines, one per order — nothing else.
+    '<order#> = <qty>' lines, one per order, then the requestor address.
     e.g.
         J2044 = 3,570
         J2328 = 5,816
+
+        Requestor: BOBBI.DURRETT@ADSTRADATA.COM
+
     Quantity is the approved qty for processed tickets, otherwise the SELECT
     PDF qty (falling back to the ticket's Requested Quantity).
+
+    The '<order#> = <qty>' lines stay first and stay exactly that shape: the recipient
+    replies in the same format and scan_approval_emails parses it back out with a pattern
+    anchored on the order number, so trailing lines are safe but a change to those lines
+    is not. Measured on the live queue every mailer group had exactly one requestor;
+    several are joined with a comma rather than guessing which order belongs to whom.
     """
     rows: list[tuple[str, int | None]] = []
     for t in processed:
@@ -485,6 +539,14 @@ def build_mailer_report(mailer: str, processed: list[dict], waiting: list[dict])
     for order, qty in sorted(rows, key=lambda r: r[0]):
         qty_str = f"{int(qty):,}" if qty is not None else "-"
         lines.append(f"{order} = {qty_str}")
+
+    seen: list[str] = []
+    for t in processed + waiting:
+        addr = (t.get("requestor_email") or "").strip()
+        if addr and addr not in seen:
+            seen.append(addr)
+    if seen:
+        lines += ["", f"Requestor: {', '.join(seen)}"]
 
     return "\n".join(lines)
 
@@ -542,14 +604,20 @@ def _collapse_orders(orders: list[str]) -> str:
 
 def _subject_for(mailer: str, processed: list[dict], waiting: list[dict], default: str) -> str:
     """
-    Build the subject as '<prefix>/QTY APPROVAL/<orders>'.
+    Build the subject as '<code>/QTY APPROVAL/<orders>'.
 
-    Prefix depends on whether this mailer is an individual or a group:
-      - 1 ticket  (individual) -> list-name abbreviation   e.g. NCF/QTY APPROVAL/J2113
-      - >1 tickets (group)     -> mailer-name abbreviation  e.g. HF/QTY APPROVAL/J2113/J2114
-    When no clean abbreviation is found, the prefix is omitted entirely
-    (just 'QTY APPROVAL/J2113'). Group orders collapse consecutive runs to
-    a range (see _collapse_orders).
+    EVERY email carries a code, and which name it comes from depends on the shape:
+      - 1 ticket  (individual) -> LIST-name abbreviation   e.g. NCF/QTY APPROVAL/J2113
+      - >1 tickets (group)     -> MAILER-name abbreviation e.g. HF/QTY APPROVAL/J2113/J2114
+
+    Both resolvers now fall back to derived initials, so an unlisted name no longer drops
+    the code: the subject used to come out as a bare 'QTY APPROVAL/J2113/J2114' with
+    nothing saying whose orders those were, which is what happened to
+    "SISTERS OF MARY - WORLD VILLAGES FOR CHILDREN" — a mailer newer than the names file.
+    The code is only absent when the name itself is blank, which in practice means the
+    --combined digest, where one code could not describe every mailer in it anyway.
+
+    Group orders collapse consecutive runs to a range (see _collapse_orders).
     """
     tickets = processed + waiting
     orders  = [t["manager_order"] for t in tickets if t.get("manager_order")]
@@ -557,14 +625,9 @@ def _subject_for(mailer: str, processed: list[dict], waiting: list[dict], defaul
         return default
 
     if len(tickets) == 1:
-        # Individual order -> list-name short code (e.g. NLEOMF/QTY APPROVAL/J3126).
-        # resolve_list_code handles 3-CODE / CODE- / bare, then the names-file
-        # '[Short:]' and Section-1 maps; returns "" (omit prefix) when unresolved.
         prefix = resolve_list_code(tickets[0].get("list_name") or "")
     else:
-        cand = _abbrev_mailer(mailer) if mailer else ""
-        # Only use it if the lookup actually abbreviated the mailer to a clean code.
-        prefix = cand if cand and cand != mailer and " " not in cand else ""
+        prefix = _abbrev_mailer(mailer)
 
     head = f"{prefix}/QTY APPROVAL" if prefix else "QTY APPROVAL"
     return f"{head}/" + _collapse_orders(orders)
