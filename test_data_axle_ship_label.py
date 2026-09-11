@@ -258,6 +258,79 @@ def test_no_key_anywhere_leaves_it_blank():
           _kc("66995-", "MOWP E20467/QTY/WWP/JOB 54634"), "")
 
 
+# ---------------------------------------------------------------------------
+# Omission description — every OMIT clause, not just the first one
+#
+# DSLF-1240 (2026-09-10). The order printed its omits in three places: a forward
+# reference on the Base: line ("OMIT States & OMIT SCFs (see below)"), the criteria
+# themselves under Selects:, and the full restatement under Special Instructions:. The
+# old single re.search started at the FIRST "OMIT" in the text and stopped at the next
+# label, so the ticket stored the pointer and lost all six states, all three SCFs, the
+# PO-box/APO omit and the previous-order omit. Other Fees went blank with them, because
+# State Omits is counted off this field.
+# ---------------------------------------------------------------------------
+
+def _omit_order(base: str, selects: str = "", special: str = "") -> str:
+    return f"""Exchange/Rental Order
+SimioCloud
+Order # 71933-RL
+Mailer: Evercare Protection LLC (#1910058)
+Media: HOTLINE SENIOR SUPERFILE
+Base: {base}
+Selects: {selects}
+Addressing: Email Delivery (flat fee)
+Order Quantity: 14,000 All Available
+Ship Label: HSS_100726
+Ship to: FTP
+Special Instructions:
+{special}
+"""
+
+
+def test_omits_are_collected_from_every_block():
+    """DSLF-1240, verbatim. The forward reference goes, the criteria stay, dupes fold."""
+    r = PARSER_REGISTRY["simiocloud"].parse(_omit_order(
+        base="08/26 Hotline Donors; OMIT States & OMIT SCFs (see\nbelow) *Omit MGT26-01436",
+        selects="SCF=OMIT SCF: 100-102\nState=OMIT States: CO, KS, DC, WI, NH, CA",
+        special=("OMIT PO Boxes; OMIT APO/FPO\nOMIT RMI# MGT26-01436\n"
+                 "OMIT States: CO, KS, DC, WI, NH, CA, &\nOMIT SCF: 100-102"),
+    ))
+    check("every omit clause collected once, in page order", r.omission_description,
+          "Omit MGT26-01436\n"
+          "OMIT SCF: 100-102\n"
+          "OMIT States: CO KS DC WI NH CA\n"
+          "OMIT PO Boxes; OMIT APO/FPO\n"
+          "OMIT RMI# MGT26-01436")
+    check("6 states + 3 SCF numbers set Other Fees", r.other_fees, "State Omits")
+
+
+def test_forward_reference_alone_is_not_an_omission():
+    """"(see below)" names nothing — it must not become the whole omission field."""
+    r = PARSER_REGISTRY["simiocloud"].parse(_omit_order(
+        base="08/26 Donors; OMIT States (see\nbelow)", special="OMIT States: NJ"))
+    check("the pointer is dropped, the criterion kept",
+          r.omission_description, "OMIT States: NJ")
+
+
+def test_omit_prior_wraps_onto_a_bare_order_number():
+    """DSLF-1075/-1077: the previous-order number sits on the next line."""
+    r = PARSER_REGISTRY["simiocloud"].parse(_omit_order(
+        base="6 Month (2/26-7/26) $10+ Female Donors *Omit Prior\n66088"))
+    check("wrapped previous-order number kept", r.omission_description, "Omit Prior 66088")
+
+
+def test_a_complete_omit_does_not_absorb_the_next_number():
+    r = PARSER_REGISTRY["simiocloud"].parse(_omit_order(
+        base="6 Month Donors *Omit Prior 65111\n99999"))
+    check("a clause ending in its own number does not wrap",
+          r.omission_description, "Omit Prior 65111")
+
+
+def test_no_omit_on_the_order_leaves_the_field_blank():
+    r = PARSER_REGISTRY["simiocloud"].parse(_omit_order(base="6 Month $10+ Donors"))
+    check("nothing to omit, nothing stored", r.omission_description, "")
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),

@@ -6,8 +6,12 @@ Two questions, asked by the same command against the same ticket:
   ORDER CHECK   Was this ticket CREATED correctly from the broker's order PDF?
                 Runs on any ticket with a recognisable order attached. Its findings are
                 the fixable ones — the order is authoritative, so a wrong Mailer PO is a
-                transcription error with a known correct value. With --fix those are
-                written back to Jira.
+                transcription error with a known correct value. Those are written back to
+                Jira BY DEFAULT: a fault the checker can name and correct is not worth
+                leaving on the ticket for a human to retype. --no-fix reports without
+                writing; --dry-run writes nothing at all. What is not auto-fixable is
+                unchanged and still reported — see the _FIXABLE whitelist, which is the
+                real guarantee here.
 
   SELECT CHECK  Did the PULL deliver what the ticket asked for? Ticket vs the SELECT
                 report. Its findings are NOT fixable by editing the ticket: a select run
@@ -18,7 +22,7 @@ Two questions, asked by the same command against the same ticket:
     python qc_checker.py DSLF-1075           # one ticket (accepts several keys)
     python qc_checker.py --status "Needs Assignment"   # the creation-check queue
     python qc_checker.py --dry-run           # print only, write nothing
-    python qc_checker.py --fix               # also apply the order-check corrections
+    python qc_checker.py --no-fix            # comment only, apply no corrections
     python qc_checker.py --order-only | --select-only
     python qc_checker.py --model M --effort low|medium|high|xhigh|max --json FILE
 
@@ -546,6 +550,19 @@ def _schema(with_fix: bool) -> dict:
 #     system: the wrong donor file to the wrong company. Reported, never written.
 #   description / omission — ADF prose owned by the parsers and tools_polish. A field-level
 #     overwrite would flatten the bullet structure that _build_adf_description creates.
+#   ship_to_email — THE DESTINATION. Same class as the database triad: a wrong value sends
+#     the donor file to the wrong company. It was writable while --fix was opt-in and a
+#     human vetted each write; it came out when fixing became the default (2026-09-11),
+#     because on the very first ticket checked that way the model proposed replacing
+#     DSLF-1240's "TINA.TORRES@DATA-AXLE.COM" with the bare host "ftp.lakegroupmedia.com".
+#     That looked right — the Ship To block names the host and Tina is only the notify
+#     contact — but measured over the 30 most recent WE ARE MOORE / DATA AXLE orders, an
+#     "Ship to: FTP <host>" block followed 8-14 lines later by a notify mailbox is the
+#     NORMAL shape (mpfiles@adstradata.com for sftp.adstramft.com, MooreDS@wearemoore.com
+#     for mooremft.wearemoore.com), and on DSLF-1082 that mailbox is at a different company
+#     from the host too. The field holds the notify address and Shipping Method carries the
+#     FTP. Reported, never written. Destination rules belong in
+#     tools_jira.apply_ship_to_rules, where they are house rules rather than a model's read.
 #   status / work order — not data, and not this tool's business.
 #
 from tools_jira import (AVAILABILITY_RULE_OPTIONS, FILE_FORMAT_OPTIONS,
@@ -565,7 +582,6 @@ _FIXABLE = {
     "availability_rule":     ("customfield_12273", "option"),
     "file_format":           ("customfield_12274", "option"),
     "shipping_method":       ("customfield_12276", "option"),
-    "ship_to_email":         ("customfield_12275", "text"),
     "shipping_instructions": ("customfield_12277", "text"),
     "requestor_name":        ("customfield_12232", "text"),
     "requestor_email":       ("customfield_12233", "text"),
@@ -846,6 +862,17 @@ WHAT TO CHECK
        RKD / AMLC      "Client P.O.:" — in AMLC's columnar layout the value can sit up to
                        25 lines BELOW its label            | first 5-6 digit number in the
                                                              first 10 lines
+   - WE ARE MOORE / DATA AXLE / SIMIOCLOUD: the Ship Label is a slash-separated jumble of
+     the MAILER's own reference numbers and only one of them is our Mailer PO. Take them
+     in this order and stop at the first that matches, on WHOLE tokens only:
+       1. an explicit "PO#" / "PO:" marker with a value attached, letter prefix included
+       2. an E-prefixed number, even when nothing says PO ("MOWP E20467/QTY" -> E20467)
+       3. three letters followed by two digits (CLU96, CLP78, CLL76)
+       4. otherwise the first run of 4+ digits
+     A JOB or MERGE number is the mailer's own and is NEVER the PO. Rule 4 is a real rule,
+     not a failure: "HSS_100726" correctly yields 100726, and the key code, file name or
+     label prefix around it is NOT part of the PO. Do not report a Mailer PO produced by
+     rule 4, and never propose replacing it with the whole label.
    - Seed Tracking Number must equal the Manager Order #. Different, or blank when a
      manager order exists, is WRONG and fixable.
    - Mailer Name is the ORGANISATION SENDING THE MAIL. List Name is the DONOR LIST BEING
@@ -1736,8 +1763,16 @@ def main() -> int:
     # the Jenkins job invokes it. --dry-run is the way to suppress every write.
     ap.add_argument("--dry-run", action="store_true",
                     help="never write: no comment, no field fix, print only")
-    ap.add_argument("--fix", action="store_true",
-                    help="apply the ORDER check's field corrections to the live ticket")
+    # Fixing is the DEFAULT. A checker that can name the wrong value, name the right one
+    # and write it, but instead leaves the ticket wrong and asks a human to retype it, has
+    # done half a job — and the cron calls this script bare, so an opt-in --fix was never
+    # once passed on a scheduled run. The safety is not the flag, it is _FIXABLE:
+    # client_db / seed_db / billable_account / description / omission are never writable,
+    # NOTE findings are never applied, every option and date is validated before the PUT,
+    # and every refusal is printed in the comment. --dry-run still writes nothing.
+    ap.add_argument("--fix", action=argparse.BooleanOptionalAction, default=True,
+                    help="apply the ORDER check's field corrections to the live ticket "
+                         "(default: on; --no-fix to report them without writing)")
     ap.add_argument("--order-only", action="store_true", help="skip the SELECT check")
     ap.add_argument("--select-only", action="store_true", help="skip the ORDER check")
     ap.add_argument("--model", default=QC_MODEL)

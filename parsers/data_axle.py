@@ -64,6 +64,49 @@ class DataAxleParser(BaseBrokerParser):
         # Collapse multiple spaces into one
         return re.sub(r'\s+', ' ', text).strip()
 
+    # A line's omit clause starts at its first OMIT token. Everything to the left of it is
+    # the field label ("Base: ...", "Selects: SCF=") or base criteria, which belong in the
+    # description rather than the omission.
+    _OMIT_CLAUSE_RE = re.compile(r"\*?\s*OMIT\b.*", re.IGNORECASE)
+
+    def _collect_omit_clauses(self, text: str) -> list[str]:
+        """Every OMIT clause printed on the order, in page order, de-duplicated.
+
+        These orders state their omits in up to three places at once: a "*Omit Prior
+        66088" tail on the Base: line, "State=OMIT States: ..." rows under Selects:, and
+        the full restatement under Special Instructions:. This used to be one re.search
+        that started at the FIRST "OMIT" anywhere in the text and ran to the next label,
+        so it kept whichever came first and dropped the rest. On DSLF-1240 the first one
+        was a forward reference inside Base: ("OMIT States & OMIT SCFs (see below)") — the
+        ticket stored the pointer and lost every criterion it pointed at: six states,
+        three SCFs, the PO-box/APO omit and the previous-order omit. That also left Other
+        Fees blank, because State Omits is counted off this field.
+        """
+        lines = [ln.strip() for ln in text.splitlines()]
+        out: list[str] = []
+        seen: set[str] = set()
+        for i, ln in enumerate(lines):
+            m = self._OMIT_CLAUSE_RE.search(ln)
+            if not m:
+                continue
+            clause = self._clean_nextmark_text(m.group(0))
+            # "*Omit Prior" wraps onto a bare order number on the next line (DSLF-1075,
+            # -1077) — but only when the clause does not already end in one of its own.
+            if (i + 1 < len(lines) and re.fullmatch(r"\d{4,}", lines[i + 1])
+                    and not re.search(r"\d\s*$", clause)):
+                clause = f"{clause} {lines[i + 1]}"
+            clause = re.sub(r"^\*\s*", "", clause).rstrip(" ,;&")
+            # An unclosed "(" is the wrapped first half of a forward reference ("...SCFs
+            # (see" / "below)"). It names nothing, and what it points at is collected from
+            # its own lines.
+            if clause.count("(") != clause.count(")"):
+                continue
+            if clause.upper() in seen:
+                continue
+            seen.add(clause.upper())
+            out.append(clause)
+        return out
+
     def parse(self, text: str) -> ParseResult:
         """Parse Data Axle rental/exchange order PDF text."""
 
@@ -174,10 +217,7 @@ class DataAxleParser(BaseBrokerParser):
         file_format = self._detect_file_format(text)
 
         # --- Omission description ---
-        omission_description = ""
-        omit_match = re.search(r"OMIT[ \t:]+([\s\S]+?)(?=\n[A-Z][a-z]+:|Job\s*#:|\n\n|$)", text, re.IGNORECASE)
-        if omit_match:
-            omission_description = self._clean_nextmark_text(omit_match.group(1))
+        omission_description = "\n".join(self._collect_omit_clauses(text))
 
         # --- Segment criteria ---
         base_match = re.search(

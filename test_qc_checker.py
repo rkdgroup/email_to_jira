@@ -157,6 +157,20 @@ def test_prose_fields_are_never_writable():
         check(f"{field} refused", fid, None)
 
 
+def test_the_destination_is_never_writable():
+    """ship_to_email came out of _FIXABLE when fixing became the default (2026-09-11).
+
+    On the first ticket checked that way the model proposed replacing DSLF-1240's
+    "TINA.TORRES@DATA-AXLE.COM" with the bare host "ftp.lakegroupmedia.com". An
+    "Ship to: FTP <host>" block followed some lines later by a notify mailbox is the
+    normal shape on these orders, so that write would have been a regression applied
+    automatically. It is the destination: same class as the database triad.
+    """
+    fid, _, reason = qc._validate_fix("ship_to_email", "ftp.lakegroupmedia.com", {})
+    check("ship_to_email refused", fid, None)
+    check("ship_to_email says why", bool(reason), True)
+
+
 def test_empty_fix_value_is_refused():
     fid, _, reason = qc._validate_fix("mailer_po", "   ", {})
     check("blank replacement refused", fid, None)
@@ -443,7 +457,14 @@ def test_posting_is_the_default_and_dry_run_suppresses_it():
         sys.argv = ["qc_checker.py"]
         qc.main()
         check("bare call posts", seen["post"], True)
-        check("bare call does not fix", seen["fix"], False)
+        # Fixing is on by default too: the cron never passed --fix, so an opt-in auto-fix
+        # meant every correctable fault sat on the ticket waiting to be retyped by hand.
+        check("bare call fixes what it can", seen["fix"], True)
+
+        sys.argv = ["qc_checker.py", "--no-fix"]
+        qc.main()
+        check("--no-fix reports without writing", seen["fix"], False)
+        check("--no-fix still posts the comment", seen["post"], True)
 
         sys.argv = ["qc_checker.py", "--dry-run"]
         qc.main()

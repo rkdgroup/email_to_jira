@@ -77,7 +77,7 @@ authoritative and update README only when a change is user-facing.
 ```bash
 # Scheduled automation (see "Scheduled Automation")
 python email_scanner/email_scanner.py                 # one poll of the shared mailbox
-python qc_checker.py [DSLF-123 ...] [--status S] [--fix] [--dry-run]
+python qc_checker.py [DSLF-123 ...] [--status S] [--no-fix] [--dry-run]
                      [--order-only|--select-only] [--model M] [--effort E] [--json f]
 python qty_approval_scanner.py [--no-email-scan] [--combined] [--output f] [--email a] [--cc b] [--subject s]
 python ticket_scanner/ticket_scanner.py [--loop N] [--reset] [--learn] [--reporter NAME]
@@ -170,7 +170,7 @@ Four independent entry points share the pipeline and `.env`. **Only `email_scann
 | Tool | Trigger / scope | Behavior |
 |------|-----------------|----------|
 | `email_scanner/email_scanner.py` | Shared-mailbox `List Rental` folder | MSAL ROPC auth → per message: if `conversationId` in `thread_map.json`, add a comment to the existing ticket; else download PDFs (or synthesize one from the body) → `process_pdf(broker_hint=SENDER_BROKER_MAP[domain])` → move mail to `List Rental/Processed` or `/Failed`. `broker_hint` short-circuits fingerprint detection. |
-| `qc_checker.py` | `Needs QC` tickets (`--status` for any other queue) | Two LLM checks per ticket — was it **created** right from the broker order, and did the **SELECT** deliver it. Posts a comment on every ticket checked, pass included. **Never transitions.** `--fix` writes the order check's field corrections back (not enabled on the cron). Verdict is the worse of the two; `UNVERIFIED` means QC did not run and is **not** a pass. See "QC" below. |
+| `qc_checker.py` | `Needs QC` tickets (`--status` for any other queue) | Two LLM checks per ticket — was it **created** right from the broker order, and did the **SELECT** deliver it. Posts a comment on every ticket checked, pass included. **Never transitions.** The order check's field corrections are written back **by default** (`--no-fix` to report them without writing); the cron gets them. Verdict is the worse of the two; `UNVERIFIED` means QC did not run and is **not** a pass. See "QC" below. |
 | `qty_approval_scanner.py` | `Ready to Send for Qty Approval` tickets | Reads `QTY APPROVAL/<order#>` emails → sets Requested Quantity (`cf[12271]`); SELECT-PDF `TOTAL RECORDS SELECTED` fallback. **Never transitions.** Emails a per-mailer qty digest; single-card subjects prefix the list short code via `resolve_list_code` (from `dslf_list_and_mailer_names.txt`). |
 | `ticket_scanner/ticket_scanner.py` | New DSLF tickets (issue# > saved state) | **Read-only** audit → report under `ticket_scanner/reports/`. `--learn` mines List Name→db_code patterns into `learned_patterns.json` (enrich tier 5). |
 
@@ -338,7 +338,7 @@ It asks two questions about the same ticket, in one run, with one LLM call each:
 | Question | was the ticket **created** right from the broker order? | did the **pull** deliver the order? |
 | Source of truth | the order PDF attached to the ticket | the SELECT report |
 | Runs when | a non-SELECT PDF matches a broker fingerprint | a `*SELECT*.pdf` is attached |
-| Findings carry a fix | **yes** — `fix_field` / `fix_value`, applied with `--fix` | **no**, by design |
+| Findings carry a fix | **yes** — `fix_field` / `fix_value`, applied by default | **no**, by design |
 | Prompt | `_SYSTEM_ORDER` (absorbed from `knowledge.md`) | `_SYSTEM_SELECT` |
 
 The ticket verdict is the **worse** of the two, and `UNVERIFIED` outranks `FAIL` — not
@@ -349,7 +349,7 @@ python qc_checker.py                              # scan Needs QC and POST the v
 python qc_checker.py DSLF-1075 DSLF-1082          # named tickets
 python qc_checker.py --status "Needs Assignment"  # the creation-check queue
 python qc_checker.py --dry-run                    # print only, write nothing
-python qc_checker.py --fix                        # also write the order-check corrections
+python qc_checker.py --no-fix                     # comment only, write no corrections
 python qc_checker.py --order-only | --select-only
 python qc_checker.py --model M --effort low|medium|high|xhigh|max --json FILE
 ```
@@ -364,9 +364,12 @@ python qc_checker.py --model M --effort low|medium|high|xhigh|max --json FILE
   2026-08-27 broke the cron on 2026-08-31 while the Jenkinsfile edit in the same commit did
   nothing. (This also explains the old "credential gap" note: the job `cp`s a full `.env`,
   which is why `MS_CLIENT_SECRET` etc. are present despite not being in the Jenkinsfile.)
-- **Posting is the DEFAULT, `--dry-run` suppresses it.** The cron calls the script bare, so
-  a bare call has to post — same as the rule-based checker it replaced. `--fix` stays
-  opt-in.
+- **Posting AND fixing are the DEFAULT, `--dry-run` suppresses both.** The cron calls the
+  script bare, so a bare call has to post — same as the rule-based checker it replaced.
+  Auto-fix was opt-in until 2026-09-11 and therefore never once ran on a scheduled build:
+  a fault the checker could name, correct and write sat on the ticket waiting for a human
+  to retype it. `--no-fix` restores report-only. The guarantee is not the flag, it is
+  `_FIXABLE` — see below.
 - **`main()` returns 0 even when tickets fail.** The job runs under `sh -xe`, so a non-zero
   exit reds the build, and a ticket failing QC is a *result*, not a build error. Non-zero is
   reserved for "the scan could not run": `config_guard` exiting on a bad YAML, argparse
@@ -460,7 +463,7 @@ legitimately differ. `_SYSTEM_SELECT` states this — the database **code** must
 and a name-only difference is a `NOTE`. DSLF-1083 also carried a real `File Format` defect
 (ASCII Delimited where the destination forces ASCII Fixed) which the check still reports.
 
-### Auto-fix (`--fix`) — order-check findings only
+### Auto-fix (on by default; `--no-fix` to disable) — order-check findings only
 
 `apply_fixes()` collects every finding whose `fix_field` is in the `_FIXABLE` whitelist and
 writes them in **one PUT**. What it refuses, and why the refusals are the design:
@@ -469,6 +472,18 @@ writes them in **one PUT**. What it refuses, and why the refusals are the design
   `client_lookup`, not off the order; they are select fields resolved against a live
   createmeta lookup; and a wrong write here is the worst outcome in this system. Reported,
   never written.
+- **`ship_to_email` is never writable either — it is the destination**, the same class of
+  field. It *was* writable while `--fix` was opt-in and a human vetted each write; it came
+  out when fixing became the default (2026-09-11). On the first ticket checked that way the
+  model proposed replacing DSLF-1240's `TINA.TORRES@DATA-AXLE.COM` with the bare host
+  `ftp.lakegroupmedia.com`. That reads right — the Ship To block names the host and Tina is
+  only the notify contact — but measured over the 30 most recent WE ARE MOORE / DATA-AXLE
+  orders, `Ship to: FTP <host>` followed 8–14 lines later by a notify mailbox is the
+  **normal** shape (`mpfiles@adstradata.com` for `sftp.adstramft.com`,
+  `MooreDS@wearemoore.com` for `mooremft.wearemoore.com`), and on DSLF-1082 that mailbox is
+  at a different company from the host as well. The field holds the notify address; the FTP
+  is carried by Shipping Method. Destination rules belong in `apply_ship_to_rules`, where
+  they are house rules rather than one model's read of one page.
 - **`description` / `omission` are never writable** — ADF prose owned by the parsers and
   `tools_polish`, and a field-level overwrite flattens the bullet structure
   `_build_adf_description` builds.
@@ -609,6 +624,30 @@ be worse than the status quo: `DD4769` (two letters, DSLF-982), `TSAGA112991` / 
 digit run. Ask before extending the token forms to cover these.
 
 `test_data_axle_ship_label.py` pins every rule and all 19 unchanged values.
+
+### Data Axle / SimioCloud state their omits three times, and the first one is a pointer
+
+These orders repeat the same omit criteria in up to three places: a `*Omit Prior 66088`
+tail on the `Base:` line, `State=OMIT States: …` rows under `Selects:`, and the full
+restatement under `Special Instructions:`. `DataAxleParser` read the omission with a single
+`re.search` that started at the **first** `OMIT` anywhere in the text and ran to the next
+label, so it kept whichever came first and dropped the rest.
+
+On DSLF-1240 the first one was a forward reference inside `Base:` — `OMIT States & OMIT
+SCFs (see below)` — so the Omission Description stored the pointer and lost every criterion
+it pointed at: six states, three SCFs, `OMIT PO Boxes; OMIT APO/FPO` and the previous-order
+omit. **Other Fees went blank with it**, because `_detect_state_omits` counts off the
+omission field, so the automatic `State Omits` never fired either.
+
+`_collect_omit_clauses` now takes every line's clause from its first `OMIT` token onward
+(the text to the left is the field label or base criteria, which belong in the
+Description), joins a `*Omit Prior` that wrapped onto a bare number line, drops a clause
+with an unclosed `(` because that is the wrapped half of a forward reference, and
+de-duplicates case-insensitively so the Selects/Special-Instructions restatement folds into
+one. Re-parsed against the **30 most recent** WE ARE MOORE / DATA-AXLE orders it changes
+**6** and leaves **24** byte-identical; five of the six only gain the word `Omit`
+(`Prior 66088` → `Omit Prior 66088`), and DSLF-1077's omission was empty before. Pinned in
+`test_data_axle_ship_label.py`. DSLF-1240 itself was corrected separately.
 
 ## Requestor by Broker
 
