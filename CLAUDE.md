@@ -54,9 +54,9 @@ python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
 ```
 
 Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap.py`,
-`parsers/adstra.py`, `parsers/data_axle.py`, `qc_checker.py`, `qc_checker.py`,
+`parsers/adstra.py`, `parsers/data_axle.py`, `qc_checker.py`,
 `parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
-`qty_approval_scanner.py`, or `WO#/work_order.py`. Verified all ten pass 2026-09-11. Everything else is tested manually via `--dry-run --verbose` against real
+`qty_approval_scanner.py`, or `WO#/work_order.py`. Verified all ten pass 2026-09-14. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
 in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
@@ -172,7 +172,7 @@ Four independent entry points share the pipeline and `.env`. **Only `email_scann
 |------|-----------------|----------|
 | `email_scanner/email_scanner.py` | Shared-mailbox `List Rental` folder | MSAL ROPC auth → per message: if `conversationId` in `thread_map.json`, add a comment to the existing ticket; else download PDFs (or synthesize one from the body) → `process_pdf(broker_hint=SENDER_BROKER_MAP[domain])` → move mail to `List Rental/Processed` or `/Failed`. `broker_hint` short-circuits fingerprint detection. |
 | `qc_checker.py` | `Needs QC` tickets (`--status` for any other queue) | Two LLM checks per ticket — was it **created** right from the broker order, and did the **SELECT** deliver it. Posts a comment on every ticket checked, pass included. **Never transitions.** The order check's field corrections are written back **by default** (`--no-fix` to report them without writing); the cron gets them. Verdict is the worse of the two; `UNVERIFIED` means QC did not run and is **not** a pass. See "QC" below. |
-| `qty_approval_scanner.py` | `Ready to Send for Qty Approval` tickets | Reads `QTY APPROVAL/<order#>` emails → sets Requested Quantity (`cf[12271]`); SELECT-PDF `TOTAL RECORDS SELECTED` fallback. **Never transitions.** Emails a per-mailer qty digest. **Every subject carries a name code** — the LIST code for a single ticket, the MAILER code for a group — and both resolvers fall back to initials derived by the names file's own `*` convention, so a name newer than that 2026-06-17 snapshot no longer drops the code. The body is the `<order#> = <qty>` lines (the shape the reply scan parses back) followed by `Requestor: <email>`. |
+| `qty_approval_scanner.py` | `Ready to Send for Qty Approval` tickets | Reads `QTY APPROVAL/<order#>` emails → sets Requested Quantity (`cf[12271]`); SELECT-PDF `TOTAL RECORDS SELECTED` fallback. **Never transitions.** Emails a per-mailer qty digest. **Every subject carries a name code** — the LIST code for a single ticket, the MAILER code for a group — and both resolvers read `dslf_list_and_mailer_names.txt` (committed at the repo root, generated 2026-06-17 from 628 tickets) and fall back to initials derived by that file's own `*` convention, so a name newer than the snapshot no longer drops the code. The body is the `<order#> = <qty>` lines (the shape the reply scan parses back) followed by `Requestor: <email>`. |
 | `ticket_scanner/ticket_scanner.py` | New DSLF tickets (issue# > saved state) | **Read-only** audit → report under `ticket_scanner/reports/`. `--learn` mines List Name→db_code patterns into `learned_patterns.json` (enrich tier 5). |
 
 Notes: `email_scanner.main()` has **no argparse** — `run_email_scanner.bat --loop` is a silent no-op (single scan). SKIP_DB_CODES emails are deliberately **left in `List Rental`** for manual handling (not moved). `email_scanner.py` and `qc_checker.py` call `config_guard.validate_configs_or_exit()` before doing work.
