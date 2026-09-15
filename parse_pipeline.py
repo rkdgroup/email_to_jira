@@ -184,6 +184,24 @@ def process_pdf(pdf_path: str, dry_run: bool = False, verbose: bool = False,
     return finalize_and_create(result, pdf_path, text, dry_run=dry_run, verbose=verbose)
 
 
+def _dup_check_key(result) -> tuple:
+    """(jql, label) for the duplicate check, or (None, None) when the order carries no key.
+
+    Mailer PO is the key, except for AMLC — its columnar orders have no meaningful PO — and
+    except when the order arrived without one, which falls back to Manager Order # rather
+    than skipping the check. Skipping is how DSLF-1211 duplicated DSLF-1209: a follow-up
+    email about DM092 parsed with a blank Mailer PO, so no query ran at all, while the
+    Manager Order # both tickets carry would have matched.
+    """
+    if result.mailer_po and result.list_manager != "AMLC":
+        return (f'project = DSLF AND cf[12193] = "{result.mailer_po}"',
+                f"PO {result.mailer_po}")
+    if result.manager_order_number:
+        return (f'project = DSLF AND cf[12192] = "{result.manager_order_number}"',
+                f"Manager Order # {result.manager_order_number}")
+    return None, None
+
+
 def finalize_and_create(result, pdf_path: str, text: str,
                         dry_run: bool = False, verbose: bool = False,
                         profile_blocks_to_omission: bool = False) -> dict:
@@ -224,17 +242,8 @@ def finalize_and_create(result, pdf_path: str, text: str,
             return {"success": False, "source": result.source, "errors": validation.errors}
 
     # Step 4: Duplicate check
-    # AMLC has no meaningful Mailer PO; use Manager Order Number instead.
     if not dry_run:
-        if result.list_manager == "AMLC" and result.manager_order_number:
-            dup_jql = f'project = DSLF AND cf[12192] = "{result.manager_order_number}"'
-            dup_label = f"Manager Order # {result.manager_order_number}"
-        elif result.mailer_po:
-            dup_jql = f'project = DSLF AND cf[12193] = "{result.mailer_po}"'
-            dup_label = f"PO {result.mailer_po}"
-        else:
-            dup_jql = None
-            dup_label = None
+        dup_jql, dup_label = _dup_check_key(result)
         if dup_jql:
             existing = search_jira_tickets(dup_jql)
             if existing.get("total", 0) > 0:

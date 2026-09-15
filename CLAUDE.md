@@ -46,8 +46,8 @@ python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 `--dry-run` and `--verbose` are the **only** two CLI flags for `parse_pipeline.py`. `broker_hint` is a function argument (used by the email scanner), not a flag.
 
 **Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
-protect you if you run them. Ten regression files, each a standalone runner that prints
-`PASS` lines and `ALL PASSED` (also collectible by pytest). All ten are hermetic: no
+protect you if you run them. Eleven regression files, each a standalone runner that prints
+`PASS` lines and `ALL PASSED` (also collectible by pytest). All eleven are hermetic: no
 Jira, no DB, no PDFs, no network — the QC tests never call the API.
 
 ```bash
@@ -60,13 +60,15 @@ python test_dollar_cap_backfill.py   # Dollar Cap placement + no-duplicate re-ru
 python test_data_axle_ship_label.py  # Ship Label PO# forms, JOB exclusion, Key Code
 python test_rmi_fields.py            # RMI MGT prefix stripped from Manager Order #
 python test_qty_subject_and_body.py  # qty-email subject codes + requestor in the body
+python test_duplicate_check.py       # dup key: PO, blank-PO fallback, AMLC
 python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
 ```
 
 Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap.py`,
 `parsers/adstra.py`, `parsers/data_axle.py`, `qc_checker.py`,
 `parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
-`qty_approval_scanner.py`, or `WO#/work_order.py`. Verified all ten pass 2026-09-14. Everything else is tested manually via `--dry-run --verbose` against real
+`parse_pipeline._dup_check_key`, `qty_approval_scanner.py`, or `WO#/work_order.py`.
+Verified all eleven pass 2026-09-15. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
 in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
@@ -169,7 +171,7 @@ Load-bearing behaviors that are easy to get wrong:
 - **Validation is advisory.** `validate_result()` errors only abort when `result.confidence == 0.0`. Rule-based parsers always return 0.92, so missing required fields (mailer_name, mailer_po, list_name, list_manager, requested_quantity) just log "proceeding" and a **partial ticket is still created**. Only a totally-unparsed PDF is blocked.
 - **SKIP_DB_CODES** (`parse_pipeline.py:78`, currently `{"A63D"}`): orders resolving to these db_codes are extracted/validated but create **no ticket** — returns `{"success": True, "skipped": True}`, in both live and dry-run. (Separate `_ADSTRA_SWEEPS_EXCLUDED = {"A63D","N11D"}` only controls whether the ADSTRA sweeps profile is attached.)
 - **Multi-page PDFs**: every broker **except ADSTRA** splits into one ticket per page, and `process_pdf` then returns a **list** of per-page result dicts. ADSTRA multi-page is merged into one order. Callers must handle the list case.
-- **Duplicate check** (live only): JQL on `cf[12193]` Mailer PO — **except AMLC**, which keys on `cf[12192]` Manager Order #. Skipped entirely in dry-run or when neither key is populated.
+- **Duplicate check** (live only, `_dup_check_key`): JQL on `cf[12193]` Mailer PO, falling back to `cf[12192]` Manager Order # when the order carries no PO — **except AMLC**, which keys on Manager Order # outright because its columnar layout puts someone else's number in the PO field. Skipped only in dry-run or when neither key is populated. The fallback exists because a blank PO used to skip the check entirely: DSLF-1211 duplicated DSLF-1209 on DM092, a follow-up email with no broker order number on it.
 - **Description is NOT raw PDF text** — see Field Rules. The PDF is preserved by **attaching the file**.
 - **`search_jira_tickets()` does not return a real total.** `/rest/api/3/search/jql` is token-paginated and omits `total`, so the helper reports `total = len(issues)` from a single page (`max_results=10` by default). Fine for the duplicate check (`total > 0`), wrong for counting. Use `search_issues_paged()` when you need every match.
 - The work-order step and all attach steps **swallow exceptions** (log + continue): a ticket can succeed with its WO#, PDF, or profile attachment silently failed.
@@ -343,8 +345,8 @@ exactly, where this reads it fresh every run. Not scheduled; nothing calls it au
 
 ## QC (`qc_checker.py`) — one file, all LLM, both questions
 
-**There is exactly one QC file and it makes API calls.** `qc_checker.py` and `qc_checker.py` are
-gone; everything lives in `qc_checker.py`. **The name is load-bearing** — the live Jenkins
+**There is exactly one QC file and it makes API calls.** `qc_llm.py` and `select_pdf.py` are
+gone (deleted in `d4e24fe`); everything lives in `qc_checker.py`. **The name is load-bearing** — the live Jenkins
 job hard-codes `python qc_checker.py`, so renaming or splitting it breaks the cron.
 
 It asks two questions about the same ticket, in one run, with one LLM call each:
