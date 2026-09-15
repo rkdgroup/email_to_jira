@@ -78,11 +78,14 @@ sys.path.insert(0, str(_ROOT))
 
 log = logging.getLogger(__name__)
 
+# One model policy across this repo: claude-opus-5 at medium effort. The API budget is
+# not a constraint, so every Claude touchpoint uses the same capable tier rather than
+# a per-module pin. Override per run where a CLI flag exists.
 # These are production tickets that drive real data pulls; a wrong database or a wrong
-# destination sends the wrong donor file to the wrong company. Accuracy beats speed and
-# cost. Override per run with --model / --effort.
+# destination sends the wrong donor file to the wrong company. Raise the effort here
+# first if QC starts missing faults. Override per run with --model / --effort.
 QC_MODEL     = "claude-opus-5"
-QC_EFFORT    = "high"
+QC_EFFORT    = "medium"
 QC_TIMEOUT_S = 90
 
 _MAX_PDF_MB  = 32

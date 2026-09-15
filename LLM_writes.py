@@ -61,11 +61,12 @@ from tools_jira import (
 from tools_pdf import extract_pdf_text, get_pdf_page_count, split_pdf_into_pages
 from compare_extraction import adf_to_lines
 
-# Sonnet at medium effort: this extraction is structured transcription against a fixed
-# schema, not open-ended reasoning, so the deeper tiers buy little. ai_extract's own
-# defaults (Opus at high effort) are deliberately left alone — compare_extraction.py and
-# hybrid_create.py still use them. Override per run with --model / --effort.
-DEFAULT_MODEL  = "claude-sonnet-5"
+# One model policy across this repo: claude-opus-5 at medium effort. The API budget is
+# not a constraint, so every Claude touchpoint uses the same capable tier rather than
+# a per-module pin. Override per run where a CLI flag exists.
+# This path reads an unrecognized order fresh every run with nothing verifying it, so it
+# is the last place to economise. Override per run with --model / --effort.
+DEFAULT_MODEL  = "claude-opus-5"
 DEFAULT_EFFORT = "medium"
 _EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
 

@@ -30,10 +30,13 @@ import time
 
 log = logging.getLogger(__name__)
 
-# Haiku measured 5/5 correct on the DSLF-967 case at ~2.5s median, vs 6.0s (Opus 5) and
-# 7.9s (Sonnet 5) for the same 5/5 — the work is mechanical re-arrangement, so the cheapest
-# tier is also the fastest path through the 4-minute Jenkins build.
-POLISH_MODEL     = "claude-haiku-4-5"
+# One model policy across this repo: claude-opus-5 at medium effort. The API budget is
+# not a constraint, so every Claude touchpoint uses the same capable tier rather than
+# a per-module pin. Override per run where a CLI flag exists.
+# Opus 5 is ~6.0s median on the DSLF-967 case against Haiku 4.5's ~2.5s, both scoring 5/5,
+# so POLISH_BUDGET_S below now covers roughly 20 tickets per run rather than ~48. The
+# overflow falls back to parser text and logs; it never blocks a ticket.
+POLISH_MODEL     = "claude-opus-5"
 POLISH_TIMEOUT_S = 20      # per call
 POLISH_BUDGET_S  = 120     # per process — keeps the 4-min Jenkins build safe
 POLISH_MAX_TOKENS = 2000
@@ -288,11 +291,12 @@ def polish_fields(segment_criteria: str, omission_description: str,
         client = anthropic.Anthropic().with_options(
             timeout=float(POLISH_TIMEOUT_S), max_retries=1)
 
-        # Mechanical re-arrangement, so the lowest effort tier — but Haiku 4.5 predates
-        # the effort parameter and errors if it is sent.
+        # Medium effort per the repo-wide model policy. The guard stays because polish()
+        # takes a model argument: Haiku 4.5 predates the effort parameter and errors if
+        # it is sent, so a caller passing Haiku must still work.
         output_config = {"format": {"type": "json_schema", "schema": _POLISH_SCHEMA}}
         if "haiku" not in model:
-            output_config["effort"] = "low"
+            output_config["effort"] = "medium"
 
         resp = client.messages.create(
             model=model,

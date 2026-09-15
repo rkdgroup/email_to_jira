@@ -36,7 +36,7 @@ from compare_extraction import adf_to_lines
 from tools_polish import text_to_adf as _text_to_adf
 
 
-def build_hybrid_kwargs(pdf_path: str, model: str = "claude-opus-4-8", use_claude: bool = True) -> dict:
+def build_hybrid_kwargs(pdf_path: str, model: str = "claude-opus-5", use_claude: bool = True) -> dict:
     """Rule-based kwargs (complete) + Claude Description prose merged in."""
     res = process_pdf(pdf_path, dry_run=True)   # dry-run => full kwargs, dup-check skipped
     if not res.get("success"):
@@ -53,7 +53,7 @@ def build_hybrid_kwargs(pdf_path: str, model: str = "claude-opus-4-8", use_claud
     return kwargs
 
 
-def hybrid_create(pdf_path: str, model: str = "claude-opus-4-8",
+def hybrid_create(pdf_path: str, model: str = "claude-opus-5",
                   use_claude: bool = True, dry_run: bool = False, attach: bool = True) -> dict:
     kwargs = build_hybrid_kwargs(pdf_path, model=model, use_claude=use_claude)
     meta = kwargs.pop("_claude_meta", {})
@@ -103,7 +103,7 @@ def main() -> int:
         pass
     ap = argparse.ArgumentParser(description="Create a DSLF ticket via the hybrid (rule-based + Claude) path.")
     ap.add_argument("pdf")
-    ap.add_argument("--model", default="claude-opus-4-8")
+    ap.add_argument("--model", default="claude-opus-5")
     ap.add_argument("--dry-run", action="store_true", help="build and print, create nothing")
     ap.add_argument("--no-claude", action="store_true", help="rule-based only (skip Claude prose)")
     ap.add_argument("--no-attach", action="store_true")

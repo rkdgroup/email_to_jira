@@ -272,7 +272,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Compare current ticket fields vs. Claude PDF extraction.")
     ap.add_argument("ticket", nargs="?", help="DSLF ticket key (e.g. DSLF-916)")
     ap.add_argument("--pdf", help="local order PDF (overrides ticket attachment)")
-    ap.add_argument("--model", default="claude-opus-4-8")
+    ap.add_argument("--model", default="claude-opus-5")
     ap.add_argument("--md", metavar="FILE", help="write Markdown report to FILE")
     ap.add_argument("--json", metavar="FILE", help="write comparison JSON to FILE")
     args = ap.parse_args()

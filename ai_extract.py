@@ -31,7 +31,10 @@ load_dotenv(_SCRIPT_DIR / ".env")
 
 log = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "claude-opus-4-8"
+# One model policy across this repo: claude-opus-5 at medium effort. The API budget is
+# not a constraint, so every Claude touchpoint uses the same capable tier rather than
+# a per-module pin. Override per run where a CLI flag exists.
+DEFAULT_MODEL = "claude-opus-5"
 
 # ── Structured-output schema ────────────────────────────────────────────────
 # Hand-written JSON Schema (no min/max/length constraints — unsupported by
@@ -131,7 +134,7 @@ _USER_TEXT = (
 
 
 def extract_fields_from_pdf(pdf_path: str, model: str = DEFAULT_MODEL,
-                            effort: str = "high", system: str = None,
+                            effort: str = "medium", system: str = None,
                             schema: dict = None) -> dict:
     """Send the PDF to Claude and return {"fields": {...}, "usage": {...}, "model": ...}.
 
