@@ -8,7 +8,17 @@ DSLF List Rental Pipeline — processes purchase order PDFs from brokers, extrac
 
 **On the default path every structured field is rule-based.** `parse_pipeline.py` uses one parser per broker and calls Claude only for `tools_polish.py`, which structurally cleans the two prose fields (Description, Omission Description) after parsing — see "Prose Polish". A PDF matching none of the 12 broker fingerprints is **flagged for review and creates no ticket** — `process_pdf` has no Claude fallback.
 
-## API cost is set to $100, use opus 5 model (medium effort) for all LLM related tasks and don't worry about the API cost. 
+## LLM Model Policy
+
+**One pin for every Claude touchpoint: `claude-opus-5` at `medium` effort.** The API budget
+is $100 and cost is not a constraint — pick the capable tier, not the cheap one. Set in
+`tools_polish.py:39`, `qc_checker.py:87-88`, `LLM_writes.py:69-70`, `ai_extract.py:37` (+ its
+`extract_fields_from_pdf(effort=)` default), `compare_extraction.py:275`,
+`hybrid_create.py:39/56/106`. Change them together or they drift apart again.
+
+`tools_polish` sends the effort parameter only when the model is not Haiku — Haiku 4.5
+predates it and errors if it is sent. That guard stays for callers passing a model; it is not
+a second pin.
 
 There are three other Claude touchpoints; know which is which before changing one:
 
@@ -286,12 +296,16 @@ There are 2 parts in Jira - Description and ommision description. So the pull de
 - **Every failure returns the parser's text unchanged** — no API key, budget exhausted,
   timeout, API error, refusal, or failed validation. A ticket is never worse than before, and
   an Anthropic outage cannot block creation.
-- **Model is `claude-haiku-4-5`**, not Opus. Measured on DSLF-967, all three tiers scored 5/5
-  after the prompt was tightened; Haiku did it at ~2.5s vs 6.0s (Opus 5) and 7.9s (Sonnet 5).
-  The work is mechanical re-arrangement — the cheapest tier is also the fastest.
+- **Model is `claude-opus-5` @ medium**, per the one policy above. Measured live on the
+  DSLF-967 shape: **5.8s median warm** (4.8–7.7s over three cases). The first call in a
+  process pays ~14s on a cold prompt cache — under the timeout, but that is the tight guard
+  now.
 - **Jenkins guards**: 20s per-call timeout, `POLISH_BUDGET_S` (120s) per-process wall clock
   after which remaining tickets skip the pass, and an in-process cache so repeated text in a
-  multi-page or batched order costs one call. A 7-page AMLC PDF is ~18s of polish.
+  multi-page or batched order costs one call. At ~6s/call the budget covers **~24 tickets per
+  run**; a 7-page AMLC PDF is ~40s of polish. Watch for
+  `Polish budget of 120s exhausted for this run — skipping` — raising the budget means
+  raising the Jenkins job timeout with it.
 - Inputs under two lines total skip the API entirely.
 
 ## Pure-LLM Ticket Creation (`LLM_writes.py`) — live creates, manual only
@@ -322,9 +336,9 @@ exactly, where this reads it fresh every run. Not scheduled; nothing calls it au
   from this file** (per-broker PO sources, the AMLC columnar trap, the SimioCloud→WE ARE MOORE
   list manager, KAP's "Email to:" line, the `Selects:` indent contract). Fix a field rule here
   *and* there, or the two paths disagree.
-- Model pin is `claude-sonnet-5` @ `medium` effort (structured transcription against a fixed
-  schema, not open-ended reasoning); `ai_extract`'s own Opus/high defaults are left alone for
-  `compare_extraction` and `hybrid_create`. Override with `--model` / `--effort`.
+- Model pin is `claude-opus-5` @ `medium` per the one policy above — this path reads an
+  unrecognized order fresh every run with nothing verifying it, so it is the last place to
+  economise. Override with `--model` / `--effort`.
 
 ## QC (`qc_checker.py`) — one file, all LLM, both questions
 
@@ -378,9 +392,9 @@ python qc_checker.py --model M --effort low|medium|high|xhigh|max --json FILE
   1). The old rule-based `main()` returned `None` and so always exited 0; this preserves it.
   `test_qc_checker.py` pins all three paths.
 - **There is no run budget.** A queue runs to completion however long it takes — measured
-  ~50s per check, so ~100s per ticket for both. Removed on request 2026-08-31; if the build
-  starts timing out, raise the Jenkins job's timeout rather than reintroducing a cap that
-  silently leaves tickets unchecked.
+  at medium effort on DSLF-1240, **~45s per ticket** for both checks (30s ORDER + 15s
+  SELECT). Removed on request 2026-08-31; if the build starts timing out, raise the Jenkins
+  job's timeout rather than reintroducing a cap that silently leaves tickets unchecked.
 - **A comment is posted on every ticket checked, pass included** — a clean ticket ends with
   "Checked and correct — no action needed." Silence used to mean "clean"; now it means
   "not checked".
@@ -415,8 +429,9 @@ python qc_checker.py --model M --effort low|medium|high|xhigh|max --json FILE
   ceiling **below** the cap is `WRONG`, at it is fine, and no profile on file means
   unverifiable rather than wrong. The cap is now also written onto the ticket itself — see
   Field Rules.
-- **`claude-opus-5` @ high effort.** A wrong database sends the wrong donor file to the
-  wrong company, so accuracy beats speed and cost.
+- **`claude-opus-5` @ medium effort**, per the one model policy. A wrong database sends the
+  wrong donor file to the wrong company, so **raise the effort here first** if QC starts
+  missing faults.
 - **The SELECT-report regexes live in the same file and make no judgements.**
   `parse_select_pdf` / `find_select_attachment` / `_parse_shipping_info` survive from the
   rule-based era because `qty_approval_scanner` needs a record count and `check_ticket`
@@ -429,17 +444,15 @@ python qc_checker.py --model M --effort low|medium|high|xhigh|max --json FILE
   Seed DB = Client DB + S, and the hosted-list case below). Add new known-good patterns
   there or QC fills with noise.
 
-### What the deleted rule checker knew, and where it went
+### What `_SYSTEM_SELECT` must keep saying
 
-Its verdict was `pass_count >= 4 and not hard_fails`. **Failures were never counted and
-never subtracted**, so a ticket could carry any number of non-hard FAILs and still pass on
-four passes — reproduced at **4 passes / 5 fails → `QC PASSED`**. The denominator moved too:
-WARN rows were dropped entirely, so `total_checks` ranged 9–15 and a fixed absolute
-threshold meant different things on different tickets. That is why it is gone rather than
-patched.
+These came from the rule-based checker that used to sit beside QC. It was deleted rather
+than patched because its verdict was `pass_count >= 4 and not hard_fails` — failures were
+never counted or subtracted, so **4 passes / 5 fails still returned `QC PASSED`**. Do not
+reintroduce an absolute pass threshold.
 
-Everything below it knew is now prompt text in `_SYSTEM_SELECT`, and
-`test_qc_checker.py` asserts each one is still present:
+Everything it knew is now prompt text in `_SYSTEM_SELECT`, and `test_qc_checker.py` asserts
+each one is still present:
 
 - a completed SELECT can never legitimately return **0 records**
 - **Nth** means the count must not exceed the requested quantity; **All Available** skips
@@ -454,15 +467,11 @@ Everything below it knew is now prompt text in `_SYSTEM_SELECT`, and
 - ADSTRA's published per-seed-database flag defaults still load from
   `config/adstra_omit_database.yaml` (`_adstra_flag_context`) as a third source
 
-**The live incident it left open is now handled as design.** Measured over the 30
-most-recent tickets with a SELECT PDF, the only surviving non-hard failures were two
-`List Name` rows — DSLF-1066 (SELECT customer `AREIVIM`, ticket list `3-HOC HEAL OUR
-CHILDREN`, db `A12D`) and DSLF-1083 (SELECT customer `NEWPORT CREATIVE SWEEPS MASTER`,
-ticket list `3-SDCA CHARITABLE APPEALS MF`, db `N15R`). Both are **hosted lists**: the
-SELECT prints the host/master account while the ticket names the rented list, and the two
-legitimately differ. `_SYSTEM_SELECT` states this — the database **code** must still match,
-and a name-only difference is a `NOTE`. DSLF-1083 also carried a real `File Format` defect
-(ASCII Delimited where the destination forces ASCII Fixed) which the check still reports.
+**Hosted lists are the one legitimate List Name mismatch.** The SELECT prints the
+host/master account while the ticket names the rented list, so the two differ by design —
+`_SYSTEM_SELECT` states that the database **code** must still match and a name-only
+difference is a `NOTE`. This was the last surviving class of non-hard failure across the 30
+most-recent tickets with a SELECT PDF; everything else it flagged was real.
 
 ### Auto-fix (on by default; `--no-fix` to disable) — order-check findings only
 
@@ -474,17 +483,13 @@ writes them in **one PUT**. What it refuses, and why the refusals are the design
   createmeta lookup; and a wrong write here is the worst outcome in this system. Reported,
   never written.
 - **`ship_to_email` is never writable either — it is the destination**, the same class of
-  field. It *was* writable while `--fix` was opt-in and a human vetted each write; it came
-  out when fixing became the default (2026-09-11). On the first ticket checked that way the
-  model proposed replacing DSLF-1240's `TINA.TORRES@DATA-AXLE.COM` with the bare host
-  `ftp.lakegroupmedia.com`. That reads right — the Ship To block names the host and Tina is
-  only the notify contact — but measured over the 30 most recent WE ARE MOORE / DATA-AXLE
-  orders, `Ship to: FTP <host>` followed 8–14 lines later by a notify mailbox is the
-  **normal** shape (`mpfiles@adstradata.com` for `sftp.adstramft.com`,
-  `MooreDS@wearemoore.com` for `mooremft.wearemoore.com`), and on DSLF-1082 that mailbox is
-  at a different company from the host as well. The field holds the notify address; the FTP
-  is carried by Shipping Method. Destination rules belong in `apply_ship_to_rules`, where
-  they are house rules rather than one model's read of one page.
+  field. It came out of `_FIXABLE` when fixing became the default (2026-09-11) and no human
+  vetted each write any more. `Ship to: FTP <host>` followed 8–14 lines later by a notify
+  mailbox is the **normal** shape on WE ARE MOORE / DATA-AXLE orders, and that mailbox is
+  routinely at a different company from the host — so a model reading one page will propose
+  replacing the notify address with the bare FTP host and be wrong. **The field holds the
+  notify address; the FTP is carried by Shipping Method.** Destination rules belong in
+  `apply_ship_to_rules`, where they are house rules rather than one model's read.
 - **`description` / `omission` are never writable** — ADF prose owned by the parsers and
   `tools_polish`, and a field-level overwrite flattens the bullet structure
   `_build_adf_description` builds.
@@ -509,7 +514,7 @@ over — that was a bug fixed in `39d94bc` which 64 tickets carried, and
 
 ## AI-Assisted Offline Tools
 
-Auxiliary, **not part of the live pipeline**. All require `ANTHROPIC_API_KEY` and are pinned to `claude-opus-4-8` (`ai_extract.py:34`, `compare_extraction.py:275`, `hybrid_create.py:39/56/106`). That pin predates the Claude 5 family and has not been re-evaluated — it is inertia, not a measured choice, unlike the live-pipeline `claude-haiku-4-5` pin which was benchmarked. `compare_extraction` and `hybrid_create` both take `--model`, so a newer model can be tried without editing anything.
+Auxiliary, **not part of the live pipeline**. All require `ANTHROPIC_API_KEY` and follow the one model policy — `claude-opus-5` @ medium (`ai_extract.py:37` + its `effort=` default, `compare_extraction.py:275`, `hybrid_create.py:39/56/106`). `compare_extraction` and `hybrid_create` both take `--model`, so another model can be tried without editing anything.
 
 | Tool | Purpose |
 |------|---------|
@@ -536,7 +541,7 @@ Auxiliary, **not part of the live pipeline**. All require `ANTHROPIC_API_KEY` an
 - **Status on creation**: Always "Needs Assignment". Never transition on creation.
 
 
-**KAP: only the Ship To block decides the destination, and it can be 15 lines below the label.** `_ship_block` is capped at 260 chars for reading the Via/format tokens, but the address hunt now runs over everything from `Ship To:` to the end of the page and never above it. DSLF-1152 printed `Email: BCRABTREE@RKDGROUP.COM` (the broker's own rep) near the top and the real drop point in prose further down — the old page-wide `Email:` fallback took the rep. Same family as DSLF-1022 and DSLF-1029. `send an email to X and Y` takes X; Y is the broker being copied. Verified on the 16 most recent KAP orders: only DSLF-1152 changed.
+**KAP: only the Ship To block decides the destination, and it can be 15 lines below the label.** `_ship_block` is capped at 260 chars for reading the Via/format tokens, but the address hunt now runs over everything from `Ship To:` to the end of the page and never above it. DSLF-1152 printed `Email: BCRABTREE@RKDGROUP.COM` (the broker's own rep) near the top and the real drop point in prose further down — the old page-wide `Email:` fallback took the rep. Same family as DSLF-1022 and DSLF-1029. `send an email to X and Y` takes X; Y is the broker being copied. Pinned in `test_kap_fields.py` and `test_ship_to_rules.py`.
 
 ## Ship-To House Rules (tools_jira.py)
 
@@ -564,26 +569,20 @@ Run at the top of `create_jira_ticket` and **override** whatever the parser prod
 | RKD / AMLC | `Client P.O.:` — in AMLC's columnar layout the value can sit up to 25 lines *below* its label | first 5-6 digit number in the first 10 lines (Service Bureau No. / Purchase Order No.) |
 
 **RMI: `MGT` is the field label, not part of the number.** The order prints `MGT26-01658`;
-the ticket's Manager Order # is `26-01658`. The prefix leaked into three fields at once,
+the ticket's Manager Order # is `26-01658`. The capture group sits *inside* the prefix
+(`MGT(\d{2}-\d+)`), but the line-matching further down still looks for the whole `MGT26-…`
+token — that is how the line is located on the page. One bad capture reaches three fields,
 because `ParseResult` builds the title from the manager order number and
-`create_jira_ticket` forces Seed Tracking Number to equal it — so six tickets carried `MGT`
-in the title, the Manager Order # and Seed Tracking. Four of the ten RMI tickets on file
-already had the bare form, which is what settled it: the parser disagreed with itself.
-Fixed 2026-08-31 by moving the capture group inside the prefix (`MGT(\d{2}-\d+)`); the
-line-matching further down still looks for the whole `MGT26-…` token, because that is how
-the line is located on the page. Re-parsed against all ten real orders: six corrected, the
-four already-correct ones byte-identical.
+`create_jira_ticket` forces Seed Tracking Number to equal it.
+Story and all ten real orders: `test_rmi_fields.py`.
 
-**A truncated Mailer PO poisons the duplicate check.** ADSTRA prints some Broker POs as
-`B/19217` on the line *below* the label. A character class without `/` stopped at the slash
-and stored a bare `B`, which DSLF-722/723/724 still carry — and since the duplicate check
-keys on `cf[12193]` Mailer PO, every later order that also truncated to `B` matched all
-three as duplicates. J4344 was refused a ticket on 2026-08-31 and its email was moved to
-`List Rental/Failed`. Fixed in `parsers/adstra.py`: `/` is part of the value, the gap to the
-value is at most one newline (`_find` passes `re.DOTALL`, so the old `\s*` could run down
-the page), and an all-letter match is rejected because every real PO carries a digit.
-Re-parsed, the three read `B/19217` / `B/19219` / `B/19223` — distinct, so the collision
-disappears. `test_adstra_list_code.py` pins it.
+**A truncated Mailer PO poisons the duplicate check**, because the check keys on
+`cf[12193]` Mailer PO — every order truncating to the same stub matches every other one.
+ADSTRA prints some Broker POs as `B/19217` on the line *below* the label, so in
+`parsers/adstra.py`: `/` is part of the value, the gap to the value is at most one newline
+(`_find` passes `re.DOTALL`, so a bare `\s*` runs down the page), and an all-letter match is
+rejected because every real PO carries a digit. **DSLF-722/723/724 still carry the bare `B`.**
+Story and the pinned cases: `test_adstra_list_code.py`.
 
 ### The Ship Label is a jumble and only one number in it is ours
 
@@ -602,29 +601,19 @@ before anything looks for digits, so they cannot win even when they come first.
 **Match whole tokens.** An unanchored `[A-Z]{3}\d{2}` finds `AGA11` inside `TSAGA112991`
 (DSLF-1093) and invents a PO out of the middle of somebody else's number.
 
-**A failed match here becomes a plausible wrong answer, not a blank** — which is why this
-went unnoticed for so long. Until 2026-08-27 the capture was digits-only with no token
-rules, so a letter-prefixed value failed and control fell through to the digit-run
-fallback, which then stored the same number without its prefix; and a label whose only PO
-was `CLU96` matched nothing at all and fell back to the Manager Order #, putting the same
-number in both fields. Measured over the **25 most recent** WE ARE MOORE / DATA-AXLE
-tickets, the fix changes **6** values and leaves **19** byte-identical:
-
-| Ticket | Ship Label | Was | Now |
-|---|---|---|---|
-| DSLF-1091 | `MOWP E20467/QTY/WWP/JOB 54634` | `20467` | `E20467` |
-| DSLF-1117 | `WWP f/F&F/PO# E22163/Merge #54725` | `22163` | `E22163` |
-| DSLF-981 | `SMF/E21035/Qty/Wounded Warrior/Job` | `21035` | `E21035` |
-| DSLF-1118 | `WWP f/SO/PO#/CLU96/Key S98/Qty` | `66457` (= mgr order) | `CLU96` |
-| DSLF-1082 | `Wounded Warrior/NYULH/Qty/CLP78` | `70641` (= mgr order) | `CLP78` |
-| DSLF-1077 | `WWP/Qty/Key ACF/CRS/CLL76` | `64416` (= mgr order) | `CLL76` |
+**A failed match here becomes a plausible wrong answer, not a blank** — a rejected value
+falls through to the digit-run fallback, which finds the digits of the very value the first
+branch just rejected and stores them without their prefix. That is why this went unnoticed
+for so long, and why a change here needs the whole test file re-run, not one case.
 
 **Shapes deliberately left alone** because no stated rule covers them, and guessing would
-be worse than the status quo: `DD4769` (two letters, DSLF-982), `TSAGA112991` / `SGK108431`
-(letters + six digits, DSLF-1093/-1075), `CB21PH01` (DSLF-1101). All four keep their bare
-digit run. Ask before extending the token forms to cover these.
+be worse than the status quo: `DD4769` (two letters), `TSAGA112991` / `SGK108431` (letters
++ six digits), `CB21PH01`. All four keep their bare digit run. **Ask before extending the
+token forms to cover these.**
 
-`test_data_axle_ship_label.py` pins every rule and all 19 unchanged values.
+`test_data_axle_ship_label.py` carries the story and pins every rule — all 25 real labels
+from the most recent WE ARE MOORE / DATA-AXLE tickets, the 6 the old code got wrong and the
+19 that must not move, plus all four left-alone shapes.
 
 ### Data Axle / SimioCloud state their omits three times, and the first one is a pointer
 
@@ -634,21 +623,17 @@ restatement under `Special Instructions:`. `DataAxleParser` read the omission wi
 `re.search` that started at the **first** `OMIT` anywhere in the text and ran to the next
 label, so it kept whichever came first and dropped the rest.
 
-On DSLF-1240 the first one was a forward reference inside `Base:` — `OMIT States & OMIT
-SCFs (see below)` — so the Omission Description stored the pointer and lost every criterion
-it pointed at: six states, three SCFs, `OMIT PO Boxes; OMIT APO/FPO` and the previous-order
-omit. **Other Fees went blank with it**, because `_detect_state_omits` counts off the
-omission field, so the automatic `State Omits` never fired either.
+Keeping only the first one loses whatever it pointed at, and **Other Fees goes blank with
+it** — `_detect_state_omits` counts off the omission field, so the automatic `State Omits`
+never fires either.
 
-`_collect_omit_clauses` now takes every line's clause from its first `OMIT` token onward
-(the text to the left is the field label or base criteria, which belong in the
-Description), joins a `*Omit Prior` that wrapped onto a bare number line, drops a clause
-with an unclosed `(` because that is the wrapped half of a forward reference, and
-de-duplicates case-insensitively so the Selects/Special-Instructions restatement folds into
-one. Re-parsed against the **30 most recent** WE ARE MOORE / DATA-AXLE orders it changes
-**6** and leaves **24** byte-identical; five of the six only gain the word `Omit`
-(`Prior 66088` → `Omit Prior 66088`), and DSLF-1077's omission was empty before. Pinned in
-`test_data_axle_ship_label.py`. DSLF-1240 itself was corrected separately.
+`_collect_omit_clauses` takes every line's clause from its first `OMIT` token onward (the
+text to the left is the field label or base criteria, which belong in the Description),
+joins a `*Omit Prior` that wrapped onto a bare number line, drops a clause with an unclosed
+`(` because that is the wrapped half of a forward reference, and de-duplicates
+case-insensitively so the Selects/Special-Instructions restatement folds into one.
+Story, the DSLF-1240 forward-reference case and the 30-order measurement:
+`test_data_axle_ship_label.py`.
 
 ## Requestor by Broker
 
@@ -704,13 +689,11 @@ From db_code (e.g., F41D): Billable Account = db_code without suffix (F41); Clie
 | Others | Extracted from order if present |
 
 **The Order # suffix is a rep name, not a key code.** `Order # 70853-MNay` /
-`2341064-Laura` — the trailing token is whoever keyed the order (Michelle Nay; the Data Axle
-rep). It was the third fallback in `DataAxleParser` until 2026-08-31 and it was wrong every
-time: over the 30 most recent Data Axle / WE ARE MOORE orders, **20 carried a suffix, all 20
-were a rep name, none was a key code**, and it wrote `MNay` into Key Code on 14 live
-tickets. The two orders that genuinely had one (`SHLMR3`, `222027-KD`) both carried a
-`-Laura` suffix as well and were read correctly from the `Key Code:` field — when a key code
-exists, the order states it. Blank is the right answer otherwise; Key Code is optional.
+`2341064-Laura` — the trailing token is whoever keyed the order. It was a fallback in
+`DataAxleParser` until 2026-08-31 and was a rep name on all 20 of the 30 most recent orders
+that carried one, never a key code. **When a key code exists, the order states it** in the
+`Key Code:` field; blank is the right answer otherwise, since Key Code is optional.
+Pinned in `test_data_axle_ship_label.py`.
 
 **Underscore ends a Ship Label field just as `/` does.** `FA_Wounded Warrior_69715_Key
 S67_Qty` means Key = `S67`; stopping only at `/` and whitespace swallowed the trailing
