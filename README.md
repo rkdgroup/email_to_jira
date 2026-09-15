@@ -18,12 +18,12 @@ PDF → Extract Text → Detect Broker → Parse Fields → Validate → Enrich 
 ## Quick Start
 
 ```bash
-# Install dependencies
-pip install requests python-dotenv pyyaml pymupdf pdfminer.six pymupdf4llm python-docx openpyxl msal
+# Install dependencies (requirements.txt covers every runtime import)
+pip install -r requirements.txt
 
-# Configure credentials
-cp .env.example .env
-# Edit .env with your Jira credentials
+# Configure credentials — create .env in the repo root.
+# CLAUDE.md's "Dependencies & Credentials" table lists every var and what needs it.
+# The IBM i work-order step additionally needs jt400.jar, which is not in the repo.
 
 # Process a single PDF
 python parse_pipeline.py /path/to/order.pdf
@@ -110,7 +110,7 @@ broker must match for it to be selected (rules are evaluated in the order below)
 
 | Tool | Purpose |
 |------|---------|
-| `qc_checker.py` | The QC checker. Two LLM checks per ticket: was it created correctly from the broker's order, and did the SELECT deliver it. Posts a comment; `--fix` writes the order-check corrections back. Never transitions the ticket. |
+| `qc_checker.py` | The QC checker. Two LLM checks per ticket: was it created correctly from the broker's order, and did the SELECT deliver it. Posts a comment and writes the order-check corrections back **by default**; `--no-fix` makes it report-only. Never transitions the ticket. |
 | `qty_approval_scanner.py` | Reads Qty Approval emails / SELECT PDFs and sets the ticket's Requested Qty. |
 | `email_scanner/` | Watches the shared inbox and routes broker PDFs into `parse_pipeline` by sender domain. |
 | `ticket_scanner/` | Scheduled scan of DSLF tickets, writing reports under `ticket_scanner/reports/`. |

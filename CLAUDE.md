@@ -80,10 +80,11 @@ encode (`UnicodeEncodeError`). Prefix runs with `PYTHONIOENCODING=utf-8`.
 the build must be POSIX, and a path or command that only works in PowerShell will pass locally
 and fail on the agent.
 
-**`README.md` is a lighter, partially-stale duplicate of this file** — its Quick Start `pip`
-line omits `anthropic`/`jaydebeapi`/`JPype1`/`xlrd`, and its flow diagram and project tree
-predate `tools_polish.py`, `tools_zip_omit.py`, and the `WO#/` step. Treat CLAUDE.md as
-authoritative and update README only when a change is user-facing.
+**`README.md` is a lighter duplicate of this file.** Its Quick Start now installs from
+`requirements.txt` rather than a hand-listed set, so that drift cannot recur, but its
+project tree still omits `tools_polish.py`, `tools_zip_omit.py`, `LLM_writes.py`, the
+offline AI tools, the `WO#/` step and the ten test files. Treat CLAUDE.md as authoritative
+and update README only when a change is user-facing.
 
 ```bash
 # Scheduled automation (see "Scheduled Automation")
