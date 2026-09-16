@@ -378,8 +378,24 @@ def test_order_prompt_keeps_knowledge_mds_rules():
         ("incoming.files@data-axle.com", "the drop-box vs staff-mailbox rule"),
         ("keyacquistion.com",    "the typo'd requestor address"),
         ("needs a Jira admin",   "known-missing options are not a parse bug"),
+        ("tlibrarian@data-management.com",
+                                 "the in-house rule (DSLF-1250: QC wanted Email -> FTP)"),
     ):
         check(f"ORDER prompt keeps {why}", needle.lower() in s.lower(), True)
+
+
+def test_order_prompt_states_the_in_house_override():
+    """DSLF-1250 is an in-house KAP order: the PDF says "Via: FTP" and tells the service
+    bureau to upload to the DMI website, and apply_ship_to_rules correctly forced
+    tlibrarian@data-management.com + Email. QC read the order's FTP line, called the ticket
+    WRONG and proposed shipping_method Email -> FTP — which is in _FIXABLE, so the cron
+    would have written it and undone the house rule.
+    """
+    s = qc._SYSTEM_ORDER.lower()
+    check("in-house beats the order's own Via line",
+          "even when the order says" in s and "in-house" in s, True)
+    check("shipping_method is still auto-fixable, so the prompt is the only guard",
+          "shipping_method" in qc._FIXABLE, True)
 
 
 def test_order_prompt_does_not_resurrect_the_kap_title_exception():

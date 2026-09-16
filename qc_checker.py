@@ -960,6 +960,14 @@ WHAT TO CHECK
      staff appear on orders routinely. Do not confuse the two.
    - Any order mentioning Saturn ships ASCII Fixed via FTP with Ship To rewritten as
      "FTP NOTIFY: ... (SATURN CORP)".
+   - IN-HOUSE, and this one overrides the order itself. A ship-to anywhere at
+     data-management.com is our own address, so the ticket must read
+     tlibrarian@data-management.com with Shipping Method "Email" EVEN WHEN THE ORDER SAYS
+     FTP — an order telling the service bureau to upload to the DMI website is the normal
+     shape of an in-house drop, not an FTP delivery. This house rule runs last and beats
+     the order's own "Via: FTP" line. Do not report it, and never propose Email -> FTP
+     here: that write undoes the rule on a live ticket. The bare-address NOTE below does
+     not apply either — delivery is Email, so there is no "FTP NOTIFY:" prefix to miss.
    - Shipping Method FTP with a bare address in Ship To Email, no "FTP NOTIFY:" prefix,
      is a NOTE.
    - Shipping Instructions is normally "CC: {requestor email}". Holding the destination

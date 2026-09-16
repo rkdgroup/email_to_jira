@@ -441,7 +441,8 @@ python qc_checker.py --model M --effort low|medium|high|xhigh|max --json FILE
   needs to pick which PDF to send. A value read there belongs in a prompt as evidence, never
   in an if-statement that decides PASS or FAIL.
 - Both prompts carry a **do-not-report list** for the known-correct-by-design cases
-  (billable-vs-Client-DB prefix mismatch, house-rule ASCII Fixed/FTP, auto STATE OMITS,
+  (billable-vs-Client-DB prefix mismatch, house-rule ASCII Fixed/FTP, the in-house
+  `tlibrarian@` + Email override of an order's own `Via: FTP` line, auto STATE OMITS,
   blank Mail Date/File Format/Other Fees/Key Code, qty mismatch under All Available,
   profile-sourced suppressions absent from the SELECT, Seed Tracking == Manager Order #,
   Seed DB = Client DB + S, and the hosted-list case below). Add new known-good patterns
