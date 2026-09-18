@@ -621,6 +621,13 @@ presented as fact.
 Quote every value verbatim from the ticket or the document. Never paraphrase a field value.
 A clean pass is a normal and common outcome — do not invent a finding to fill the list.
 
+A finding is a request for a human's attention. If your own conclusion about it is that the
+ticket is acceptable, correct, explained by a rule above, or fine as it stands, it is not a
+finding: leave it out. Do not file your reasoning, a reading you settled, or a rule you
+applied, and do not ask a human to confirm what the CONFIG, the CLIENT PROFILE or a
+"[counted for you]" line already states. An empty finding list is what a clean check looks
+like.
+
 LENGTH — these findings are read in a Jira comment, so be brief
 "ticket_value", "select_value" and "expected" hold VALUES ONLY, quoted verbatim. No
 commentary, no parenthetical explanation, no restating the rule inside them.
@@ -901,7 +908,11 @@ WHAT TO CHECK
      When the list name shares a distinctive word with another known client, say so
      explicitly and ask for human confirmation rather than assuming it is fine.
    - An ADSTRA list name carrying a 5-digit code in parentheses — "NLEOMF DONORS (49210)"
-     — makes that code the definitive identifier. Quote it in the finding.
+     — makes that code the definitive identifier. The CONFIG block below prints the rows
+     behind the ticket's database code: when the order's code appears in one of them the
+     mapping is CONFIRMED — report nothing, and do not ask for a human to confirm what the
+     configuration already states. Report only when the code is absent from every row, and
+     then it is WRONG and names the wrong client.
    - KNOWN MISSING JIRA OPTIONS, do not report as a parse bug: C65D (3-CARI CHILDREN AT
      RISK INTL), X14D (3-ASFD AUTISM SPECTR DIS FOUND), M84D (3-MBF MANS BEST FRIEND),
      N13D (3-NPTA-NAT POLICE / TROOPER AS). These db_codes are correct but have no option
@@ -985,8 +996,11 @@ WHAT TO CHECK
    A requestor email at the MAILER's domain rather than the list manager's is WRONG.
 
 7. OTHER FEES should read "STATE OMITS" when the Omission Description lists six or more
-   states, zips or SCFs (count state codes plus 3-5 digit numbers). Below six it stays
-   blank. Both directions are a NOTE at most — this is automatic and expected.
+   states, zips or SCFs. The count is done for you and printed under the Omission
+   Description as "[counted for you]" — take it, do not count the omission yourself and do
+   not describe a total as near or at the threshold. Say nothing at all when the field
+   already agrees with that line. Only a field disagreeing with it is reportable, and then
+   a NOTE at most: this is automatic and expected.
 
 8. SPECIAL SEED INSTRUCTIONS holds only "Insert:" lines, and is blank on most orders.
    FTP or email details in there are WRONG.
@@ -1039,7 +1053,26 @@ def _ticket_text(fields: dict) -> str:
             out.extend(f"  {ln}" for ln in lines)
         else:
             out.append("  (empty)")
+        if key == "omission_adf":
+            out.append(_state_omit_count_text("\n".join(lines)))
     return "\n".join(out)
+
+
+def _state_omit_count_text(omission_text: str) -> str:
+    """The STATE OMITS arithmetic, done by the same code the parsers use.
+
+    The model was counting states off the omission itself and getting a different number
+    from the parser — DSLF-1268 carries four states and one zip, five, and still drew a
+    NOTE saying it "sits at the six-item threshold". The count is not a judgement call, so
+    it is handed over as a fact and the prompt only has to compare it with the field.
+    """
+    from parsers.base import BaseBrokerParser
+
+    states, zips = BaseBrokerParser._count_state_omit_items(omission_text)
+    total = states + zips
+    expected = '"STATE OMITS"' if total >= 6 else "blank"
+    return (f"\n[counted for you] {states} state code(s) + {zips} zip/SCF = {total}. "
+            f"The rule fires at 6, so Other Fees should be {expected} — do not recount.")
 
 
 def _profile_context(ticket_fields: dict) -> str:
@@ -1067,6 +1100,35 @@ def _profile_context(ticket_fields: dict) -> str:
         rows.append(f"  Standing flag omits: {prof['flags']}")
     return ("\n\nCLIENT PROFILE for " + db + " — the contracted terms for this client, and "
             "authoritative on what the order's shorthand means:\n" + "\n".join(rows))
+
+
+def _config_row_context(ticket_fields: dict) -> str:
+    """The config rows behind the ticket's database code — the ADSTRA list code included.
+
+    An ADSTRA list name carries a 5-digit code in parentheses and that code is the
+    definitive identifier, but the model has no way to resolve it, so it could only ever
+    quote the code back and ask a human to confirm the mapping (DSLF-1268: "(00521) is the
+    definitive identifier; worth a human confirming A18D" — config says 00521 IS A18D).
+    The row client_lookup would have resolved is a fact, so send it and let the comparison
+    be a comparison.
+    """
+    from client_lookup import _load_all_clients
+
+    db = str(ticket_fields.get("client_db") or "").upper()
+    if not db:
+        return ""
+    names = []
+    for row in _load_all_clients():
+        if str(row.get("db_code") or "").upper() != db:
+            continue
+        for v in (row.get("rental_name"), row.get("db_name")):
+            if v and v not in names:
+                names.append(v)
+    if not names:
+        return (f"\n\nCONFIG: no row on file for {db}. You cannot confirm the database "
+                "against a list code — say it is unverified rather than calling it wrong.")
+    return ("\n\nCONFIG — the client_lookup rows for " + db + ", authoritative on which "
+            "client this code belongs to:\n" + "\n".join(f"  {n}" for n in names[:6]))
 
 
 def _load_adstra_flag_omits() -> dict:
@@ -1303,6 +1365,7 @@ def review_order(pdf_path: str, ticket_fields: dict,
         user = ("THE TICKET, as the pipeline created it:\n\n"
                 + _ticket_text(ticket_fields)
                 + _profile_context(ticket_fields)
+                + _config_row_context(ticket_fields)
                 + "\n\nThe attached PDF is the broker's purchase order, the document this "
                   "ticket was created from and authoritative on everything printed on it. "
                   "Decide whether the ticket reproduces it correctly.")

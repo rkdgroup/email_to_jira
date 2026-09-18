@@ -229,22 +229,29 @@ class BaseBrokerParser(ABC):
                 return []  # non-state token → not a pure state-omit line
         return codes
 
+    @staticmethod
+    def _count_state_omit_items(omission_description: str) -> tuple[int, int]:
+        """(state codes, zips/SCFs) in an omission — the input to the STATE OMITS rule.
+
+        Split out so qc_checker can print the same two counts as evidence instead of
+        asking the model to count states off the page and disagree with the parser.
+        """
+        if not omission_description:
+            return 0, 0
+        upper = omission_description.upper()
+        # Count state abbreviations
+        states = sum(1 for s in BaseBrokerParser._US_STATES if re.search(rf"\b{s}\b", upper))
+        # Count zip codes (5-digit or 3-digit SCF prefixes)
+        zips = len(re.findall(r"\b\d{3,5}\b", omission_description))
+        return states, zips
+
     def _detect_state_omits(self, omission_description: str) -> str:
         """
         If omission_description contains 6+ US states, zip codes, or SCFs,
         return "State Omits" for the other_fees field.
         """
-        if not omission_description:
-            return ""
-        upper = omission_description.upper()
-        # Count state abbreviations
-        state_count = sum(1 for s in self._US_STATES if re.search(rf"\b{s}\b", upper))
-        # Count zip codes (5-digit or 3-digit SCF prefixes)
-        zip_matches = re.findall(r"\b\d{3,5}\b", omission_description)
-        total = state_count + len(zip_matches)
-        if total >= 6:
-            return "State Omits"
-        return ""
+        states, zips = self._count_state_omit_items(omission_description)
+        return "State Omits" if states + zips >= 6 else ""
 
     def _extract_special_seed_instructions(self, text: str) -> str:
         """Extract special seed instructions from PDF text."""

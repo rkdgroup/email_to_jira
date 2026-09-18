@@ -364,6 +364,34 @@ def test_profile_context_handles_an_unknown_database():
     check("blank db_code handled", isinstance(qc._profile_context({}), str), True)
 
 
+def test_the_omit_count_is_handed_over_rather_than_left_to_the_model():
+    """DSLF-1268 drew a NOTE claiming five omit items "sit at the six-item threshold".
+
+    The count is arithmetic, not judgement, so the prompt gets the parser's own numbers.
+    """
+    from parsers.base import BaseBrokerParser as P
+    check("four states and a zip is five", P._count_state_omit_items(
+        "OMIT: DC,TX,WI,WV AND ZIP 11753"), (4, 1))
+    check("the detector still fires at six", P._detect_state_omits(
+        P, "OMIT AL,AK,AZ,AR,CA,CO"), "State Omits")
+    below = qc._state_omit_count_text("OMIT: DC,TX,WI,WV AND ZIP 11753")
+    check("below six says the field should be blank", "should be blank" in below, True)
+    check("and forbids a recount", "do not recount" in below, True)
+    check("at six it asks for STATE OMITS",
+          "STATE OMITS" in qc._state_omit_count_text("OMIT AL,AK,AZ,AR,CA,CO"), True)
+
+
+def test_config_rows_let_the_order_check_resolve_an_adstra_list_code():
+    """Without them the model can only quote (00521) back and ask a human — every run."""
+    ctx = qc._config_row_context({"client_db": "A18D"})
+    check("the config rental name reaches the prompt", "00521" in ctx, True)
+    check("an unknown db_code says so rather than inventing a client",
+          "no row on file" in qc._config_row_context({"client_db": "ZZ9D"}), True)
+    check("blank db_code handled", qc._config_row_context({}), "")
+    check("the ORDER prompt points at the CONFIG block",
+          "CONFIG block" in qc._SYSTEM_ORDER, True)
+
+
 def test_select_prompt_keeps_the_rules_the_regex_checker_knew():
     s = qc._SYSTEM_SELECT
     for needle, why in (
