@@ -1669,7 +1669,13 @@ def check_ticket(ticket_key: str, post: bool = False, fix: bool = False,
 # ---------------------------------------------------------------------------
 
 _QC_COMMENT_PREFIXES = ("QC CHECK RESULTS", "QC SKIPPED")
-_RERUN_GRACE_SECONDS = 120  # posting the comment itself updates the ticket
+# Posting the QC comment is the last write check_ticket makes, so the ticket's
+# `updated` lands within a second of the comment's own timestamp — the grace only has
+# to cover that. It used to be 120s, and a SELECT PDF attached in the minute after a
+# ticket was QC'd (DSLF-1268: order checked 12:26:42, SELECT attached 12:28:13) fell
+# inside the window, so the guard called the ticket unchanged and it never came back
+# for its SELECT check.
+_RERUN_GRACE_SECONDS = 15
 
 
 def _adf_text(adf) -> str:

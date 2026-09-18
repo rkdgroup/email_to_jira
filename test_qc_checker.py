@@ -275,6 +275,21 @@ def test_unverified_report_is_recognisable_to_the_rerun_guard():
     check("report says it is not a pass", "NOT a pass" in report, True)
 
 
+def test_a_select_attached_after_the_order_check_brings_the_ticket_back():
+    """DSLF-1268: ORDER checked at 12:26:42, SELECT attached at 12:28:13.
+
+    The grace window is only there to absorb the QC comment's own write. A window wide
+    enough to swallow a SELECT PDF that lands a minute later leaves the ticket looking
+    unchanged forever, so it is order-checked and never select-checked.
+    """
+    check("a SELECT attached ~2 min later re-opens the ticket",
+          qc._updated_after_qc("2026-09-16T12:28:34.268-0500",
+                               "2026-09-16T12:26:42.259-0500"), True)
+    check("the QC comment's own write still does not re-open it",
+          qc._updated_after_qc("2026-09-16T12:26:43.100-0500",
+                               "2026-09-16T12:26:42.259-0500"), False)
+
+
 def test_a_real_verdict_is_not_mistaken_for_unverified():
     report = qc.format_report("DSLF-1", {
         "verdict": qc.PASS,
