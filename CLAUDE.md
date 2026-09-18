@@ -264,9 +264,10 @@ On every **live** create, `_create_and_link_work_order()` imports `WO#/work_orde
   Adding a machine means adding a path here or setting the env var — the jar is **not** in the repo.
 - Only `IBMI_PASSWORD` is truly required: `IBMI_HOST` and `IBMI_USER` fall back to hardcoded
   defaults (`SYSTEM5.DATA-MANAGEMENT.COM`, `DMISUVAM`), so a missing host silently uses prod.
-- There is a **second** `WO#/requirements.txt` (`jaydebeapi`/`JPype1`/`python-dotenv`) that
-  Jenkins never installs — it runs `pip3 install -r requirements.txt` on the root file only.
-  Keep the three pins in sync with root or the scheduled run misses them.
+- The second `WO#/requirements.txt` is **gone** — Jenkins only ever installed the root file,
+  so its three floors (`jaydebeapi>=1.2.3`, `JPype1>=1.4.0`, `python-dotenv>=1.0.0`) were
+  invisible to the scheduled run. Folded into root instead of kept in sync by hand. They are
+  floors, not pins: the rest of the file is still unpinned, which is the open suspect below.
 
 ## Prose Polish (`tools_polish.py`) — the live LLM step
 

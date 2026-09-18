@@ -3,11 +3,11 @@ requests
 pymupdf
 pdfminer.six
 pymupdf4llm
-python-dotenv
+python-dotenv>=1.0.0
 msal
 pyyaml
 openpyxl
 xlrd
 python-docx
-jaydebeapi
-JPype1
+jaydebeapi>=1.2.3
+JPype1>=1.4.0

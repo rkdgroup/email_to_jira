@@ -1,3 +1,0 @@
-jaydebeapi>=1.2.3
-JPype1>=1.4.0
-python-dotenv>=1.0.0
