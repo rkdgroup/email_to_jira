@@ -1249,7 +1249,17 @@ def _review(pdf_path: str, system: str, schema: dict, user_text: str,
             thinking={"type": "adaptive"},
             output_config={"effort": effort,
                            "format": {"type": "json_schema", "schema": schema}},
-            system=system,
+            # Both prompts are static and large — 5,931 tokens for _SYSTEM_ORDER, 5,450
+            # for _SYSTEM_SELECT, over half the input of every call — and were being paid
+            # at full rate once per ticket per check. The breakpoint is explicit and sits
+            # here rather than top-level `cache_control`, because the request ends in the
+            # per-ticket PDF: an automatic breakpoint lands after it and bills the 1.25x
+            # write premium on bytes nothing ever reads back. ORDER and SELECT cache
+            # separately (different prefixes). 5-minute TTL is refreshed by each read, so
+            # a queue at ~45s/ticket stays warm; a single-ticket run pays the write
+            # premium on the system block alone (~$0.006) and never reads it back.
+            system=[{"type": "text", "text": system,
+                     "cache_control": {"type": "ephemeral"}}],
             messages=[{
                 "role": "user",
                 "content": [
