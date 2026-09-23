@@ -388,6 +388,106 @@ def test_a_non_kap_address_is_never_the_requestor():
           "jgomez@keyacquisition.com")
 
 
+# DM166 / DSLF-1307 — the select names its geography with a forward pointer ("IN SCF'S
+# BELOW") and the codes sit under Special Instructions, next to unrelated prose and a
+# secure-upload URL that the "upload file to:" pattern does not phrase-match.
+_DM166 = """Order Date:
+KAP Order:
+9943  RW
+DM166
+09/18/26
+Purchase Order
+Exchange
+Mailer:
+Offer:
+Key:
+Category:
+GLIDE MEMORIAL
+FUNDRAISING
+''''0018
+Broker order:
+Wanted By:
+ Email: ALASKOS@NEXUSDIRECT.COM
+TO:
+11/06/2026
+Mail Date:
+NEXUS DIRECT
+DA60018
+09/23/26
+10/23/26
+Broker:
+List:
+Price:
+AID FOR STARVING CHILDREN
+24 MO $10-99.99  IN SCF''''S BELOW
+$ 0.00 /F
+Selects:
+Exch Qty:
+Price:
+$0.00/M
+632
+All available
+Material:
+Price:
+Ship To:
+Via:
+Contact:
+Email
+$0.00
+EMAIL
+Email
+INCOMINGFILES@NEXUSDIRECT.COM
+Please advise all available quantity before shipping.
+SCF'S 940-941, 943-947, 949
+Please use the link below to upload the file on our secured, encrypted site.
+https://nexusdirect.sharefile.com/r-reaf1a9edb38c40be93124f271426e6b4
+SHIP LABEL:  PO #/MAILER/LIST/SEGMENT/KEY CODE/QUANTITY
+Omit all APO, FPO, Foreign addresses DMA Panders.
+Please contact Robin Wojack at Email: rwojack@keyacquisition.com
+Special Instructions
+"""
+
+
+def test_below_pointer_pulls_in_the_block_it_points_at():
+    """DSLF-1307: the SCF codes reached neither field, so the ticket lost its geography."""
+    r = PARSER_REGISTRY["kap"].parse(_DM166)
+    check("referenced block appended under the criterion",
+          r.segment_criteria,
+          "24 MO $10-99.99  IN SCF''''S BELOW\n"
+          "  SCF'S 940-941, 943-947, 949")
+
+
+def test_below_pointer_takes_only_its_own_subject():
+    """Special Instructions also holds prose, a URL and the ship-label line — none of it
+    is the geography, and matching on the subject named before BELOW is what excludes it."""
+    r = PARSER_REGISTRY["kap"].parse(_DM166)
+    for stray in ("advise", "sharefile", "SHIP LABEL", "Robin"):
+        check(f"{stray!r} not dragged into the select",
+              stray in r.segment_criteria, False)
+
+
+def test_an_include_never_fires_state_omits():
+    """Nine SCF codes, but they are selected IN, not omitted — Other Fees stays blank."""
+    r = PARSER_REGISTRY["kap"].parse(_DM166)
+    check("SCF includes stay out of the omission", "940" in r.omission_description, False)
+    check("no State Omits fee on an include", r.other_fees, "")
+
+
+def test_prose_upload_link_reaches_shipping_instructions():
+    """DSLF-1307: "use the link below to upload the file on our secured site" never says
+    "file to:", so the destination was dropped."""
+    r = PARSER_REGISTRY["kap"].parse(_DM166)
+    check("prose upload link appended to the cc line",
+          r.shipping_instructions,
+          "CC: rwojack@keyacquisition.com | UPLOAD TO: "
+          "https://nexusdirect.sharefile.com/r-reaf1a9edb38c40be93124f271426e6b4")
+
+
+def test_a_select_without_a_pointer_is_left_alone():
+    r = PARSER_REGISTRY["kap"].parse(_DL995)
+    check("pointerless select untouched", r.segment_criteria, "$10+ LAST 12 MO")
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),

@@ -14,6 +14,45 @@ class KapParser(BaseBrokerParser):
             return ""
         return re.sub(r"\s+", " ", s).strip()
 
+    @staticmethod
+    def _subject_token(s: str) -> str:
+        """Collapse the apostrophe noise KAP extraction leaves, so a pointer matches its
+        block: SCFS from every spelling of SCF-S the PDF produces."""
+        return re.sub(r"[^A-Z]", "", s.upper())
+
+    def _resolve_below_reference(self, criteria: str, lines: list[str]) -> str:
+        """Append the block a "... IN SCF-S BELOW" select points at, indented.
+
+        Matching on the subject named before BELOW is what keeps this from swallowing
+        the unrelated prose that also sits under Special Instructions. The referenced
+        block is indented, which _build_adf_description would render as a bullet under
+        the criterion; tools_polish strips the indent on the way in and may join or
+        split the pair, so the indent is a hint, not a guarantee. What is guaranteed is
+        that the codes reach the Description at all.
+        An include stays in the Description: _detect_state_omits counts off the
+        omission field, so pulling SCFs in here cannot fire State Omits by itself.
+        """
+        if not criteria:
+            return criteria
+        m = re.search(r"([A-Za-z'\u2019]+)[ \t]+(?:(?:SEE|LISTED|SHOWN|NOTED)[ \t]+)*BELOW\b",
+                      criteria, re.IGNORECASE)
+        if not m:
+            return criteria
+        subject = self._subject_token(m.group(1))
+        if not subject:
+            return criteria
+        found: list[str] = []
+        for ln in lines:
+            ln = ln.strip()
+            if ln == criteria.strip() or not re.search(r"\d", ln):
+                continue
+            head = re.match(r"\**[ \t]*([A-Za-z'\u2019]+)", ln)
+            if head and self._subject_token(head.group(1)) == subject and ln not in found:
+                found.append(ln)
+        if not found:
+            return criteria
+        return "\n".join([criteria] + ["  " + f for f in found])
+
     def parse(self, text: str) -> ParseResult:
         lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
 
@@ -321,6 +360,11 @@ class KapParser(BaseBrokerParser):
         upload_target = ""
         m_up = re.search(r"(?is)\b(?:upload|post|send)[ \t]+(?:the[ \t]+)?file[ \t]+to[ \t]*:[ \t\r\n]*(\S+)",
                          text)
+        if not m_up:
+            # DM166 states the same thing as prose with the link on its own line: "Please
+            # use the link below to upload the file on our secured, encrypted site." The
+            # pattern above needs the literal "file to:", so that destination was dropped.
+            m_up = re.search(r"(?is)\bupload\b[^\n]{0,160}[\r\n]+[ \t]*(https?://\S+)", text)
         if m_up:
             upload_target = m_up.group(1).strip().rstrip(".,;")
 
@@ -368,6 +412,13 @@ class KapParser(BaseBrokerParser):
         # Fall back to explicit Selects: label if unlabeled line wasn't found
         if not segment_criteria:
             segment_criteria = self._find(text, r"(?:Selects?|Segment):[ \t]*([^\n]+)")
+
+        # A select that ends in a pointer names its subject right before BELOW, and the
+        # block it points at repeats that subject further down the page — DM166's
+        # "24 MO $10-99.99 IN SCF-S BELOW" is answered by "SCF-S 940-941, 943-947, 949"
+        # under Special Instructions. The select is read as one line, so those codes
+        # reached neither field and the ticket lost its whole geography (DSLF-1307).
+        segment_criteria = self._resolve_below_reference(segment_criteria, lines)
 
         # Drop offer-date noise mis-grabbed as the key from a wrapped offer line, e.g.
         # offer "Lutheran Hour Ministries November 2026" leaves key_code "2026" or
