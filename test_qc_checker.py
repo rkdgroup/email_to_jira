@@ -580,6 +580,63 @@ def test_the_select_parser_lives_here_too():
         check(f"{name} is importable from qc_checker", hasattr(qc, name), True)
 
 
+# ---------------------------------------------------------------------------
+# The dollar cost on the comment footer
+# ---------------------------------------------------------------------------
+
+class _Usage:
+    """The four fields of an Anthropic usage object this file prices."""
+
+    def __init__(self, inp=0, out=0, read=0, write=0):
+        self.input_tokens = inp
+        self.output_tokens = out
+        self.cache_read_input_tokens = read
+        self.cache_creation_input_tokens = write
+
+
+def test_cost_is_priced_off_usage_and_the_two_cache_multipliers():
+    """A read is a tenth of the input rate and an ephemeral write is 1.25x it.
+
+    Getting the multipliers wrong is invisible — the number still looks plausible — so
+    the arithmetic is pinned rather than eyeballed against a live bill.
+    """
+    # opus-5: $5/MTok in, $25/MTok out.
+    check("input only", round(qc._cost_usd(_Usage(inp=1_000_000), "claude-opus-5"), 6), 5.0)
+    check("output only", round(qc._cost_usd(_Usage(out=1_000_000), "claude-opus-5"), 6), 25.0)
+    check("a cache read is a tenth of the input rate",
+          round(qc._cost_usd(_Usage(read=1_000_000), "claude-opus-5"), 6), 0.5)
+    check("an ephemeral write is 1.25x the input rate",
+          round(qc._cost_usd(_Usage(write=1_000_000), "claude-opus-5"), 6), 6.25)
+
+    # The real shape: a warm QC call — small uncached prefix, the system prompt read back
+    # from cache, one report's worth of output.
+    warm = qc._cost_usd(_Usage(inp=2_500, out=1_900, read=11_400), "claude-opus-5")
+    check("a warm call lands in the measured band", 0.05 < warm < 0.20, True)
+
+
+def test_an_unpriced_model_reports_nothing_rather_than_a_wrong_number():
+    """--model takes any string. A missing figure is recoverable; a wrong one is read as fact."""
+    check("unknown model", qc._cost_usd(_Usage(inp=1_000_000), "some-other-model"), 0.0)
+    check("no usage object at all", qc._cost_usd(None, "claude-opus-5"), 0.0)
+
+
+def test_the_footer_carries_the_cost_only_when_there_is_one():
+    def report(cost):
+        return qc.format_report("DSLF-1", {
+            "verdict": qc.PASS,
+            "select": {"verdict": qc.PASS, "findings": [], "delivered": "d",
+                       "model": "claude-opus-5", "elapsed_s": 45.0, "cost_usd": cost},
+            "select_filename": "S.pdf"})
+
+    priced = report(0.1183)
+    check("the dollar figure is on the footer", "$0.118" in priced, True)
+    check("it sits with the model and the seconds", "claude-opus-5 \u00b7 45s \u00b7 $0.118" in priced, True)
+    check("an unpriced run prints no dollars", "$" in report(0.0), False)
+    # The re-run guard greps the top of this comment; the footer must not disturb it.
+    check("the guard's prefix still matches",
+          priced.startswith(qc._QC_COMMENT_PREFIXES), True)
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),

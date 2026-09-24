@@ -1219,6 +1219,40 @@ def _worst(*verdicts) -> str:
 # The call
 # ---------------------------------------------------------------------------
 
+# Per-1M-token rates, first-party Anthropic API. The two cache multipliers apply to the
+# INPUT rate: a read is a tenth of it, a 5-minute ephemeral write is 1.25x — which is the
+# whole reason the breakpoint below sits on the system block and not top-level.
+_RATES_PER_MTOK = {
+    "claude-opus-5":    (5.0, 25.0),
+    "claude-sonnet-5":  (2.0, 10.0),
+    "claude-haiku-4-5": (1.0,  5.0),
+}
+_CACHE_READ_X  = 0.10
+_CACHE_WRITE_X = 1.25
+
+
+def _cost_usd(usage, model: str) -> float:
+    """What this one call cost, in dollars. 0.0 for a model with no rate on file.
+
+    --model takes any string, so an unpinned model would otherwise be priced at whatever
+    the default happened to be. A missing number on the comment is recoverable; a wrong
+    dollar figure on a live ticket gets read as fact.
+    """
+    rates = _RATES_PER_MTOK.get(model)
+    if not rates or usage is None:
+        return 0.0
+    rate_in, rate_out = rates
+
+    def n(name):
+        return getattr(usage, name, 0) or 0
+
+    # Thinking tokens are already inside output_tokens — no separate term.
+    return (n("input_tokens")                  * rate_in
+            + n("cache_read_input_tokens")     * rate_in * _CACHE_READ_X
+            + n("cache_creation_input_tokens") * rate_in * _CACHE_WRITE_X
+            + n("output_tokens")               * rate_out) / 1e6
+
+
 def _review(pdf_path: str, system: str, schema: dict, user_text: str,
             check: str, model: str = None, effort: str = None) -> dict:
     """One PDF, one prompt, one verdict. Never raises. UNVERIFIED on every failure path."""
@@ -1237,7 +1271,11 @@ def _review(pdf_path: str, system: str, schema: dict, user_text: str,
 
     cache_key = (hash(data), user_text, system[:64], model, effort)
     if cache_key in _cache:
-        return dict(_cache[cache_key])
+        # A hit made no API call, so it cost nothing. Without this a multi-page or
+        # repeated-text order would bill the same dollars once per page.
+        hit = dict(_cache[cache_key])
+        hit["cost_usd"] = 0.0
+        return hit
 
     started = time.monotonic()
     try:
@@ -1284,6 +1322,10 @@ def _review(pdf_path: str, system: str, schema: dict, user_text: str,
                           if isinstance(f, dict) and f.get("field")]
     result["model"]     = model
     result["elapsed_s"] = elapsed
+    # ponytail: a call that succeeds and then fails json.loads returns UNVERIFIED above,
+    # and the money it spent is not reported. Under-reporting a failed parse is the safe
+    # direction; over-reporting is not.
+    result["cost_usd"]  = _cost_usd(getattr(resp, "usage", None), model)
     result["check"]     = check
     result = _reconcile(result)
 
@@ -1658,8 +1700,14 @@ def format_report(ticket_key: str, result: dict) -> str:
 
     models = {c.get("model") for c in (order, select) if c and c.get("model")}
     secs   = sum(c.get("elapsed_s", 0) for c in (order, select) if c)
+    cost   = sum(c.get("cost_usd", 0) for c in (order, select) if c)
     if models:
-        lines.append(f"\n{', '.join(sorted(models))} · {secs:.0f}s")
+        # Three decimals: reports land at $0.099-$0.182 and two would round away the
+        # difference the prompt-cache breakpoint above exists to make.
+        foot = f"\n{', '.join(sorted(models))} · {secs:.0f}s"
+        if cost:
+            foot += f" · ${cost:.3f}"
+        lines.append(foot)
     return "\n".join(lines).rstrip()
 
 
