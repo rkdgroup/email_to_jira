@@ -10,8 +10,7 @@ DSLF List Rental Pipeline — processes purchase order PDFs from brokers, extrac
 
 ## LLM Model Policy
 
-**One pin for every Claude touchpoint: `claude-opus-5` at `medium` effort.** The API budget
-is $100 and cost is not a constraint — pick the capable tier, not the cheap one. Set in
+**One pin for every Claude touchpoint: `claude-opus-5` at `medium` effort.** Set in
 `tools_polish.py:39`, `qc_checker.py:87-88`, `LLM_writes.py:69-70`, `ai_extract.py:37` (+ its
 `extract_fields_from_pdf(effort=)` default), `compare_extraction.py:275`,
 `hybrid_create.py:39/56/106`. Change them together or they drift apart again.
@@ -52,7 +51,7 @@ Jira, no DB, no PDFs, no network — the QC tests never call the API.
 
 ```bash
 python test_ship_to_rules.py         # ship-to house rules + KAP FTP-boilerplate false positive
-python test_kap_fields.py            # KAP exchange qty, spaced order #, $-prefixed select
+python test_kap_fields.py            # KAP exchange qty, spaced order #, $-select, BELOW ref
 python test_adstra_list_code.py      # ADSTRA 5-digit list code vs address digits
 python test_qc_select_parse.py       # SELECT-PDF shipping-info parsing (spaced filenames)
 python test_qc_checker.py            # fail-closed verdicts, gate, auto-fix whitelist, exit codes
@@ -68,7 +67,7 @@ Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap
 `parsers/adstra.py`, `parsers/data_axle.py`, `qc_checker.py`,
 `parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
 `parse_pipeline._dup_check_key`, `qty_approval_scanner.py`, or `WO#/work_order.py`.
-Verified all eleven pass 2026-09-15. Everything else is tested manually via `--dry-run --verbose` against real
+Verified all eleven pass 2026-09-21. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
 in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
@@ -85,7 +84,7 @@ and fail on the agent.
 **`README.md` is a lighter duplicate of this file.** Its Quick Start now installs from
 `requirements.txt` rather than a hand-listed set, so that drift cannot recur, but its
 project tree still omits `tools_polish.py`, `tools_zip_omit.py`, `LLM_writes.py`, the
-offline AI tools, the `WO#/` step and the ten test files. Treat CLAUDE.md as authoritative
+offline AI tools, the `WO#/` step and the eleven test files. Treat CLAUDE.md as authoritative
 and update README only when a change is user-facing.
 
 ```bash
@@ -179,7 +178,7 @@ Load-bearing behaviors that are easy to get wrong:
 
 ## Scheduled Automation
 
-Four independent entry points share the pipeline and `.env`. **Only `email_scanner` + QC are Jenkins-scheduled** — by a freestyle Execute-shell job whose script lives in the Jenkins config, **not** by this repo's `Jenkinsfile` (see "QC" below). It calls `python qc_checker.py`, which is a shim onto `qc_checker`. `qty_approval_scanner` is run manually / emailed; `ticket_scanner` uses a Windows Task Scheduler `.bat`.
+Four independent entry points share the pipeline and `.env`. **Only `email_scanner` + QC are Jenkins-scheduled** — by a freestyle Execute-shell job whose script lives in the Jenkins config, **not** by this repo's `Jenkinsfile` (see "QC" below). It calls `python qc_checker.py` directly. `qty_approval_scanner` is run manually / emailed; `ticket_scanner` uses a Windows Task Scheduler `.bat`.
 
 | Tool | Trigger / scope | Behavior |
 |------|-----------------|----------|
@@ -306,7 +305,7 @@ There are 2 parts in Jira - Description and ommision description. So the pull de
   now.
 - **Jenkins guards**: 20s per-call timeout, `POLISH_BUDGET_S` (120s) per-process wall clock
   after which remaining tickets skip the pass, and an in-process cache so repeated text in a
-  multi-page or batched order costs one call. At ~6s/call the budget covers **~24 tickets per
+  multi-page or batched order costs one call. At ~6s/call the budget covers **~20 tickets per
   run**; a 7-page AMLC PDF is ~40s of polish. Watch for
   `Polish budget of 120s exhausted for this run — skipping` — raising the budget means
   raising the Jenkins job timeout with it.
@@ -395,6 +394,23 @@ python qc_checker.py --model M --effort low|medium|high|xhigh|max --json FILE
   exiting on bad arguments, or an unexpected exception (`_entry` catches those and returns
   1). The old rule-based `main()` returned `None` and so always exited 0; this preserves it.
   `test_qc_checker.py` pins all three paths.
+- **Both system prompts are prompt-cached, and where the breakpoint sits is the whole
+  trick.** `_SYSTEM_ORDER` (~5.9k tokens) and `_SYSTEM_SELECT` (~5.5k) are over half the
+  input of every call and used to be billed at full rate once per ticket per check.
+  `cache_control: {"type": "ephemeral"}` is set **on the system block itself, never
+  top-level** — the request ends in the per-ticket PDF, so an automatic breakpoint lands
+  after it and pays the 1.25x write premium on bytes nothing ever reads back. Measured over
+  four real tickets: ~30% off per report, a 20-ticket queue ~$3.40 -> ~$2.46. The 5-minute
+  TTL is refreshed by each read, so a queue at ~45s/ticket stays warm; a single-ticket run
+  pays the write and never reads it back. Reordering the message blocks silently un-caches
+  it — that is cost, not correctness, so nothing fails and no test catches it.
+- **Every report carries what it cost, and three decimals is deliberate.** `_cost_usd`
+  prices each call off `_RATES_PER_MTOK` (per-1M input/output, cache read 0.10x, 5-minute
+  ephemeral write 1.25x) and the comment footer reads `model · Ns · $x.xxx`. Reports land at
+  $0.099-$0.182, so two decimals would round away the difference the prompt-cache
+  breakpoint exists to make. A model with no rate on file prices at **0.0 and the footer
+  drops the figure** — `--model` takes any string, and a wrong dollar amount on a live ticket
+  gets read as fact.
 - **There is no run budget.** A queue runs to completion however long it takes — measured
   at medium effort on DSLF-1240, **~45s per ticket** for both checks (30s ORDER + 15s
   SELECT). Removed on request 2026-08-31; if the build starts timing out, raise the Jenkins
@@ -420,6 +436,11 @@ python qc_checker.py --model M --effort low|medium|high|xhigh|max --json FILE
   check failed comes back next run. Without that, the re-run guard would see an unchanged
   ticket carrying a QC comment and skip it forever. The guard greps the report text, so
   `format_report` and `_last_qc_comment_time` are coupled — a test pins them together.
+- **The re-run guard's grace window is 15s, and the narrowness is the point.**
+  `_RERUN_GRACE_SECONDS` only has to absorb the QC comment's own write, which is the last
+  thing `check_ticket` does. At its old 120s a SELECT PDF attached 112s after the order
+  check (DSLF-1268) fell inside the window, so every later scan called the ticket unchanged
+  and it sat in `Needs QC` order-checked and never select-checked.
 - **The gate overrides the model, not the reverse.** `_reconcile()` forces `FAIL` whenever
   any finding is `WRONG` or `BLOCKING-BLANK`, whatever the model wrote in `verdict`, and
   records `verdict_forced`. `NOTE` never forces a fail.
@@ -547,6 +568,19 @@ Auxiliary, **not part of the live pipeline**. All require `ANTHROPIC_API_KEY` an
 
 
 **KAP: only the Ship To block decides the destination, and it can be 15 lines below the label.** `_ship_block` is capped at 260 chars for reading the Via/format tokens, but the address hunt now runs over everything from `Ship To:` to the end of the page and never above it. DSLF-1152 printed `Email: BCRABTREE@RKDGROUP.COM` (the broker's own rep) near the top and the real drop point in prose further down — the old page-wide `Email:` fallback took the rep. Same family as DSLF-1022 and DSLF-1029. `send an email to X and Y` takes X; Y is the broker being copied. Pinned in `test_kap_fields.py` and `test_ship_to_rules.py`.
+
+**KAP: a select can point at codes printed further down, and the pointer must be followed.**
+DM166's select line reads `24 MO $10-99.99 IN SCF'S BELOW` with the nine SCFs sitting under
+Special Instructions. `segment_criteria` is read as a single line and never followed the
+pointer, so those codes reached neither prose field and DSLF-1307 was created with **no
+geography at all**. `_resolve_below_reference` matches on the subject named before `BELOW`
+and appends only the later lines that repeat it — that is what keeps the unrelated prose,
+the ship-label line and a URL in the same block out of the select. **Those codes are an
+include, so they stay in the Description**; `_detect_state_omits` counts off the omission
+field and so cannot fire State Omits on them. The same order also lost its destination: the
+upload pattern required the literal `file to:`, and this one phrases it "use the link below
+to upload the file on our secured, encrypted site" with the URL on the next line — a
+fallback now catches that. Pinned in `test_kap_fields.py`.
 
 ## Ship-To House Rules (tools_jira.py)
 
@@ -753,5 +787,12 @@ They can create and edit live Jira tickets through `tools_jira`, same as the pip
   `processed_ids.json` and `token_cache.bin` (runtime state — see "Email scanner specifics"
   for why losing them spawns duplicate tickets), the source Excel workbooks and
   `Client Profiles/` (client data), and `.claude/settings.local.json` (per-machine
-  permissions). `.gitignore` covers these today; that is a safety net, not a reason to skip
-  checking `git status` before committing.
+  permissions). ⚠ **`NEW LR CLIENT LIST 2026.xlsx` is already tracked** — committed before
+  the rule existed, same as `settings.local.json` below — so this rule protects only the
+  *other* workbooks; do not read it as proof the Excel is out of the repo.
+- **`.gitignore` does NOT cover `.claude/settings.local.json` — that file is tracked.** The
+  `.claude/` ignore entry cannot untrack what was committed before it, so the file shows as
+  modified on every machine and any `git add` naming it sweeps it in. `.claude/agents/`
+  is the mirror case: only `jira_Auto.md` is tracked, so a fresh clone has no `bff_agent`.
+  Ignore rules are a safety net, not a reason to skip checking `git status` before
+  committing.
