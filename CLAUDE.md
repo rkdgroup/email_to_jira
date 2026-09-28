@@ -67,7 +67,7 @@ Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap
 `parsers/adstra.py`, `parsers/data_axle.py`, `qc_checker.py`,
 `parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
 `parse_pipeline._dup_check_key`, `qty_approval_scanner.py`, or `WO#/work_order.py`.
-Verified all eleven pass 2026-09-21. Everything else is tested manually via `--dry-run --verbose` against real
+Verified all eleven pass 2026-09-28. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
 in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
