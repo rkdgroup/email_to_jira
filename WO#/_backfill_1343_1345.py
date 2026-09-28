@@ -1,7 +1,7 @@
-"""One-off via ODBC: create WOs for DSLF-1344 / DSLF-1345 and write WO# back to Jira.
+"""One-off via ODBC: create WOs for DSLF-1343..1345 and write WO# back to Jira.
 
-Both were created by the Jenkins pipeline on 2026-09-25 with the WO step failing
-silently (as did DSLF-1342, backfilled by hand, and DSLF-1343). Same allocator as
+All three were created by the Jenkins pipeline on 2026-09-25 with the WO step failing
+silently (as did DSLF-1342, backfilled by hand). Same allocator as
 the pipeline (WorkOrderManager.allocate_and_create: PEPBK# floor, cross-suffix
 verify + backout), but connected through the IBM i Access ODBC Driver because
 JPype is blocked on the dev machine. DRY RUN by default; --live writes.
@@ -21,9 +21,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 from work_order import WorkOrderManager, _billable_to_wccust, _make_acronym, _today_mmddyy
-from tools_jira import update_ticket_fields, get_ticket_billable_account
+from tools_jira import update_ticket_fields, get_ticket_billable_account, search_issues_paged
 
 TICKETS = [
+    {"key": "DSLF-1343", "mailer": "Greater Chicago Food Depository", "manager_po": "73495", "mailer_po": "224085"},
     {"key": "DSLF-1344", "mailer": "SILENT CRY FOUNDATION", "manager_po": "J5328", "mailer_po": "133323"},
     {"key": "DSLF-1345", "mailer": "SILENT CRY FOUNDATION", "manager_po": "J5326", "mailer_po": "133349"},
 ]
@@ -43,6 +44,11 @@ def main() -> None:
     live = "--live" in sys.argv
     mgr = OdbcWorkOrderManager()
     for t in TICKETS:
+        # Skip tickets that already carry a WO so a re-run never allocates a second one.
+        existing = search_issues_paged(f"key = {t['key']}", "customfield_12089")[0]["fields"]["customfield_12089"]
+        if existing:
+            print(json.dumps({"key": t["key"], "skipped": f"already has WO {existing}"}), flush=True)
+            continue
         billable = get_ticket_billable_account(t["key"])
         if not billable:
             print(json.dumps({"key": t["key"], "error": "no billable account on ticket"}), flush=True)
