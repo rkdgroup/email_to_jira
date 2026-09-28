@@ -46,7 +46,7 @@ python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 
 **Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
 protect you if you run them. Twelve regression files, each a standalone runner that prints
-`PASS` lines and `ALL PASSED` (also collectible by pytest). All eleven are hermetic: no
+`PASS` lines and `ALL PASSED` (also collectible by pytest). All twelve are hermetic: no
 Jira, no DB, no PDFs, no network — the QC tests never call the API.
 
 ```bash
@@ -69,7 +69,7 @@ Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap
 `parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
 `parse_pipeline._dup_check_key`, `parse_pipeline._create_and_link_work_order`,
 `qty_approval_scanner.py`, or `WO#/work_order.py`.
-Verified all eleven pass 2026-09-28. Everything else is tested manually via `--dry-run --verbose` against real
+Verified all twelve pass 2026-09-28. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
 in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
