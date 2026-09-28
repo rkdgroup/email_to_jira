@@ -73,6 +73,8 @@ import argparse
 import traceback
 from pathlib import Path
 
+import usage_log
+
 _ROOT = Path(__file__).parent
 sys.path.insert(0, str(_ROOT))
 
@@ -507,7 +509,7 @@ def _finding_props(with_fix: bool) -> dict:
             "type": "string",
             "description": "Machine key of the ticket field to correct, or \"\" when this "
                            "finding is not a simple field correction. Must be one of: "
-                           + ", ".join(sorted(_FIXABLE)),
+                           + ", ".join(sorted(_FIXABLE) + [_MOVE_FIELD]),
         }
         props["fix_value"] = {
             "type": "string",
@@ -570,6 +572,12 @@ def _schema(with_fix: bool) -> dict:
 #
 from tools_jira import (AVAILABILITY_RULE_OPTIONS, FILE_FORMAT_OPTIONS,
                         SHIPPING_METHOD_OPTIONS)
+
+# The ONE permitted edit to the Description / Omission Description. Not in _FIXABLE:
+# that map is set-a-field-to-a-value shaped, and this is a MOVE whose value comes
+# from the ticket's own Description, not from the order. adf_move does the surgery
+# and refuses anything ambiguous. See adf_move.plan_move.
+_MOVE_FIELD = "omission_move"
 
 _FIXABLE = {
     "summary":               ("summary",           "text"),
@@ -845,6 +853,16 @@ Never propose a fix for client_db, seed_db, billable_account, the Description or
 Omission Description. Those are resolved from configuration or built by the pipeline, not
 read off the order. Report them; do not try to correct them.
 
+ONE EXCEPTION, and only this one: when an omission/suppression instruction has been left in
+the Description that belongs in the Omission Description, set "fix_field" to "omission_move"
+and "fix_value" to THAT ONE LINE, quoted as the Description stores it -- not paraphrased,
+not re-cased, not merged with a neighbouring line, and WITHOUT any bullet or list marker
+("* STATE OMIT" renders as a bullet; the line itself is "STATE OMIT"). It is moved
+verbatim: removed from the Description and appended to the Omission Description. Propose it
+only for a line that is wholly an omission instruction. If two lines are misfiled, propose
+the one, most clearly misfiled line and report the rest -- one move is applied per pass. Any
+other Description or Omission edit stays forbidden.
+
 WHAT TO CHECK
 
 1. IDENTITY
@@ -936,6 +954,13 @@ WHAT TO CHECK
    - A Description containing ONLY the profile blocks, with no order-specific select line
      above them, means the ticket lost its criteria. WRONG.
    - A missing "FLAG OMITS:" line is a NOTE.
+   - A FLAG OMITS code SATISFIES the requirement it encodes; the wording does not have to
+     appear a second time in prose. The codes mean: $ = DMA Pander Match, R = Do Not Mail,
+     D = Deceased, T = Do Not Rent, A = 6X Mailing Per Year, 5 = Once a Year. So an order
+     saying "Please omit DMA Panders" is CARRIED when the FLAG OMITS line contains $, and
+     raising it as a dropped requirement is WRONG-in-reverse: check the flags before you
+     call an omit missing. S05/D's DSLF-1278 was refused that way while its order (SELNO
+     870) did carry the $ flag, which is exactly how this shop omits panders.
    - The order stating a dollar select while the Description carries no "Dollar Cap:" line
      is a NOTE: the cap is what tells a reader and the fulfilment check that "$10+" is
      bounded. Not fixable from the order — the cap comes from the client profile.
@@ -1300,14 +1325,21 @@ def _review(pdf_path: str, system: str, schema: dict, user_text: str,
                      "cache_control": {"type": "ephemeral"}}],
             messages=[{
                 "role": "user",
+                # Shared prefix, varying suffix: auto_runner._run_precheck sends
+                # this same PDF twice in two subprocesses seconds apart (the
+                # re-check after a --fix), with only user_text differing. Pays
+                # once more than ~28% of prechecks re-check -- read cache_read
+                # against cache_write in logs/api_usage.jsonl to confirm it does.
                 "content": [
                     {"type": "document",
                      "source": {"type": "base64", "media_type": "application/pdf",
-                                "data": base64.standard_b64encode(data).decode("ascii")}},
+                                "data": base64.standard_b64encode(data).decode("ascii")},
+                     "cache_control": {"type": "ephemeral"}},
                     {"type": "text", "text": user_text},
                 ],
             }],
         )
+        usage_log.record(f"qc_checker.{check}", resp, Path(pdf_path).name)
         if resp.stop_reason == "refusal":
             return _unverified("the model refused this PDF", check)
         text = next((b.text for b in resp.content if b.type == "text"), "")
@@ -1504,6 +1536,19 @@ def apply_fixes(ticket_key: str, findings: list, ticket_fields: dict,
             continue
         if str(f.get("severity", "")).upper() == "NOTE":
             refused.append(f"{field}: NOTE-level finding, not auto-applied")
+            continue
+        if field == _MOVE_FIELD:
+            import adf_move
+            plan = adf_move.plan_move(ticket_fields.get("description_adf"),
+                                      ticket_fields.get("omission_adf"), value)
+            if not plan.ok:
+                refused.append(f"{field}: {plan.reason}")
+            elif "description" in payload:
+                refused.append(f"{field}: a second move in one pass, ignored")
+            else:
+                payload["description"] = plan.description
+                payload["customfield_12270"] = plan.omission
+                applied.append(f"{field}: {plan.reason}")
             continue
         fid, jval, reason = _validate_fix(field, value, ticket_fields)
         if reason:
@@ -1719,6 +1764,7 @@ def check_ticket(ticket_key: str, post: bool = False, fix: bool = False,
                  do_order: bool = True, do_select: bool = True,
                  model: str = None, effort: str = None, dry_run: bool = False) -> dict:
     """Run both checks on one ticket, optionally fix and comment. Never raises."""
+    os.environ["DSLF_TICKET"] = ticket_key      # tags this ticket's usage_log rows; tickets run one at a time
     import tempfile, shutil
     from tools_jira import (get_ticket_qc_fields, download_attachment,
                             add_comment_to_ticket)
@@ -1856,11 +1902,41 @@ def _updated_after_qc(ticket_updated: str, qc_created: str) -> bool:
     return False
 
 
+_SERVICE_ACCOUNT_ID: str | None = None
+
+
+def _service_account_id() -> str:
+    """The accountId we authenticate as, cached. Raises if it cannot be resolved.
+
+    Raising is deliberate: `scan` must return NO tickets rather than every ticket
+    when ownership cannot be established, because the caller transitions whatever
+    comes back."""
+    global _SERVICE_ACCOUNT_ID
+    if _SERVICE_ACCOUNT_ID is None:
+        import requests
+        from tools_jira import _auth, _get_jira_base_url
+        resp = requests.get(f"{_get_jira_base_url()}/rest/api/3/myself",
+                            auth=_auth(), headers={"Accept": "application/json"},
+                            timeout=15)
+        resp.raise_for_status()
+        account_id = (resp.json() or {}).get("accountId")
+        if not account_id:
+            raise RuntimeError("/myself returned no accountId")
+        _SERVICE_ACCOUNT_ID = str(account_id)
+    return _SERVICE_ACCOUNT_ID
+
+
 def scan(status: str, **kw) -> list:
-    """Every ticket in `status`, skipping ones unchanged since their last QC comment."""
+    """Every ticket in `status` ASSIGNED TO US, skipping ones unchanged since
+    their last QC comment."""
     from tools_jira import search_issues_paged
 
-    jql = f'project = DSLF AND status = "{status}" ORDER BY created ASC'
+    # Scoped to the service account 2026-09-15. Unscoped, this returned every
+    # ticket in the status and qc_gate transitioned all of them -- its first live
+    # pass moved five tickets two people were actively working straight to
+    # STOREHOUSE. A ticket someone has assigned to themselves is theirs.
+    jql = (f'project = DSLF AND status = "{status}" '
+           f'AND assignee = "{_service_account_id()}" ORDER BY created ASC')
     log.info("Scanning: %s", jql)
     issues = search_issues_paged(jql, "summary,status,updated")
     log.info("Found %d ticket(s) in %r", len(issues), status)

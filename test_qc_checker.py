@@ -655,3 +655,63 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+# --- the one sanctioned Description -> Omission move ---------------------------
+#
+# DSLF-1274 stranded because its blocking finding named the Description, which
+# apply_fixes could not write. The surgery lives in adf_move; this is the wiring.
+
+def _adf(*texts):
+    return {"type": "doc", "version": 1,
+            "content": [{"type": "paragraph",
+                         "content": [{"type": "text", "text": t}]} for t in texts]}
+
+
+_MOVE_FIELDS = {"description_adf": _adf("3M $5+ W/GEO", "STATE OMIT"),
+                "omission_adf": _adf("STANDARD OMITS (F6)")}
+
+
+def _move(value="STATE OMIT", severity="WRONG"):
+    return [{"field": "Description", "severity": severity,
+             "fix_field": "omission_move", "fix_value": value}]
+
+
+def test_a_move_finding_rewrites_both_adf_fields_together():
+    r = qc.apply_fixes("DSLF-0", _move(), dict(_MOVE_FIELDS), dry_run=True)
+
+    assert r["ok"] and len(r["applied"]) == 1
+    assert "STATE OMIT" in r["applied"][0]
+    assert not r["refused"]
+
+
+def test_a_move_of_a_line_not_in_the_description_is_refused_not_written():
+    r = qc.apply_fixes("DSLF-0", _move("NCOA OMIT"), dict(_MOVE_FIELDS), dry_run=True)
+
+    assert r["applied"] == []
+    assert "not a line in the Description" in r["refused"][0]
+
+
+def test_a_note_level_move_is_still_never_auto_applied():
+    r = qc.apply_fixes("DSLF-0", _move(severity="NOTE"), dict(_MOVE_FIELDS), dry_run=True)
+
+    assert r["applied"] == [] and "NOTE-level" in r["refused"][0]
+
+
+def test_only_one_move_is_applied_per_pass():
+    findings = _move("STATE OMIT") + _move("3M $5+ W/GEO")
+
+    r = qc.apply_fixes("DSLF-0", findings, dict(_MOVE_FIELDS), dry_run=True)
+
+    assert len(r["applied"]) == 1
+    assert any("second move" in x for x in r["refused"])
+
+
+def test_the_move_key_is_offered_to_the_model():
+    """Absent from the schema enum, the model can never emit it."""
+    props = qc._finding_props(with_fix=True) if hasattr(qc, "_finding_props") else None
+    if props is None:
+        import json
+        assert "omission_move" in json.dumps(qc._schema(with_fix=True))
+    else:
+        assert "omission_move" in props["fix_field"]["description"]
