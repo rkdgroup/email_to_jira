@@ -45,7 +45,7 @@ python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 `--dry-run` and `--verbose` are the **only** two CLI flags for `parse_pipeline.py`. `broker_hint` is a function argument (used by the email scanner), not a flag.
 
 **Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
-protect you if you run them. Eleven regression files, each a standalone runner that prints
+protect you if you run them. Twelve regression files, each a standalone runner that prints
 `PASS` lines and `ALL PASSED` (also collectible by pytest). All eleven are hermetic: no
 Jira, no DB, no PDFs, no network — the QC tests never call the API.
 
@@ -60,13 +60,15 @@ python test_data_axle_ship_label.py  # Ship Label PO# forms, JOB exclusion, Key 
 python test_rmi_fields.py            # RMI MGT prefix stripped from Manager Order #
 python test_qty_subject_and_body.py  # qty-email subject codes + requestor in the body
 python test_duplicate_check.py       # dup key: PO, blank-PO fallback, AMLC
+python test_wo_failure_report.py     # WO failure/skip posted on the ticket, never fails the create
 python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
 ```
 
 Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap.py`,
 `parsers/adstra.py`, `parsers/data_axle.py`, `qc_checker.py`,
 `parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
-`parse_pipeline._dup_check_key`, `qty_approval_scanner.py`, or `WO#/work_order.py`.
+`parse_pipeline._dup_check_key`, `parse_pipeline._create_and_link_work_order`,
+`qty_approval_scanner.py`, or `WO#/work_order.py`.
 Verified all eleven pass 2026-09-28. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
@@ -241,7 +243,12 @@ On every **live** create, `_create_and_link_work_order()` imports `WO#/work_orde
   on one connection; it also reads the shop's `PEPBK#` counter as an allocation floor (read
   only — the ARWRKSCH trigger advances it) so it won't take a number order-entry reserved
   ahead of the committed MAX. `WO#/test_work_order_allocation.py` pins this loop.
-- **⚠ WO failures are silent by design, so the log line is the only evidence.** Since
+- **A WO failure or skip is posted as a comment on the ticket** (`_report_wo_failure`:
+  `WORK ORDER NOT CREATED`, the host that ran the pipeline, the traceback tail), since
+  2026-09-28. DSLF-1342..1346 failed with the Jenkins build history holding no log at all,
+  so the ticket is now the durable record. Posting it has its own `try/except` and cannot
+  fail the create.
+- **⚠ WO failures are otherwise silent by design.** Since
   2026-08-31 `_create_and_link_work_order` logs `%r` + `exc_info=True`; before that it
   logged bare `str(e)`, and a JPype-wrapped Java exception rendered as just
   `java.lang.ArrayIndexOutOfBoundsException: Index 0 out of bounds for length 0` with no

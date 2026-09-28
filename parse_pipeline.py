@@ -21,6 +21,8 @@ import re
 import sys
 import logging
 import argparse
+import platform
+import traceback
 import yaml
 from pathlib import Path
 from dotenv import load_dotenv
@@ -464,6 +466,8 @@ def _create_and_link_work_order(
     """
     if not billable_account:
         log.warning("No billable_account — skipping work order creation for %s", ticket_key)
+        if not dry_run:
+            _report_wo_failure(ticket_key, "No billable account on the order — WO step skipped.")
         return None
 
     wo_dir = str(Path(__file__).parent / "WO#")
@@ -515,7 +519,20 @@ def _create_and_link_work_order(
         # when DSLF-1139 through -1142 were created with no work order and the one-line
         # message could not distinguish a connect failure from a scan or an INSERT.
         log.warning("Work order creation failed for %s: %r", ticket_key, e, exc_info=True)
+        if not dry_run:
+            _report_wo_failure(ticket_key, traceback.format_exc()[-1500:])
         return None
+
+
+def _report_wo_failure(ticket_key: str, detail: str) -> None:
+    # The Jenkins log is not kept (DSLF-1342..1346 left no record), so the reason goes on the ticket.
+    try:
+        from tools_jira import add_comment_to_ticket
+        host = f"{platform.node()} ({sys.platform}) {Path(__file__).resolve().parent}"
+        add_comment_to_ticket(ticket_key, f"WORK ORDER NOT CREATED\nhost: {host}\n\n{detail}",
+                              code_block=True)
+    except Exception as exc:
+        log.warning("Could not post WO failure comment on %s: %r", ticket_key, exc)
 
 
 def _adf_para(text: str) -> dict:
