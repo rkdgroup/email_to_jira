@@ -1,6 +1,6 @@
-"""One-off via ODBC: create WOs for DSLF-1343..1345 and write WO# back to Jira.
+"""One-off via ODBC: create WOs for DSLF-1343..1346 and write WO# back to Jira.
 
-All three were created by the Jenkins pipeline on 2026-09-25 with the WO step failing
+All were created by the Jenkins pipeline (2026-09-25, 1346 on 09-28) with the WO step failing
 silently (as did DSLF-1342, backfilled by hand). Same allocator as
 the pipeline (WorkOrderManager.allocate_and_create: PEPBK# floor, cross-suffix
 verify + backout), but connected through the IBM i Access ODBC Driver because
@@ -27,6 +27,7 @@ TICKETS = [
     {"key": "DSLF-1343", "mailer": "Greater Chicago Food Depository", "manager_po": "73495", "mailer_po": "224085"},
     {"key": "DSLF-1344", "mailer": "SILENT CRY FOUNDATION", "manager_po": "J5328", "mailer_po": "133323"},
     {"key": "DSLF-1345", "mailer": "SILENT CRY FOUNDATION", "manager_po": "J5326", "mailer_po": "133349"},
+    {"key": "DSLF-1346", "mailer": "EVERCARE PROTECTION", "manager_po": "J5415", "mailer_po": "2361585"},
 ]
 
 
