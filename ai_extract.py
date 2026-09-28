@@ -26,6 +26,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+import usage_log
+
 _SCRIPT_DIR = Path(__file__).parent
 load_dotenv(_SCRIPT_DIR / ".env")
 
@@ -178,6 +180,8 @@ def extract_fields_from_pdf(pdf_path: str, model: str = DEFAULT_MODEL,
             ],
         }],
     )
+
+    usage_log.record("ai_extract", resp, p.name)
 
     if resp.stop_reason == "refusal":
         raise RuntimeError(f"Claude refused: {getattr(resp, 'stop_details', None)}")

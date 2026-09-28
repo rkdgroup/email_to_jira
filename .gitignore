@@ -32,3 +32,6 @@ ticket_scanner/scanner_state.json
 
 # Local IDE/tool settings
 .claude/
+
+# API usage ledger (usage_log.py)
+logs/
