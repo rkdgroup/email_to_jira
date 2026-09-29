@@ -45,8 +45,8 @@ python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 `--dry-run` and `--verbose` are the **only** two CLI flags for `parse_pipeline.py`. `broker_hint` is a function argument (used by the email scanner), not a flag.
 
 **Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
-protect you if you run them. Thirteen regression files, each a standalone runner that prints
-`PASS` lines and `ALL PASSED` (also collectible by pytest). All thirteen are hermetic: no
+protect you if you run them. Fourteen regression files, each a standalone runner that prints
+`PASS` lines and `ALL PASSED` (also collectible by pytest). All fourteen are hermetic: no
 Jira, no DB, no PDFs, no network — the QC tests never call the API.
 
 ```bash
@@ -61,6 +61,7 @@ python test_rmi_fields.py            # RMI MGT prefix stripped from Manager Orde
 python test_qty_subject_and_body.py  # qty-email subject codes + requestor in the body
 python test_duplicate_check.py       # dup key: PO, blank-PO fallback, AMLC
 python test_wo_failure_report.py     # WO failure/skip posted on the ticket, never fails the create
+python test_ncc_dnm_omit.py          # NCC do-not-mail line stripped for N11D only
 python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
 python "WO#/test_ibmi_credentials.py"        # blank env var cannot mask .env; empty password fails loudly
 ```
@@ -69,8 +70,9 @@ Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap
 `parsers/adstra.py`, `parsers/data_axle.py`, `qc_checker.py`,
 `parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
 `parse_pipeline._dup_check_key`, `parse_pipeline._create_and_link_work_order`,
-`qty_approval_scanner.py`, `WO#/work_order.py`, or `WO#/base.py`.
-Verified all thirteen pass 2026-09-29. Everything else is tested manually via `--dry-run --verbose` against real
+`parse_pipeline._strip_ncc_dnm`, `qty_approval_scanner.py`, `WO#/work_order.py`, or
+`WO#/base.py`.
+Verified all fourteen pass 2026-09-29. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
 in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
@@ -171,6 +173,15 @@ PDF → [tools_pdf] extract text (PyMuPDF primary; pdfminer fallback only if PyM
 Load-bearing behaviors that are easy to get wrong:
 
 - **Validation is advisory.** `validate_result()` errors only abort when `result.confidence == 0.0`. Rule-based parsers always return 0.92, so missing required fields (mailer_name, mailer_po, list_name, list_manager, requested_quantity) just log "proceeding" and a **partial ticket is still created**. Only a totally-unparsed PDF is blocked.
+- **The ADSTRA STANDARD OMITS block is hardcoded in the parser, and one of its lines is not
+  standard.** `parsers/adstra.py:141` prepends the same nine-line block to every ADSTRA
+  order, `NCC DNM FILE FOR LIST RENTAL (W/O 222222)` among them. **N11D does not suppress
+  against that file** and had it on 54 of its 55 tickets. `_NCC_DNM_EXCLUDED_DB_CODES`
+  (`parse_pipeline.py:87`, currently `{"N11D"}`) strips it after enrichment — the parser
+  runs before enrichment and so has no db_code to test. Only **41 of the 195** entries in
+  `client_profiles.yaml` record this suppression at all, so the exclusion set is
+  deliberately narrow rather than profile-driven: reading it off the profile would silently
+  drop the line for ~153 other clients. Pinned in `test_ncc_dnm_omit.py`.
 - **SKIP_DB_CODES** (`parse_pipeline.py:78`, currently `{"A63D"}`): orders resolving to these db_codes are extracted/validated but create **no ticket** — returns `{"success": True, "skipped": True}`, in both live and dry-run. (Separate `_ADSTRA_SWEEPS_EXCLUDED = {"A63D","N11D"}` only controls whether the ADSTRA sweeps profile is attached.)
 - **Multi-page PDFs**: every broker **except ADSTRA** splits into one ticket per page, and `process_pdf` then returns a **list** of per-page result dicts. ADSTRA multi-page is merged into one order. Callers must handle the list case.
 - **Duplicate check** (live only, `_dup_check_key`): JQL on `cf[12193]` Mailer PO, falling back to `cf[12192]` Manager Order # when the order carries no PO — **except AMLC**, which keys on Manager Order # outright because its columnar layout puts someone else's number in the PO field. Skipped only in dry-run or when neither key is populated. The fallback exists because a blank PO used to skip the check entirely: DSLF-1211 duplicated DSLF-1209 on DM092, a follow-up email with no broker order number on it.

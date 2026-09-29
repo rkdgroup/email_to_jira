@@ -79,6 +79,21 @@ _PROFILE_MAP       = _load_profile_map()
 # ticket is created. Add codes here to skip more databases going forward.
 SKIP_DB_CODES = {"A63D"}
 
+# The ADSTRA parser prepends a fixed STANDARD OMITS block to every ADSTRA order, and one
+# of its lines is client-specific rather than standard: the NCC do-not-mail file. N11D does
+# not suppress against it (Suvam, 2026-09-29) — its client profile lists four standard
+# suppressions and this is not one of them. Only 41 of the 195 profiles record it at all,
+# so this set is the narrow correction the instruction covers, not the whole population;
+# widening it to "whatever the profile lists" would silently change ~153 other clients.
+_NCC_DNM_LINE = "NCC DNM FILE FOR LIST RENTAL (W/O 222222)"
+_NCC_DNM_EXCLUDED_DB_CODES = {"N11D"}
+
+
+def _strip_ncc_dnm(omission: str) -> str:
+    """Drop the NCC do-not-mail suppression line, leaving the rest of the block intact."""
+    kept = [ln for ln in omission.splitlines() if ln.strip() != _NCC_DNM_LINE]
+    return "\n".join(kept)
+
 
 def _find_supplementary_files(pdf_path: str, order_number: str) -> list[Path]:
     """
@@ -349,6 +364,13 @@ def finalize_and_create(result, pdf_path: str, text: str,
         kwargs["list_manager"] = enriched["list_manager"]
     if db_code_resolved:
         kwargs["db_code"] = db_code_resolved
+
+    # Databases that do not suppress against the NCC do-not-mail file. Applied here rather
+    # than in parsers/adstra.py because the parser runs before enrichment and so has no
+    # db_code to test.
+    if (db_code_resolved.upper() in _NCC_DNM_EXCLUDED_DB_CODES
+            and kwargs.get("omission_description")):
+        kwargs["omission_description"] = _strip_ncc_dnm(kwargs["omission_description"])
 
     # FLAGS → omission_description (profile-driven, all brokers)
     profile_flags = profile_data.get("flags", "")
