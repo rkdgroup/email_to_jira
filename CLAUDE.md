@@ -45,8 +45,8 @@ python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 `--dry-run` and `--verbose` are the **only** two CLI flags for `parse_pipeline.py`. `broker_hint` is a function argument (used by the email scanner), not a flag.
 
 **Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
-protect you if you run them. Twelve regression files, each a standalone runner that prints
-`PASS` lines and `ALL PASSED` (also collectible by pytest). All twelve are hermetic: no
+protect you if you run them. Thirteen regression files, each a standalone runner that prints
+`PASS` lines and `ALL PASSED` (also collectible by pytest). All thirteen are hermetic: no
 Jira, no DB, no PDFs, no network — the QC tests never call the API.
 
 ```bash
@@ -62,14 +62,15 @@ python test_qty_subject_and_body.py  # qty-email subject codes + requestor in th
 python test_duplicate_check.py       # dup key: PO, blank-PO fallback, AMLC
 python test_wo_failure_report.py     # WO failure/skip posted on the ticket, never fails the create
 python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
+python "WO#/test_ibmi_credentials.py"        # blank env var cannot mask .env; empty password fails loudly
 ```
 
 Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap.py`,
 `parsers/adstra.py`, `parsers/data_axle.py`, `qc_checker.py`,
 `parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
 `parse_pipeline._dup_check_key`, `parse_pipeline._create_and_link_work_order`,
-`qty_approval_scanner.py`, or `WO#/work_order.py`.
-Verified all twelve pass 2026-09-28. Everything else is tested manually via `--dry-run --verbose` against real
+`qty_approval_scanner.py`, `WO#/work_order.py`, or `WO#/base.py`.
+Verified all thirteen pass 2026-09-29. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
 in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
@@ -253,16 +254,18 @@ On every **live** create, `_create_and_link_work_order()` imports `WO#/work_orde
   logged bare `str(e)`, and a JPype-wrapped Java exception rendered as just
   `java.lang.ArrayIndexOutOfBoundsException: Index 0 out of bounds for length 0` with no
   clue whether it came from the connect, the scan or the INSERT.
-- **Open incident: DSLF-1139 through -1142 have no Work Order** (created 2026-08-31).
-  DSLF-1138 / WO 466554 is the last successful allocation. Ruled out by evidence: it is not
-  the billable account (S15 both worked and failed), not number-space exhaustion
-  (`_WO_MAX = 500_000`, at 466554), and not the INSERT parameter count (8 markers, 8
-  values). The exception is thrown inside the **jt400 Java driver**, not Python. Prime
-  suspect is the environment rather than the code, because **`requirements.txt` has no
-  version pins** and the Jenkins job does `rm -rf` + fresh clone + fresh venv +
-  `pip3 install -r requirements.txt` on **every 5-minute tick** — so `JPype1`,
-  `jaydebeapi` and the rest can change under a scheduled run with no commit. Cannot be
-  reproduced locally: JPype is blocked on the dev machine by Application Control policy.
+- **`ArrayIndexOutOfBoundsException: Index 0 out of bounds for length 0` on connect means a
+  BLANK PASSWORD.** JTOpen's `AS400JDBCDriver.initializeAS400` reads the password's first
+  character (reproduced locally 2026-09-29 by blanking `IBMI_PASSWORD`). It cost
+  DSLF-1139..1142 (2026-08-31) and DSLF-1342..1347 (2026-09-25..28) their work orders, while
+  the `.env` uploaded to Jenkins held a valid password: every loader calls
+  `load_dotenv(override=False)`, so an `IBMI_PASSWORD` already present and blank in the
+  Jenkins process environment masked it. `base._setting` now skips a blank env var and reads
+  the `.env` files directly, and `get_connection` refuses an empty host/user/password with a
+  secrets-free diagnosis (which var, which `.env` holds one, jt400 path) that
+  `_report_wo_failure` posts on the ticket. Pinned in `WO#/test_ibmi_credentials.py`. The
+  earlier "unpinned requirements" theory was wrong: JPype1/jaydebeapi had no release in
+  either window.
 - **`jt400.jar` is auto-discovered, not configured** (`WO#/base.py:_resolve_jt400`): `IBMI_JT400_JAR`
   first, then `/opt/jt400/jt400.jar`, the Jenkins workspace
   `/var/lib/jenkins/workspace/DSLF-Email-Scanner/jt400.jar`, the project root, and finally a

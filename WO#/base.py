@@ -7,7 +7,7 @@ import os
 import sys
 import logging
 from pathlib import Path
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 import jpype
 import jaydebeapi
 
@@ -16,9 +16,30 @@ load_dotenv(Path(__file__).parent.parent / ".env", override=False)
 
 log = logging.getLogger(__name__)
 
-_HOST     = os.environ.get("IBMI_HOST",     "SYSTEM5.DATA-MANAGEMENT.COM")
-_USER     = os.environ.get("IBMI_USER",     "DMISUVAM")
-_PASSWORD = os.environ.get("IBMI_PASSWORD", "")
+_ENV_FILES = [
+    Path(__file__).parent / ".env",
+    Path(__file__).parent.parent / ".env",
+    Path(__file__).parent.parent / "email_scanner" / ".env",
+]
+
+
+def _setting(key: str, default: str = "") -> str:
+    """Env var, else the first .env holding a non-blank value, else default.
+
+    load_dotenv never overrides, so a blank IBMI_PASSWORD already in the Jenkins
+    environment masked the valid one in .env (DSLF-1342..1347, and 1139..1142).
+    """
+    if os.environ.get(key):
+        return os.environ[key]
+    for f in _ENV_FILES:
+        if f.exists() and dotenv_values(f).get(key):
+            return dotenv_values(f)[key]
+    return default
+
+
+_HOST     = _setting("IBMI_HOST", "SYSTEM5.DATA-MANAGEMENT.COM")
+_USER     = _setting("IBMI_USER", "DMISUVAM")
+_PASSWORD = _setting("IBMI_PASSWORD")
 _JT400_WINDOWS = (
     r"D:\Users\Public\Downloads\RDi_9.8_core_MP_ML\windows\IBM Rational Developer for i"
     r"\plugins\com.ibm.etools.iseries.toolbox_9.8.0.202304121327\runtime\jt400.jar"
@@ -56,7 +77,27 @@ def _ensure_jvm() -> None:
     jpype.startJVM(jpype.getDefaultJVMPath(), *jvm_args)
 
 
+def _credential_problem() -> str | None:
+    """Plain-language reason the credentials are unusable, never including a secret."""
+    empty = [k for k, v in (("IBMI_HOST", _HOST), ("IBMI_USER", _USER),
+                            ("IBMI_PASSWORD", _PASSWORD)) if not v]
+    if not empty:
+        return None
+    raw = os.environ.get("IBMI_PASSWORD")
+    env_state = "unset" if raw is None else ("blank" if raw == "" else "set")
+    files = "; ".join(
+        f"{f} exists={f.exists()} password="
+        f"{'set' if f.exists() and dotenv_values(f).get('IBMI_PASSWORD') else 'blank'}"
+        for f in _ENV_FILES
+    )
+    return (f"{', '.join(empty)} empty - jt400 would fail with ArrayIndexOutOfBoundsException. "
+            f"process env IBMI_PASSWORD={env_state}; .env files: {files}; jt400={_JT400}")
+
+
 def get_connection():
+    problem = _credential_problem()
+    if problem:
+        raise RuntimeError(problem)
     if not Path(_JT400).exists():
         raise FileNotFoundError(
             f"jt400.jar not found at: {_JT400}\n"
