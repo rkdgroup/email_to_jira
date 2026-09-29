@@ -23,23 +23,25 @@ _ENV_FILES = [
 ]
 
 
-def _setting(key: str, default: str = "") -> str:
-    """Env var, else the first .env holding a non-blank value, else default.
+def _credentials() -> tuple[str, str, str, str]:
+    """(host, user, password, source), all three values from ONE source.
 
-    load_dotenv never overrides, so a blank IBMI_PASSWORD already in the Jenkins
-    environment masked the valid one in .env (DSLF-1342..1347, and 1139..1142).
+    load_dotenv never overrides, so a blank IBMI_PASSWORD already in the environment
+    would mask the valid one in .env (DSLF-1342..1347, 1139..1142). Taking user and
+    password together keeps a stale env user from pairing with the file's password.
     """
-    if os.environ.get(key):
-        return os.environ[key]
-    for f in _ENV_FILES:
-        if f.exists() and dotenv_values(f).get(key):
-            return dotenv_values(f)[key]
-    return default
+    if os.environ.get("IBMI_PASSWORD"):
+        source, values = "env", os.environ
+    else:
+        f = next((f for f in _ENV_FILES if f.exists() and dotenv_values(f).get("IBMI_PASSWORD")), None)
+        source, values = (str(f), dotenv_values(f)) if f else ("none", {})
+    return (values.get("IBMI_HOST") or "SYSTEM5.DATA-MANAGEMENT.COM",
+            values.get("IBMI_USER") or "DMISUVAM",
+            values.get("IBMI_PASSWORD") or "",
+            source)
 
 
-_HOST     = _setting("IBMI_HOST", "SYSTEM5.DATA-MANAGEMENT.COM")
-_USER     = _setting("IBMI_USER", "DMISUVAM")
-_PASSWORD = _setting("IBMI_PASSWORD")
+_HOST, _USER, _PASSWORD, _CRED_SOURCE = _credentials()
 _JT400_WINDOWS = (
     r"D:\Users\Public\Downloads\RDi_9.8_core_MP_ML\windows\IBM Rational Developer for i"
     r"\plugins\com.ibm.etools.iseries.toolbox_9.8.0.202304121327\runtime\jt400.jar"
@@ -91,7 +93,8 @@ def _credential_problem() -> str | None:
         for f in _ENV_FILES
     )
     return (f"{', '.join(empty)} empty - jt400 would fail with ArrayIndexOutOfBoundsException. "
-            f"process env IBMI_PASSWORD={env_state}; .env files: {files}; jt400={_JT400}")
+            f"source={_CRED_SOURCE}; process env IBMI_PASSWORD={env_state}; "
+            f".env files: {files}; jt400={_JT400}")
 
 
 def get_connection():

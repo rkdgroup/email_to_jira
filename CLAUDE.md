@@ -258,11 +258,14 @@ On every **live** create, `_create_and_link_work_order()` imports `WO#/work_orde
   BLANK PASSWORD.** JTOpen's `AS400JDBCDriver.initializeAS400` reads the password's first
   character (reproduced locally 2026-09-29 by blanking `IBMI_PASSWORD`). It cost
   DSLF-1139..1142 (2026-08-31) and DSLF-1342..1347 (2026-09-25..28) their work orders, while
-  the `.env` uploaded to Jenkins held a valid password: every loader calls
-  `load_dotenv(override=False)`, so an `IBMI_PASSWORD` already present and blank in the
-  Jenkins process environment masked it. `base._setting` now skips a blank env var and reads
-  the `.env` files directly, and `get_connection` refuses an empty host/user/password with a
-  secrets-free diagnosis (which var, which `.env` holds one, jt400 path) that
+  the `.env` uploaded to Jenkins held a valid password. **Confirmed:** jt400 got a blank password.
+  **Not confirmed:** why. Likeliest is a blank `IBMI_PASSWORD` already in the Jenkins process
+  environment, which `load_dotenv(override=False)` keeps over the file. `base._credentials`
+  now takes host, user and password as ONE set - from the env when it holds a non-blank
+  password, else from the first `.env` that does - so a stale env user never pairs with the
+  file's password (that would be a real invalid sign-on). `get_connection` refuses an empty
+  host/user/password with a secrets-free diagnosis (which var, the source, which `.env`
+  holds one, jt400 path) that
   `_report_wo_failure` posts on the ticket. Pinned in `WO#/test_ibmi_credentials.py`. The
   earlier "unpinned requirements" theory was wrong: JPype1/jaydebeapi had no release in
   either window.
