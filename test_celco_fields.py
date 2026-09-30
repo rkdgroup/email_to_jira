@@ -180,6 +180,15 @@ def test_send_file_to_a_mailbox_is_not_an_upload_link():
     check("no UPLOAD TO for a mailbox", r.shipping_instructions, "CC: sara@celcononprofit.com")
 
 
+def test_file_destination_beats_the_notification_on_one_line():
+    """Greedy "send.*to" took the LAST "TO" on the line - the shipment-notification mailbox.
+    D04-086791 had this, masked only by the in-house rule rewriting data-management.com."""
+    one_line = _EMAIL_TAIL.replace(
+        "tlibrarian@data-management.com AND SEND SHIPMENT\nNOTIFICATION TO apiper@data-management.com",
+        "data@mailshop.com AND SEND SHIPMENT NOTIFICATION TO rep@broker.com")
+    check("destination, not the notification", _parse(one_line).ship_to_email, "data@mailshop.com")
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),

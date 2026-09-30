@@ -249,7 +249,8 @@ class CelcoParser(BaseBrokerParser):
 
         # Also check for "send shipping confirmation to" or "send Data via SFTP"
         confirm_match = re.search(
-            r"(?:confirmation\s+to|send.*to)[:\s]+([\w.+-]+@[\w.-]+\.\w+)",
+            # Lazy: "SEND FILE TO: X AND SEND SHIPMENT NOTIFICATION TO Y" is X, not Y.
+            r"(?:confirmation\s+to|send.*?\bto)[:\s]+([\w.+-]+@[\w.-]+\.\w+)",
             text, re.IGNORECASE
         )
         if confirm_match and not ship_to_email:
