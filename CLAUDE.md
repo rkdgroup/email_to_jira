@@ -160,7 +160,7 @@ pip install anthropic requests pymupdf pdfminer.six pymupdf4llm python-dotenv ms
 | `IBMI_HOST`, `IBMI_USER`, `IBMI_PASSWORD` | work-order creation |
 | `ANTHROPIC_API_KEY` | `tools_polish` (live pipeline) + `qc_checker` (QC) + `LLM_writes` + offline AI tools |
 
-The `JIRA_API_TOKEN` in `.env` **can create and edit tickets** — `tools_jira` uses it to create issues (POST), update fields (`update_ticket_fields`, PUT → 204), comment, and attach. (Verified 2026-07-27: created DSLF-919, updated DSLF-936.) The Atlassian MCP connector is an optional alternative for interactive edits under the user's own account, not a requirement.
+The `JIRA_API_TOKEN` in `.env` **can create and edit tickets** — `tools_jira` uses it to create issues (POST), update fields (`update_ticket_fields`, PUT → 204), comment, and attach. (Verified 2026-07-27: created DSLF-919, updated DSLF-936.) **The local `.env` token is not the Jenkins one and they can diverge:** on 2026-09-30 the local token returned 401 while Jenkins kept creating tickets. Test with `GET /rest/api/3/myself` before a live script that writes Jira. The Atlassian MCP connector authenticates as the same **Jira Service Account** (accountId `712020:73a21996-…`) and is the working fallback for reads and field writes when the local token fails.
 
 ## Architecture
 
@@ -281,6 +281,12 @@ On every **live** create, `_create_and_link_work_order()` imports `WO#/work_orde
   2026-09-28. DSLF-1342..1346 failed with the Jenkins build history holding no log at all,
   so the ticket is now the durable record. Posting it has its own `try/except` and cannot
   fail the create.
+- **A missing WO stalls the ticket downstream, on a clock.** LRF_Processing's auto-run
+  comments `Auto-run: NOT RUN — waiting for Work Order #` and re-checks every 15 min for up to
+  24 h, then moves the ticket to **STUCK**. So a WO outage needs backfilling within the day.
+  Whether a ticket already in STUCK resumes on its own once the WO is filled is **not
+  verified**. STUCK has other causes too (DSLF-1346: a run that returned 0 records), so read
+  the ticket's last `Auto-run:` comment before blaming the WO.
 - **⚠ WO failures are otherwise silent by design.** Since
   2026-08-31 `_create_and_link_work_order` logs `%r` + `exc_info=True`; before that it
   logged bare `str(e)`, and a JPype-wrapped Java exception rendered as just
@@ -319,7 +325,22 @@ On every **live** create, `_create_and_link_work_order()` imports `WO#/work_orde
 - The second `WO#/requirements.txt` is **gone** — Jenkins only ever installed the root file,
   so its three floors (`jaydebeapi>=1.2.3`, `JPype1>=1.4.0`, `python-dotenv>=1.0.0`) were
   invisible to the scheduled run. Folded into root instead of kept in sync by hand. They are
-  floors, not pins: the rest of the file is still unpinned, which is the open suspect below.
+  floors, not pins: the rest of the file is still unpinned.
+- **Backfilling missed WOs** uses a one-off `WO#/_backfill_<range>.py`; the latest is
+  `_backfill_1348_1364.py`. Each subclasses `WorkOrderManager` with a pyodbc `_connect`
+  (IBM i Access ODBC Driver), because JPype is blocked on the dev box. It keeps the pipeline's
+  allocator and INSERT unchanged, and it is a dry run unless given `--live`. Things that bite:
+  - **Check ARWRKSCH for rows staff keyed by hand first**, matching every order value against
+    **both** `"WXCOD#"` and `WMAILR`. Staff put the broker PO in `"WXCOD#"` under a non-blank
+    suffix, which is where the pipeline puts the manager order.
+  - **Prove the check query can find something before trusting a zero.** Validate it against a
+    *recent* pipeline WO, since older ones get deleted from ARWRKSCH after production uses
+    them (DSLF-1347's 467909 was gone within a day).
+  - `"WXCOD#"` is CHAR(9). A bound parameter longer than that, such as the 10-char PO
+    `D01-122992`, fails the whole query with ODBC `22001` right truncation. Inline vetted
+    literals instead.
+  - Write the ticket-to-WO mapping to disk the moment each INSERT returns, before touching
+    Jira, so a failed Jira write can never leave an orphan WO. Then read both sides back.
 
 ## Prose Polish (`tools_polish.py`) — the live LLM step
 
