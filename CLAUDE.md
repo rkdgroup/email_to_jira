@@ -11,9 +11,20 @@ DSLF List Rental Pipeline — processes purchase order PDFs from brokers, extrac
 ## LLM Model Policy
 
 **One pin for every Claude touchpoint: `claude-opus-5` at `medium` effort.** Set in
-`tools_polish.py:39`, `qc_checker.py:87-88`, `LLM_writes.py:69-70`, `ai_extract.py:37` (+ its
-`extract_fields_from_pdf(effort=)` default), `compare_extraction.py:275`,
-`hybrid_create.py:39/56/106`. Change them together or they drift apart again.
+`tools_polish.POLISH_MODEL`, `qc_checker.QC_MODEL`/`QC_EFFORT`,
+`LLM_writes.DEFAULT_MODEL`/`DEFAULT_EFFORT`, `ai_extract.DEFAULT_MODEL` (+ its
+`extract_fields_from_pdf(effort=)` default), and the `--model` / keyword defaults in
+`compare_extraction.py` and `hybrid_create.py` (grep `claude-opus-5`). Change them together or
+they drift apart again. A new model also needs a rate in **both** price tables —
+`qc_checker._RATES_PER_MTOK` (the QC comment footer) and `usage_log._RATES` (the usage log);
+a model missing from either prices at 0.
+
+**Every Claude call except `tools_polish` writes one row to `logs/api_usage.jsonl`**
+(gitignored) through `usage_log.record()` — `qc_checker` directly, `LLM_writes` /
+`compare_extraction` / `hybrid_create` via `ai_extract`. `qc_checker.check_ticket` sets
+`DSLF_TICKET` so rows carry the ticket key. `usage_log.py` is a deliberate **copy** of
+`LRF_Processing/order-processor/usage_log.py`, not an import: keep the row shape identical so
+one reader totals both repos. The live polish call is not logged.
 
 `tools_polish` sends the effort parameter only when the model is not Haiku — Haiku 4.5
 predates it and errors if it is sent. That guard stays for callers passing a model; it is not
@@ -45,11 +56,22 @@ python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 `--dry-run` and `--verbose` are the **only** two CLI flags for `parse_pipeline.py`. `broker_hint` is a function argument (used by the email scanner), not a flag.
 
 **Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
-protect you if you run them. Fourteen regression files, each a standalone runner that prints
-`PASS` lines and `ALL PASSED` (also collectible by pytest). All fourteen are hermetic: no
-Jira, no DB, no PDFs, no network — the QC tests never call the API.
+protect you if you run them. Sixteen regression files, all hermetic: no Jira, no DB, no PDFs,
+no network — the QC tests never call the API. **Run the whole suite with pytest** (212 tests,
+~5s; no `pytest.ini`/`conftest.py` needed):
 
 ```bash
+python -m pytest -q test_*.py "WO#/"              # everything
+python -m pytest -q test_kap_fields.py -k below   # one file / one test
+```
+
+Fourteen files are also standalone runners that print `PASS` lines and `ALL PASSED`.
+**`test_adf_move.py` and `test_usage_log.py` are pytest-only** — they have no `__main__`, so
+`python test_adf_move.py` exits 0 having run nothing. Use pytest for those two.
+
+```bash
+python -m pytest -q test_adf_move.py  # omission_move: one misfiled line Description -> Omission
+python -m pytest -q test_usage_log.py # usage-log row shape + pricing, parity with LRF_Processing
 python test_ship_to_rules.py         # ship-to house rules + KAP FTP-boilerplate false positive
 python test_kap_fields.py            # KAP exchange qty, spaced order #, $-select, BELOW ref
 python test_adstra_list_code.py      # ADSTRA 5-digit list code vs address digits
@@ -70,9 +92,9 @@ Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap
 `parsers/adstra.py`, `parsers/data_axle.py`, `qc_checker.py`,
 `parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
 `parse_pipeline._dup_check_key`, `parse_pipeline._create_and_link_work_order`,
-`parse_pipeline._strip_ncc_dnm`, `qty_approval_scanner.py`, `WO#/work_order.py`, or
-`WO#/base.py`.
-Verified all fourteen pass 2026-09-29. Everything else is tested manually via `--dry-run --verbose` against real
+`parse_pipeline._strip_ncc_dnm`, `qty_approval_scanner.py`, `WO#/work_order.py`,
+`WO#/base.py`, `adf_move.py`, or `usage_log.py`. Verified all sixteen pass (212 tests)
+2026-09-30. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
 in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
@@ -89,7 +111,7 @@ and fail on the agent.
 **`README.md` is a lighter duplicate of this file.** Its Quick Start now installs from
 `requirements.txt` rather than a hand-listed set, so that drift cannot recur, but its
 project tree still omits `tools_polish.py`, `tools_zip_omit.py`, `LLM_writes.py`, the
-offline AI tools, the `WO#/` step and the eleven test files. Treat CLAUDE.md as authoritative
+offline AI tools, `adf_move.py`, `usage_log.py`, the `WO#/` step and the sixteen test files. Treat CLAUDE.md as authoritative
 and update README only when a change is user-facing.
 
 ```bash
@@ -177,12 +199,12 @@ Load-bearing behaviors that are easy to get wrong:
   standard.** `parsers/adstra.py:141` prepends the same nine-line block to every ADSTRA
   order, `NCC DNM FILE FOR LIST RENTAL (W/O 222222)` among them. **N11D does not suppress
   against that file** and had it on 54 of its 55 tickets. `_NCC_DNM_EXCLUDED_DB_CODES`
-  (`parse_pipeline.py:87`, currently `{"N11D"}`) strips it after enrichment — the parser
+  (`parse_pipeline`, currently `{"N11D"}`) strips it after enrichment — the parser
   runs before enrichment and so has no db_code to test. Only **41 of the 195** entries in
   `client_profiles.yaml` record this suppression at all, so the exclusion set is
   deliberately narrow rather than profile-driven: reading it off the profile would silently
   drop the line for ~153 other clients. Pinned in `test_ncc_dnm_omit.py`.
-- **SKIP_DB_CODES** (`parse_pipeline.py:78`, currently `{"A63D"}`): orders resolving to these db_codes are extracted/validated but create **no ticket** — returns `{"success": True, "skipped": True}`, in both live and dry-run. (Separate `_ADSTRA_SWEEPS_EXCLUDED = {"A63D","N11D"}` only controls whether the ADSTRA sweeps profile is attached.)
+- **SKIP_DB_CODES** (`parse_pipeline.SKIP_DB_CODES`, currently `{"A63D"}`): orders resolving to these db_codes are extracted/validated but create **no ticket** — returns `{"success": True, "skipped": True}`, in both live and dry-run. (Separate `_ADSTRA_SWEEPS_EXCLUDED = {"A63D","N11D"}` only controls whether the ADSTRA sweeps profile is attached.)
 - **Multi-page PDFs**: every broker **except ADSTRA** splits into one ticket per page, and `process_pdf` then returns a **list** of per-page result dicts. ADSTRA multi-page is merged into one order. Callers must handle the list case.
 - **Duplicate check** (live only, `_dup_check_key`): JQL on `cf[12193]` Mailer PO, falling back to `cf[12192]` Manager Order # when the order carries no PO — **except AMLC**, which keys on Manager Order # outright because its columnar layout puts someone else's number in the PO field. Skipped only in dry-run or when neither key is populated. The fallback exists because a blank PO used to skip the check entirely: DSLF-1211 duplicated DSLF-1209 on DM092, a follow-up email with no broker order number on it.
 - **Description is NOT raw PDF text** — see Field Rules. The PDF is preserved by **attaching the file**.
@@ -197,7 +219,7 @@ Four independent entry points share the pipeline and `.env`. **Only `email_scann
 | Tool | Trigger / scope | Behavior |
 |------|-----------------|----------|
 | `email_scanner/email_scanner.py` | Shared-mailbox `List Rental` folder | MSAL ROPC auth → per message: if `conversationId` in `thread_map.json`, add a comment to the existing ticket; else download PDFs (or synthesize one from the body) → `process_pdf(broker_hint=SENDER_BROKER_MAP[domain])` → move mail to `List Rental/Processed` or `/Failed`. `broker_hint` short-circuits fingerprint detection. |
-| `qc_checker.py` | `Needs QC` tickets (`--status` for any other queue) | Two LLM checks per ticket — was it **created** right from the broker order, and did the **SELECT** deliver it. Posts a comment on every ticket checked, pass included. **Never transitions.** The order check's field corrections are written back **by default** (`--no-fix` to report them without writing); the cron gets them. Verdict is the worse of the two; `UNVERIFIED` means QC did not run and is **not** a pass. See "QC" below. |
+| `qc_checker.py` | `Needs QC` tickets **assigned to the service account** (`--status` for any other queue; named tickets bypass the scan) | Two LLM checks per ticket — was it **created** right from the broker order, and did the **SELECT** deliver it. Posts a comment on every ticket checked, pass included. **Never transitions.** The order check's field corrections are written back **by default** (`--no-fix` to report them without writing); the cron gets them. Verdict is the worse of the two; `UNVERIFIED` means QC did not run and is **not** a pass. See "QC" below. |
 | `qty_approval_scanner.py` | `Ready to Send for Qty Approval` tickets | Reads `QTY APPROVAL/<order#>` emails → sets Requested Quantity (`cf[12271]`); SELECT-PDF `TOTAL RECORDS SELECTED` fallback. **Never transitions.** Emails a per-mailer qty digest. **Every subject carries a name code** — the LIST code for a single ticket, the MAILER code for a group — and both resolvers read `dslf_list_and_mailer_names.txt` (committed at the repo root, generated 2026-06-17 from 628 tickets) and fall back to initials derived by that file's own `*` convention, so a name newer than the snapshot no longer drops the code. The body is the `<order#> = <qty>` lines (the shape the reply scan parses back) followed by `Requestor: <email>`. |
 | `ticket_scanner/ticket_scanner.py` | New DSLF tickets (issue# > saved state) | **Read-only** audit → report under `ticket_scanner/reports/`. `--learn` mines List Name→db_code patterns into `learned_patterns.json` (enrich tier 5). |
 
@@ -221,15 +243,14 @@ Notes: `email_scanner.main()` has **no argparse** — `run_email_scanner.bat --l
   (`_generate_pdf_from_text`, `Prefer: outlook.body-content-type="text"` so HTML `<style>`
   bloat cannot push the fingerprint past the 3000-char detection window).
 
-### ⚠ Jenkins credential gap
+### Jenkins credentials come from a copied `.env`, not the Jenkinsfile
 
-`Jenkinsfile` injects only `MS_CLIENT_ID`, `MS_TENANT_ID`, and `IMAP_EMAIL`. But
-`email_scanner.get_access_token()` also hard-requires **`MS_CLIENT_SECRET`,
-`MS_SERVICE_ACCOUNT`, `MS_SERVICE_PASSWORD`** and calls `sys.exit(1)` if any is missing —
-so scheduled runs authenticate only because a `.env` file exists in the Jenkins agent
-workspace, not because Jenkins supplies those three. Do not assume the Jenkinsfile is the
-complete credential picture. (`ANTHROPIC_API_KEY` **is** now used by scheduled runs — the
-`tools_polish` step in the live pipeline — so that one is load-bearing rather than spare.)
+The repo `Jenkinsfile` does not drive the live job (see "QC" below). The freestyle job
+`cp`s a full credential file to `.env` before running, which is where
+`email_scanner.get_access_token()`'s hard requirements (`MS_CLIENT_SECRET`,
+`MS_SERVICE_ACCOUNT`, `MS_SERVICE_PASSWORD` — `sys.exit(1)` if any is missing) and
+`ANTHROPIC_API_KEY` (live `tools_polish` + QC) come from. The Jenkinsfile's three injected
+vars are not the credential picture.
 
 ## Config System
 
@@ -294,7 +315,8 @@ On every **live** create, `_create_and_link_work_order()` imports `WO#/work_orde
 
 ## Prose Polish (`tools_polish.py`) — the live LLM step
 
-Runs on every ticket inside `process_pdf`, between kwargs assembly and the FLAG OMITS append.
+Runs on every ticket inside `finalize_and_create` (so `LLM_writes` gets it too), before the ADF
+description is built and the FLAG OMITS appended.
 Cleans the two PDF-derived prose values structurally, because parsers copy PDF text verbatim
 and inherit its line wrapping (DSLF-967: one sentence wrapped across two lines, with an omit
 criterion stranded in the Description and duplicated into Omission).
@@ -404,8 +426,8 @@ python qc_checker.py --model M --effort low|medium|high|xhigh|max --json FILE
   `python qc_checker.py`. Editing the Jenkinsfile changes nothing. **Verify which config
   drives a build before assuming the repo file does** — deleting `qc_checker.py` on
   2026-08-27 broke the cron on 2026-08-31 while the Jenkinsfile edit in the same commit did
-  nothing. (This also explains the old "credential gap" note: the job `cp`s a full `.env`,
-  which is why `MS_CLIENT_SECRET` etc. are present despite not being in the Jenkinsfile.)
+  nothing. (The job `cp`s a full `.env`, which is why `MS_CLIENT_SECRET` etc. are present
+  despite not being in the Jenkinsfile.)
 - **Posting AND fixing are the DEFAULT, `--dry-run` suppresses both.** The cron calls the
   script bare, so a bare call has to post — same as the rule-based checker it replaced.
   Auto-fix was opt-in until 2026-09-11 and therefore never once ran on a scheduled build:
@@ -426,8 +448,19 @@ python qc_checker.py --model M --effort low|medium|high|xhigh|max --json FILE
   after it and pays the 1.25x write premium on bytes nothing ever reads back. Measured over
   four real tickets: ~30% off per report, a 20-ticket queue ~$3.40 -> ~$2.46. The 5-minute
   TTL is refreshed by each read, so a queue at ~45s/ticket stays warm; a single-ticket run
-  pays the write and never reads it back. Reordering the message blocks silently un-caches
-  it — that is cost, not correctness, so nothing fails and no test catches it.
+  pays the write and never reads it back. **A second breakpoint sits on the PDF document
+  block** (2026-09-28): LRF_Processing's `auto_runner._run_precheck` sends the same PDF twice
+  seconds apart (the re-check after a fix) with only the trailing `user_text` differing, so
+  the PDF prefix is read back there. Compare `cache_read` vs `cache_write` in
+  `logs/api_usage.jsonl` to confirm it pays. Reordering the message blocks silently
+  un-caches it — that is cost, not correctness, so nothing fails and no test catches it.
+- **`scan()` only returns tickets assigned to the service account** (since 2026-09-15), read
+  from `/rest/api/3/myself` and **failing closed** (no tickets) if that read fails.
+  `qc_checker` itself never transitions, but LRF_Processing's `qc_gate` imports `scan()` and
+  **does** transition whatever it returns — unscoped, its first live pass moved five tickets
+  two people were working straight to STOREHOUSE. A ticket someone assigned to themselves is
+  theirs and is never scanned; name it on the command line to check it anyway. `scan()` is
+  therefore a cross-repo interface: keep its signature and its fail-closed behaviour.
 - **Every report carries what it cost, and three decimals is deliberate.** `_cost_usd`
   prices each call off `_RATES_PER_MTOK` (per-1M input/output, cache read 0.10x, 5-minute
   ephemeral write 1.25x) and the comment footer reads `model · Ns · $x.xxx`. Reports land at
@@ -492,7 +525,9 @@ python qc_checker.py --model M --effort low|medium|high|xhigh|max --json FILE
   blank Mail Date/File Format/Other Fees/Key Code, qty mismatch under All Available,
   profile-sourced suppressions absent from the SELECT, Seed Tracking == Manager Order #,
   Seed DB = Client DB + S, and the hosted-list case below). Add new known-good patterns
-  there or QC fills with noise.
+  there or QC fills with noise. Related: a `FLAG OMITS` **code satisfies the requirement it
+  encodes** (`$` = DMA pander) — the wording need not appear too. DSLF-1278 was refused while
+  its SELECT carried the `$` flag.
 
 ### What `_SYSTEM_SELECT` must keep saying
 
@@ -540,9 +575,15 @@ writes them in **one PUT**. What it refuses, and why the refusals are the design
   replacing the notify address with the bare FTP host and be wrong. **The field holds the
   notify address; the FTP is carried by Shipping Method.** Destination rules belong in
   `apply_ship_to_rules`, where they are house rules rather than one model's read.
-- **`description` / `omission` are never writable** — ADF prose owned by the parsers and
+- **`description` / `omission` are never overwritten** — ADF prose owned by the parsers and
   `tools_polish`, and a field-level overwrite flattens the bullet structure
-  `_build_adf_description` builds.
+  `_build_adf_description` builds. **The one sanctioned edit is `fix_field: "omission_move"`**
+  (since 2026-09-28, `adf_move.plan_move`): it drops exactly one matching node from the
+  Description and appends it as one paragraph to the Omission Description, leaving every
+  other node untouched and writing both fields in the same PUT. One move per pass, never at
+  `NOTE`, and a line that is absent, appears more than once, or is already in the Omission is
+  refused into `NOT APPLIED`. It exists for DSLF-1274, whose `STATE OMIT` sat as a `Selects:` bullet in the Description and
+  stranded the ticket because nothing could correct it. Pinned in `test_adf_move.py`.
 - A **select option** Jira cannot resolve is dropped server-side *without failing the
   request*, so `_validate_fix` checks every option against `AVAILABILITY_RULE_OPTIONS` /
   `FILE_FORMAT_OPTIONS` / `SHIPPING_METHOD_OPTIONS` and sends `{"id": ...}`.
@@ -564,7 +605,7 @@ over — that was a bug fixed in `39d94bc` which 64 tickets carried, and
 
 ## AI-Assisted Offline Tools
 
-Auxiliary, **not part of the live pipeline**. All require `ANTHROPIC_API_KEY` and follow the one model policy — `claude-opus-5` @ medium (`ai_extract.py:37` + its `effort=` default, `compare_extraction.py:275`, `hybrid_create.py:39/56/106`). `compare_extraction` and `hybrid_create` both take `--model`, so another model can be tried without editing anything.
+Auxiliary, **not part of the live pipeline**. All require `ANTHROPIC_API_KEY` and follow the one model policy — `claude-opus-5` @ medium (see "LLM Model Policy" for where it is set). `compare_extraction` and `hybrid_create` both take `--model`, so another model can be tried without editing anything.
 
 | Tool | Purpose |
 |------|---------|
@@ -787,7 +828,7 @@ S67_Qty` means Key = `S67`; stopping only at `/` and whitespace swallowed the tr
 
 ## Project Subagents (`.claude/agents/`)
 
-Two repo-local agents, both `model: opus` and both **write-capable**
+Two agents are documented, both `model: opus` and both **write-capable**
 (`Read, Write, Edit, Bash, Glob, Grep, Agent, WebSearch, WebFetch`):
 
 | Agent | Scope |
@@ -797,6 +838,9 @@ Two repo-local agents, both `model: opus` and both **write-capable**
 
 They can create and edit live Jira tickets through `tools_jira`, same as the pipeline. Prefer
 `bff_agent` when the order is BFF — it carries the program-level knowledge `jira_Auto` does not.
+**Only `jira_Auto` actually exists in this checkout** (checked 2026-09-30: `bff_agent.md` is in
+neither `.claude/agents/` nor `~/.claude/agents/`), so on a machine without it, BFF work falls
+back to `jira_Auto`.
 
 ## Github Rules
 
