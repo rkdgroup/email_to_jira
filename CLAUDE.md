@@ -289,10 +289,18 @@ On every **live** create, `_create_and_link_work_order()` imports `WO#/work_orde
 - **`ArrayIndexOutOfBoundsException: Index 0 out of bounds for length 0` on connect means a
   BLANK PASSWORD.** JTOpen's `AS400JDBCDriver.initializeAS400` reads the password's first
   character (reproduced locally 2026-09-29 by blanking `IBMI_PASSWORD`). It cost
-  DSLF-1139..1142 (2026-08-31) and DSLF-1342..1347 (2026-09-25..28) their work orders, while
-  the `.env` uploaded to Jenkins held a valid password. **Confirmed:** jt400 got a blank password.
-  **Not confirmed:** why. Likeliest is a blank `IBMI_PASSWORD` already in the Jenkins process
-  environment, which `load_dotenv(override=False)` keeps over the file. `base._credentials`
+  DSLF-1139..1142 (2026-08-31), DSLF-1342..1347 (2026-09-25..28) and DSLF-1348..1364
+  (2026-09-29..30) their work orders. **Cause confirmed 2026-09-30 by the diagnostic below:
+  the Jenkins credential file itself.** On every failing ticket the comment reads process env
+  `IBMI_PASSWORD=unset` and `email_to_jira/.env exists=True password=blank` — the file the job
+  `cp`s in parses with no usable `IBMI_PASSWORD` (absent or empty), while its Jira and MS keys
+  work. The earlier "blank env var masks a valid .env" theory was wrong. **No code change fixes
+  this: replace the Jenkins secret file.** It cannot be read back from the Jenkins UI, and the
+  local `.env` is not a drop-in replacement (its Jira token returned 401 on 2026-09-30), so build
+  one file that holds a working Jira token **and** the `IBMI_*` lines. If `IBMI_PASSWORD` is
+  injected by credentials binding instead, inject `IBMI_USER` with it: `_credentials` takes all
+  three from the env once it holds a password, and a missing user falls back to `DMISUVAM`,
+  which is a real failed sign-on every 5 minutes. `base._credentials`
   now takes host, user and password as ONE set - from the env when it holds a non-blank
   password, else from the first `.env` that does - so a stale env user never pairs with the
   file's password (that would be a real invalid sign-on). `get_connection` refuses an empty
