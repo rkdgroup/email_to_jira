@@ -56,8 +56,8 @@ python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 `--dry-run` and `--verbose` are the **only** two CLI flags for `parse_pipeline.py`. `broker_hint` is a function argument (used by the email scanner), not a flag.
 
 **Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
-protect you if you run them. Sixteen regression files, all hermetic: no Jira, no DB, no PDFs,
-no network — the QC tests never call the API. **Run the whole suite with pytest** (212 tests,
+protect you if you run them. Seventeen regression files, all hermetic: no Jira, no DB, no PDFs,
+no network — the QC tests never call the API. **Run the whole suite with pytest** (222 tests,
 ~5s; no `pytest.ini`/`conftest.py` needed):
 
 ```bash
@@ -65,7 +65,7 @@ python -m pytest -q test_*.py "WO#/"              # everything
 python -m pytest -q test_kap_fields.py -k below   # one file / one test
 ```
 
-Fourteen files are also standalone runners that print `PASS` lines and `ALL PASSED`.
+Fifteen files are also standalone runners that print `PASS` lines and `ALL PASSED`.
 **`test_adf_move.py` and `test_usage_log.py` are pytest-only** — they have no `__main__`, so
 `python test_adf_move.py` exits 0 having run nothing. Use pytest for those two.
 
@@ -84,6 +84,7 @@ python test_qty_subject_and_body.py  # qty-email subject codes + requestor in th
 python test_duplicate_check.py       # dup key: PO, blank-PO fallback, AMLC
 python test_wo_failure_report.py     # WO failure/skip posted on the ticket, never fails the create
 python test_ncc_dnm_omit.py          # NCC do-not-mail line stripped for N11D only
+python test_celco_fields.py          # CELCO wrapped segment, CONTACT requestor, FTP notify, Key Code line
 python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
 python "WO#/test_ibmi_credentials.py"        # blank env var cannot mask .env; empty password fails loudly
 ```
@@ -92,8 +93,8 @@ Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap
 `parsers/adstra.py`, `parsers/data_axle.py`, `qc_checker.py`,
 `parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
 `parse_pipeline._dup_check_key`, `parse_pipeline._create_and_link_work_order`,
-`parse_pipeline._strip_ncc_dnm`, `qty_approval_scanner.py`, `WO#/work_order.py`,
-`WO#/base.py`, `adf_move.py`, or `usage_log.py`. Verified all sixteen pass (212 tests)
+`parse_pipeline._strip_ncc_dnm`, `parsers/celco.py`, `qty_approval_scanner.py`, `WO#/work_order.py`,
+`WO#/base.py`, `adf_move.py`, or `usage_log.py`. Verified all seventeen pass (222 tests)
 2026-09-30. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
@@ -111,7 +112,7 @@ and fail on the agent.
 **`README.md` is a lighter duplicate of this file.** Its Quick Start now installs from
 `requirements.txt` rather than a hand-listed set, so that drift cannot recur, but its
 project tree still omits `tools_polish.py`, `tools_zip_omit.py`, `LLM_writes.py`, the
-offline AI tools, `adf_move.py`, `usage_log.py`, the `WO#/` step and the sixteen test files. Treat CLAUDE.md as authoritative
+offline AI tools, `adf_move.py`, `usage_log.py`, the `WO#/` step and the seventeen test files. Treat CLAUDE.md as authoritative
 and update README only when a change is user-facing.
 
 ```bash
@@ -777,6 +778,7 @@ Story, the DSLF-1240 forward-reference case and the 30-order measurement:
 | WE ARE MOORE | MICHELLE NAY | MNAY@WEAREMOORE.COM |
 | KAP | JENNY GOMEZ | jgomez@keyacquisition.com — house default only. The order's own `contact <Name> at\|@ Email: <addr>` line wins, and the captured address is pinned to `@keyacquisition.com`: "Please" is optional, so a domain-agnostic pattern could take the FTP-setup address (`eftaccountsetup@igxfer.com`, DSLF-1141) instead. |
 | CONRAD DIRECT | Brenda Gundlah | bgundlah@conraddirect.com |
+| CELCO | the order's CONTACT AT rep (Sara Ghods on every order so far) | sara@celcononprofit.com |
 
 ## DSLF Custom Field IDs
 

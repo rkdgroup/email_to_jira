@@ -138,6 +138,14 @@ class CelcoParser(BaseBrokerParser):
                     candidate = lines[j]
                     if candidate not in _CELCO_LABELS and len(candidate) > 2 and not candidate.endswith(":"):
                         segment = candidate
+                        # DSLF-1366: a long segment wraps ("... SCFS 940-941," / "943-947, 949 ONLY").
+                        # ponytail: joins only after a visibly unfinished line - the label-block
+                        # layout puts the FORMAT value next, which must not be swallowed.
+                        k = j + 1
+                        while (k < len(lines) and lines[k] not in _CELCO_LABELS
+                               and re.search(r"(?:[,&/-]|\bAND|\bOR)$", segment)):
+                            segment = f"{segment} {lines[k]}"
+                            k += 1
                         break
                 break
 
@@ -152,6 +160,12 @@ class CelcoParser(BaseBrokerParser):
                         not re.match(r"^[A-Z][a-z]", next_ln)):
                     key_code = next_ln
                 break
+        if not key_code:
+            # DSLF-1366: the box is blank and the code rides in "MARK FILE AS: ... Key Code '0845".
+            # "Key[ \t]+Code" skips the KEYCODE label itself; the value must carry a digit.
+            m_key = re.search(r"(?i)\bKey[ \t]+Code[: \t]*'?([A-Z0-9-]*\d[A-Z0-9-]*)", text)
+            if m_key:
+                key_code = m_key.group(1)
 
         # --- Quantity ---
         requested_quantity = 0
@@ -235,19 +249,33 @@ class CelcoParser(BaseBrokerParser):
 
         # Also check for "send shipping confirmation to" or "send Data via SFTP"
         confirm_match = re.search(
-            r"(?:confirmation\s+to|send.*to)\s+([\w.+-]+@[\w.-]+\.\w+)",
+            r"(?:confirmation\s+to|send.*to)[:\s]+([\w.+-]+@[\w.-]+\.\w+)",
             text, re.IGNORECASE
         )
         if confirm_match and not ship_to_email:
             ship_to_email = confirm_match.group(1)
 
+        # Same convention as KAP/ADSTRA: on an FTP order the address is who to notify.
+        if shipping_method == "FTP" and ship_to_email and not ship_to_email.upper().startswith("FTP NOTIFY:"):
+            ship_to_email = f"FTP NOTIFY: {ship_to_email}"
+
         if not requestor_email:
             requestor_email = contact_email
+        # DSLF-1366: the CONTACT AT rep is the requestor when SHIP TO names nobody.
+        requestor_name = requestor_name or contact_name
 
         # --- Shipping instructions = CC: requestor_email ---
         shipping_instructions = ""
         if requestor_email:
             shipping_instructions = f"CC: {requestor_email}"
+
+        # "PLEASE POST FILE TO:" with the link on the next line - same shape KAP reads. Links only:
+        # "PLEASE SEND FILE TO: tlibrarian@..." (D04-086371) is an email destination, not an upload.
+        m_up = re.search(r"(?is)\b(?:upload|post|send)[ \t]+(?:the[ \t]+)?file[ \t]+to[ \t]*:[ \t\r\n]*"
+                         r"((?:https?|s?ftp)://\S+)", text)
+        if m_up:
+            _upload = f"UPLOAD TO: {m_up.group(1).strip().rstrip('.,;')}"
+            shipping_instructions = f"{shipping_instructions} | {_upload}" if shipping_instructions else _upload
 
         # --- File format ---
         file_format = self._detect_file_format(text)
