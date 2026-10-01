@@ -34,9 +34,7 @@ A15R:
   - 'OMIT COMPANY BY TITLE CODE: CO'
   - OMIT NCOA REASON CODES
   - OMIT COLUMBUS OH PO BOX 2168, 43216
-  - +
-  - .
-  - +
+
 A16:
   select_by: TRANSACTION $ AND DATE
   flags: D, N, R , $, A, X, !
