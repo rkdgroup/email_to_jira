@@ -441,6 +441,17 @@ def test_order_prompt_states_the_in_house_override():
           "shipping_method" in qc._FIXABLE, True)
 
 
+def test_order_prompt_lets_the_ship_to_block_name_an_agency_drop_box():
+    """DSLF-1376: KAP's Ship To block reads "Via: EMAIL ... data@veradata.com", and nine Done
+    tickets shipped there, yet QC called it a list-agency contact and the sweep sent it STUCK.
+    The agency rule is for the agency's people (cwhitney@veradata.com, the Wanted By contact).
+    """
+    s = qc._SYSTEM_ORDER.lower()
+    check("data@veradata.com is named as a drop box", "data@veradata.com" in s, True)
+    check("an address the order's Ship To block names is the drop point",
+          "ship to block names that address" in s, True)
+
+
 def test_order_prompt_does_not_resurrect_the_kap_title_exception():
     """knowledge.md line 161 called `P.O. {DL#} {LIST NAME}` a KAP design. It was a bug,
     fixed in 39d94bc, and 64 tickets carried it. Treating it as design hides a real defect.

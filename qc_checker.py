@@ -988,6 +988,10 @@ WHAT TO CHECK
    - Ship To at a list-agency domain (rmlc.net, veradata.com, esteemarketing.com,
      dmgroup.com, maryegranger.com) is usually the mailer's agency contact rather than the
      drop point. WRONG when the ticket looks like a plain email delivery; name the address.
+     EXCEPT when the order's own Ship To block names that address: then it IS the drop
+     point, whatever its domain. data@veradata.com is Vera Data's file-drop mailbox (nine
+     orders shipped there; DSLF-1376 was wrongly refused for it), while a person at the
+     agency, such as the "Wanted By" contact cwhitney@veradata.com, is not.
    - These destinations always mean File Format = ASCII Fixed, delivery stays Email:
      data@trylondm.com, data@talonmm.com, data@rkdgroup.com, tisdata@trinitydirect.net,
      tapelibrarian@directmail.com. Anything else on those addresses is WRONG.
