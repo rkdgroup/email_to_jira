@@ -57,8 +57,8 @@ python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 
 **Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
 protect you if you run them. Seventeen regression files, all hermetic: no Jira, no DB, no PDFs,
-no network — the QC tests never call the API. **Run the whole suite with pytest** (222 tests,
-~5s; no `pytest.ini`/`conftest.py` needed):
+no network — the QC tests never call the API. **Run the whole suite with pytest** (224 tests,
+~17s; no `pytest.ini`/`conftest.py` needed):
 
 ```bash
 python -m pytest -q test_*.py "WO#/"              # everything
@@ -94,8 +94,8 @@ Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap
 `parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
 `parse_pipeline._dup_check_key`, `parse_pipeline._create_and_link_work_order`,
 `parse_pipeline._strip_ncc_dnm`, `parsers/celco.py`, `qty_approval_scanner.py`, `WO#/work_order.py`,
-`WO#/base.py`, `adf_move.py`, or `usage_log.py`. Verified all seventeen pass (222 tests)
-2026-09-30. Everything else is tested manually via `--dry-run --verbose` against real
+`WO#/base.py`, `adf_move.py`, or `usage_log.py`. Verified all seventeen pass (224 tests)
+2026-10-06. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
 in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
@@ -144,8 +144,7 @@ python hybrid_create.py order.pdf [--dry-run] [--no-claude] [--no-attach]  # --d
 ## Dependencies & Credentials
 
 ```bash
-pip install anthropic requests pymupdf pdfminer.six pymupdf4llm python-dotenv msal pyyaml \
-            openpyxl xlrd jaydebeapi JPype1 python-docx
+pip install -r requirements.txt   # same file Jenkins installs; never hand-list packages here
 ```
 
 - `requirements.txt` now covers **every** runtime import, including `python-docx` (added in `86d03d0`; needed by `client_profiles.py`, `build_profile_yaml.py`, `verify_configs.py`) and `openpyxl`/`xlrd` for the zip-omit splitter. Jenkins installs from this file *only* (`pip3 install -q -r requirements.txt`), so a new runtime import that isn't added here breaks the scheduled run, not the local one.
