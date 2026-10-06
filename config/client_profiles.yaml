@@ -21,7 +21,7 @@ A14D:
   - OMIT PR, TERR, MILITARY
   - OMIT COMPANY  BY TITLE CODE
 A15R:
-  select_by: MOST RECENT DATE &
+  select_by: MOST RECENT DATE & LARGEST DOLLAR
   flags: '!, $'
   dollar_cap: $99.99
   standard_suppressions:

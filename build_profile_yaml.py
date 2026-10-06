@@ -110,6 +110,11 @@ def _parse_lines(lines: list[str]) -> dict:
             m = _SELECT_BY_RE.search(line)
             if m:
                 val = _strip_mergefield(m.group(1)).strip()
+                if val and re.search(r"(?:&|\bAND\b|/|,)$", val, re.IGNORECASE):
+                    # Cell wrapped onto the next line ("MOST RECENT DATE &" / "LARGEST DOLLAR", A15R, DSLF-1373).
+                    nxt = next((ln.strip() for ln in lines[i + 1:i + 3] if ln.strip()), "")
+                    if nxt and ":" not in nxt and not _is_section_header(nxt):
+                        val = f"{val} {_strip_mergefield(nxt).strip()}"
                 if val:
                     result["select_by"] = val
 
