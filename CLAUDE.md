@@ -123,6 +123,13 @@ python qc_checker.py [DSLF-123 ...] [--status S] [--no-fix] [--dry-run]
 python qty_approval_scanner.py [--no-email-scan] [--combined] [--output f] [--email a] [--cc b] [--subject s]
 python ticket_scanner/ticket_scanner.py [--loop N] [--reset] [--learn] [--reporter NAME]
 
+# EOD shift handoff (manual, Windows only): tickets moved into Done / Waiting on Qty Approval
+# in the last N hours -> ~/OneDrive/Documents/Hands-off report/EOD_Hands-off_Report_<date>.xlsx
+# (outside the repo; same-day rerun overwrites). A ticket that entered both statuses in the
+# window is one row with the later one. --send mails it through classic Outlook (pywin32 COM)
+# with the account's default signature, to HANDOFF_EMAIL_TO + HANDOFF_EMAIL_CC in .env (--to replaces both). Read-only against Jira.
+python handoff.py [--hours N (default 10)] [--send] [--to a@x.com] [--cc b@y.com]
+
 # Config tooling (see "Config System")
 python config_guard.py        # fast syntax gate over config/*.yaml (exit 1 on parse error)
 python verify_configs.py      # deep audit of YAMLs vs source Excel/docs → config_audit_report.md
