@@ -131,9 +131,10 @@ def write_excel(rows: list, today: datetime) -> Path:
         for col in range(1, 4):
             ws.cell(row=r, column=col).fill = FILLS[status]
 
-    if not rows:
-        ws["A4"] = "No tickets this shift"
-        ws["A4"].font = Font(italic=True)
+    if not any(status == DONE for _, _, status in rows):
+        # Right under the headers when the table is empty, else after a blank row
+        note = ws.cell(row=4 + len(rows) + (1 if rows else 0), column=1, value="No shipping was done")
+        note.font = Font(italic=True)
 
     for col, width in zip("ABC", (14, 20, 28)):
         ws.column_dimensions[col].width = width
