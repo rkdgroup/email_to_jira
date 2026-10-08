@@ -128,7 +128,7 @@ python ticket_scanner/ticket_scanner.py [--loop N] [--reset] [--learn] [--report
 # (outside the repo; same-day rerun overwrites). A ticket that entered both statuses in the
 # window is one row with the later one. --send mails it through classic Outlook (pywin32 COM)
 # with the account's default signature, to HANDOFF_EMAIL_TO + HANDOFF_EMAIL_CC in .env (--to replaces both). Read-only against Jira.
-python handoff.py [--hours N (default 10)] [--send] [--to a@x.com] [--cc b@y.com]
+python handoff.py [--hours N (default 8)] [--send] [--to a@x.com] [--cc b@y.com]
 
 # Config tooling (see "Config System")
 python config_guard.py        # fast syntax gate over config/*.yaml (exit 1 on parse error)

@@ -9,7 +9,7 @@ it entered last. Done rows come first (green), then Waiting rows (amber).
 Re-running on the same day overwrites that day's file.
 
 Usage:
-    python handoff.py                     # last 10 hours, file only
+    python handoff.py                     # last 8 hours, file only 
     python handoff.py --send              # + email to the .env recipients
     python handoff.py --hours 12 --send
     python handoff.py --send --to me@x.com    # test run: only to me, no CC
@@ -180,7 +180,7 @@ def send_via_outlook(path: Path, to: str, cc: str, today: datetime) -> None:
 
 def main():
     ap = argparse.ArgumentParser(description="Generate the EOD Hands-off Report.")
-    ap.add_argument("--hours", type=int, default=10, help="look back this many hours from now (default 10)")
+    ap.add_argument("--hours", type=int, default=8, help="look back this many hours from now (default 8)")
     ap.add_argument("--send", action="store_true", help="email the report through Outlook")
     ap.add_argument("--to", help="send only to these (comma-separated); skips the .env CC")
     ap.add_argument("--cc", help="CC these (comma-separated)")
