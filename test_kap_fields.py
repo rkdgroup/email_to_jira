@@ -488,6 +488,32 @@ def test_a_select_without_a_pointer_is_left_alone():
     check("pointerless select untouched", r.segment_criteria, "$10+ LAST 12 MO")
 
 
+# DM247 (DSLF-1399): a Saturn FileShare order. The Ship To block holds only "FTP" tokens,
+# Convert@saturncorp.com is a bare address in prose, and the only "Email:" below the block
+# is KAP's own rep on the contact line. That rep must not become the destination; the
+# Saturn mailbox is supplied by apply_ship_to_rules (test_ship_to_rules.py).
+_DM247 = """Selects:
+All available
+Ship To:
+Via:
+Contact:
+FTP
+FTP
+Attn: see instructions below
+Please provide the all available quantity before shipping for approval.
+=========================================================================
+Please do not email the data file*. Please load the data to your allocated Saturn Corp FileShare. Please contact
+Convert@saturncorp.com if you need your FileShare credentials. FTP LINK:    www.saturn-corp.com.
+Please contact Jenny Gomez at Email: jgomez@keyacquisition.com
+"""
+
+
+def test_kap_rep_on_the_contact_line_is_never_the_destination():
+    r = PARSER_REGISTRY["kap"].parse(_DM247)
+    check("DM247 ship-to is not the KAP rep", "keyacquisition" in r.ship_to_email.lower(), False)
+    check("DM247 rep is still the requestor", r.requestor_email, "jgomez@keyacquisition.com")
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),

@@ -320,7 +320,13 @@ class KapParser(BaseBrokerParser):
             m = re.search(r"e-?mail\s+(?:the\s+\w+\s+)?to:?[^\n@]*?([\w.+-]+@[\w.-]+\.\w+)",
                           _ship_tail, re.IGNORECASE)
         if not m:
-            m = re.search(r"Email:\s*([\w.+-]+@[\w.-]+\.\w+)", _ship_tail, re.IGNORECASE)
+            # Never KAP's own rep: "Please contact Jenny Gomez at Email: jgomez@..." sits
+            # below the Ship To block on every order and is the requestor, not a destination
+            # (DSLF-1398/1399 shipped to it).
+            m = next((x for x in re.finditer(r"Email:\s*([\w.+-]+@[\w.-]+\.\w+)", _ship_tail,
+                                             re.IGNORECASE)
+                      if not re.search(r"@keyacquisition(?:partners)?\.com$", x.group(1), re.I)),
+                     None)
         if m:
             ship_to_email = m.group(1)
 
