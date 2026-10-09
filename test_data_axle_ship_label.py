@@ -331,6 +331,30 @@ def test_no_omit_on_the_order_leaves_the_field_blank():
     check("nothing to omit, nothing stored", r.omission_description, "")
 
 
+def test_household_dedupe_is_kept_with_the_omits():
+    """DSLF-1402, verbatim: "Please supply one per household" has no OMIT and was dropped."""
+    r = PARSER_REGISTRY["simiocloud"].parse(_omit_order(
+        base="4/26-9/26 $10+ Female Donors w/State Omits",
+        selects="Gender=Female\nSelect Cap\nSCF/ZIP/State=Omit AK, CA, HI, MA, PR",
+        special=("Select Females **State Omit: AK, CA, HI, MA, PR **Omit PR, VI, Guam, APO/FPO\n"
+                 "**Please supply one per household.\n**Service Bureau has very strict"),
+    ))
+    check("household line kept, in page order", r.omission_description,
+          "Omit AK CA HI MA PR\n"
+          "Omit: AK CA HI MA PR **Omit PR VI Guam APO/FPO\n"
+          "1 PER HOUSEHOLD")
+
+
+def test_household_dedupe_forms():
+    def omits(special: str) -> str:
+        return PARSER_REGISTRY["simiocloud"].parse(
+            _omit_order(base="6 Month Donors", special=special)).omission_description
+    check("1 per HH", omits("Supply 1 per HH"), "1 PER HOUSEHOLD")
+    check("stated twice, kept once", omits("1 PER HOUSEHOLD\none per household"), "1 PER HOUSEHOLD")
+    check("two per household is not rewritten to one", omits("TWO PER HOUSEHOLD"), "")
+    check("a negation is not a dedupe", omits("Do NOT supply one per household"), "")
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),

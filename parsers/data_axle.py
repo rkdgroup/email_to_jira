@@ -68,6 +68,10 @@ class DataAxleParser(BaseBrokerParser):
     # the field label ("Base: ...", "Selects: SCF=") or base criteria, which belong in the
     # description rather than the omission.
     _OMIT_CLAUSE_RE = re.compile(r"\*?\s*OMIT\b.*", re.IGNORECASE)
+    # Same wording LRF's criteria_parser reads as the household dedupe; never "2 PER HH".
+    _HOUSEHOLD_RE = re.compile(r"\b(?:1|ONE)\s*(?:NAMES?\s+)?/?\s*PER\s+H(?:OUSEHOLD|H)\b",
+                               re.IGNORECASE)
+    _HOUSEHOLD = "1 PER HOUSEHOLD"
 
     def _collect_omit_clauses(self, text: str) -> list[str]:
         """Every OMIT clause printed on the order, in page order, de-duplicated.
@@ -86,6 +90,11 @@ class DataAxleParser(BaseBrokerParser):
         out: list[str] = []
         seen: set[str] = set()
         for i, ln in enumerate(lines):
+            # A household dedupe carries no OMIT but belongs with the omits (DSLF-1402).
+            if (self._HOUSEHOLD_RE.search(ln) and self._HOUSEHOLD not in seen
+                    and not re.search(r"\bDO\s+NOT\b", ln, re.IGNORECASE)):
+                seen.add(self._HOUSEHOLD)
+                out.append(self._HOUSEHOLD)
             m = self._OMIT_CLAUSE_RE.search(ln)
             if not m:
                 continue
