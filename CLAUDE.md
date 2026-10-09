@@ -57,8 +57,8 @@ python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 
 **Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
 protect you if you run them. Seventeen regression files, all hermetic: no Jira, no DB, no PDFs,
-no network — the QC tests never call the API. **Run the whole suite with pytest** (222 tests,
-~5s; no `pytest.ini`/`conftest.py` needed):
+no network — the QC tests never call the API. **Run the whole suite with pytest** (224 tests,
+~17s; no `pytest.ini`/`conftest.py` needed):
 
 ```bash
 python -m pytest -q test_*.py "WO#/"              # everything
@@ -94,8 +94,8 @@ Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap
 `parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
 `parse_pipeline._dup_check_key`, `parse_pipeline._create_and_link_work_order`,
 `parse_pipeline._strip_ncc_dnm`, `parsers/celco.py`, `qty_approval_scanner.py`, `WO#/work_order.py`,
-`WO#/base.py`, `adf_move.py`, or `usage_log.py`. Verified all seventeen pass (222 tests)
-2026-09-30. Everything else is tested manually via `--dry-run --verbose` against real
+`WO#/base.py`, `adf_move.py`, or `usage_log.py`. Verified all seventeen pass (224 tests)
+2026-10-06. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
 in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
@@ -123,6 +123,13 @@ python qc_checker.py [DSLF-123 ...] [--status S] [--no-fix] [--dry-run]
 python qty_approval_scanner.py [--no-email-scan] [--combined] [--output f] [--email a] [--cc b] [--subject s]
 python ticket_scanner/ticket_scanner.py [--loop N] [--reset] [--learn] [--reporter NAME]
 
+# EOD shift handoff (manual, Windows only): tickets moved into Done / Waiting on Qty Approval
+# in the last N hours -> ~/OneDrive/Documents/Hands-off report/EOD_Hands-off_Report_<date>.xlsx
+# (outside the repo; same-day rerun overwrites). A ticket that entered both statuses in the
+# window is one row with the later one. --send mails it through classic Outlook (pywin32 COM)
+# with the account's default signature, to HANDOFF_EMAIL_TO + HANDOFF_EMAIL_CC in .env (--to replaces both). Read-only against Jira.
+python handoff.py [--hours N (default 8)] [--send] [--to a@x.com] [--cc b@y.com]
+
 # Config tooling (see "Config System")
 python config_guard.py        # fast syntax gate over config/*.yaml (exit 1 on parse error)
 python verify_configs.py      # deep audit of YAMLs vs source Excel/docs → config_audit_report.md
@@ -144,8 +151,7 @@ python hybrid_create.py order.pdf [--dry-run] [--no-claude] [--no-attach]  # --d
 ## Dependencies & Credentials
 
 ```bash
-pip install anthropic requests pymupdf pdfminer.six pymupdf4llm python-dotenv msal pyyaml \
-            openpyxl xlrd jaydebeapi JPype1 python-docx
+pip install -r requirements.txt   # same file Jenkins installs; never hand-list packages here
 ```
 
 - `requirements.txt` now covers **every** runtime import, including `python-docx` (added in `86d03d0`; needed by `client_profiles.py`, `build_profile_yaml.py`, `verify_configs.py`) and `openpyxl`/`xlrd` for the zip-omit splitter. Jenkins installs from this file *only* (`pip3 install -q -r requirements.txt`), so a new runtime import that isn't added here breaks the scheduled run, not the local one.

@@ -76,6 +76,22 @@ def test_saturn_rules():
           ("PLACE ON SATURN CORP FTP FILESHARE", "ASCII Fixed", "FTP"))
 
 
+def test_saturn_mailbox_in_the_body_is_the_destination():
+    """DSLF-1398/1399: KAP prints Convert@saturncorp.com as a bare address in prose, and the
+    parser's Email: fallback took KAP's own rep from the contact line instead."""
+    body = ("Please load the data to your allocated Saturn Corp FileShare. Please contact\n"
+            "Convert@saturncorp.com if you need your FileShare credentials.\n"
+            "Please contact Jenny Gomez at Email: jgomez@keyacquisition.com")
+    check("saturn mailbox replaces the rep",
+          apply_ship_to_rules("FTP NOTIFY: jgomez@keyacquisition.com", "", "FTP", body),
+          ("FTP NOTIFY: CONVERT@SATURNCORP.COM", "ASCII Fixed", "FTP"))
+    check("blank ship-to takes the saturn mailbox too",
+          apply_ship_to_rules("", "", "", body)[0], "FTP NOTIFY: CONVERT@SATURNCORP.COM")
+    check("in-house still wins",
+          apply_ship_to_rules("tlibrarian@data-management.com", "", "Email", body)[0],
+          "tlibrarian@data-management.com")
+
+
 def test_plain_order_untouched():
     check("plain email order untouched",
           apply_ship_to_rules("mercy@mmidirect.com", "", "Email"),

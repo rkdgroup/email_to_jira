@@ -11,3 +11,4 @@ xlrd
 python-docx
 jaydebeapi>=1.2.3
 JPype1>=1.4.0
+pywin32; sys_platform == "win32"

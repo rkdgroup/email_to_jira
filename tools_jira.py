@@ -8,6 +8,7 @@ Credentials required in .env (project root):
 """
 
 import os
+import re
 import json
 import logging
 import requests
@@ -119,6 +120,14 @@ def apply_ship_to_rules(ship_to_email: str, file_format: str, shipping_method: s
     if "saturn" in (ship_to_email or "").lower() or "saturn" in (order_text or "").lower():
         file_format = "ASCII Fixed"
         shipping_method = "FTP"
+        # A Saturn mailbox printed in the order IS the destination, whatever address the
+        # parser picked. KAP prints Convert@saturncorp.com as a bare address in prose, so the
+        # parser's "Email:" fallback took KAP's own rep from the contact line below it
+        # (DSLF-1398/1399). DSLF-1276 and the ADSTRA tickets all carry CONVERT@SATURNCORP.COM.
+        m_sat = re.search(r"[\w.+-]+@saturncorp\.com", order_text or "", re.IGNORECASE)
+        if (m_sat and "saturn" not in (ship_to_email or "").lower()
+                and "@data-management.com" not in (ship_to_email or "").lower()):
+            ship_to_email = m_sat.group(0).upper()
         if ship_to_email:
             st = ship_to_email.strip()
             if "@" in st and not st.upper().startswith("FTP NOTIFY:"):
