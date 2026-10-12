@@ -174,8 +174,21 @@ def send_via_outlook(path: Path, to: str, cc: str, today: datetime) -> None:
     mail.HTMLBody = re.sub(r"(<body[^>]*>)", lambda m: m.group(1) + EMAIL_BODY,
                            mail.HTMLBody, count=1, flags=re.IGNORECASE)
     mail.Attachments.Add(str(path.resolve()))
+    subject = mail.Subject
     mail.Send()
-    print(f"Email sent to {to}" + (f" (cc {cc})" if cc else ""))
+    # Send() only queues the mail. An Outlook this script started can close again
+    # on exit before flushing the Outbox (09-Oct: three reports stuck there), so
+    # push a send/receive and wait for the Outbox to let go of it.
+    ns = outlook.GetNamespace("MAPI")
+    outbox = ns.GetDefaultFolder(4)  # 4 = olFolderOutbox
+    ns.SendAndReceive(False)
+    for _ in range(60):
+        if not any(item.Subject == subject for item in outbox.Items):
+            print(f"Email sent to {to}" + (f" (cc {cc})" if cc else ""))
+            return
+        time.sleep(2)
+    sys.exit("Email is still in the Outlook Outbox after 2 minutes - leave Outlook open "
+             "and check it is online; it will go out on the next send/receive.")
 
 
 def main():
