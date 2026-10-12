@@ -175,7 +175,7 @@ class AdstraParser(BaseBrokerParser):
                 # still land in the omission description with the state/flag omits.
                 if ln and not re.search(r"DO\s+NOT\s+OMIT", ln, re.IGNORECASE) and (
                         re.search(r"\bOMIT\b", ln, re.IGNORECASE)
-                        or re.search(r"\bPER\s+H(?:OUSEHOLD|H)\b", ln, re.IGNORECASE)):
+                        or re.search(r"\bPER\s+H(?:OUSE\s*HOLD|H)\b", ln, re.IGNORECASE)):
                     # Join continuation lines: if this line ends with a comma,
                     # the next line continues the same list (e.g. wrapped state codes).
                     while ln.endswith(",") and i + 1 < len(lines):
@@ -242,11 +242,12 @@ class AdstraParser(BaseBrokerParser):
                 for c in codes:
                     if c not in state_codes:
                         state_codes.append(c)
-            elif re.search(r"\bPER\s+H(?:OUSEHOLD|H)\b", ln, re.IGNORECASE):
+            elif re.search(r"\bPER\s+H(?:OUSE\s*HOLD|H)\b", ln, re.IGNORECASE):
                 # Household de-dupe (e.g. "1 PER HOUSEHOLD") — kept verbatim so a
                 # count other than 1 isn't rewritten; first occurrence wins.
                 if not household_line:
-                    household_line = ln
+                    # DSLF-1385: "HOUSE HOLD" -> "HOUSEHOLD", the spelling LRF's dedupe parser reads.
+                    household_line = re.sub(r"HOUSE\s+HOLD", "HOUSEHOLD", ln, flags=re.IGNORECASE)
             else:
                 other_omit_lines.append(ln)
         prev_order_nums: list[str] = []

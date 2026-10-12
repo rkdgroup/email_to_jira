@@ -175,6 +175,15 @@ def test_ftp_notification_line_is_the_notify_address():
         check(f"notify from {line[:22]!r}", r.ship_to_email, "FTP NOTIFY: INCOMING.FILES@DATA-AXLE.COM")
 
 
+def test_spaced_house_hold_is_the_household_dedupe():
+    """DSLF-1385/1386 print "1 PER HOUSE HOLD"; written as LRF's parser reads it."""
+    text = (_order("NLEOMF DONORS\n(49210)") + "SPECIAL INSTRUCTIONS\n"
+            "ADDR. USA NAMES ONLY, OMIT CAN., P.R.,FOREIGN,APO,FPO & MIL.\n"
+            "1 PER HOUSE HOLD\nPAYMENT DUE THIRTY DAYS FROM MAIL DATE.\n")
+    om = PARSER_REGISTRY["adstra"].parse(text).omission_description
+    check("household line kept, spelled HOUSEHOLD", "1 PER HOUSEHOLD" in om, True)
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),
