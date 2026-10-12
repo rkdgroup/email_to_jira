@@ -125,7 +125,9 @@ class AdstraParser(BaseBrokerParser):
             ship_to_email = m.group(1) if m else ""
         # FTP orders: pull notify email from Special Instructions block
         if not ship_to_email and shipping_method == "FTP":
-            m = re.search(r"(?:EMAIL|CONFIRM|CONFIRMATION)[^\n]*?([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
+            # DSLF-1383: "SEND NOTIFICATION TO: INCOMING.FILES@DATA-AXLE.COM" names it too.
+            m = re.search(r"(?:EMAIL|CONFIRM|CONFIRMATION|NOTIFICATION|NOTIFY)[^\n]*?([\w.+-]+@[\w.-]+\.\w+)",
+                          text, re.IGNORECASE)
             if m:
                 ship_to_email = f"FTP NOTIFY: {m.group(1)}"
 

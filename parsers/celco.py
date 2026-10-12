@@ -165,6 +165,8 @@ class CelcoParser(BaseBrokerParser):
             # DSLF-1366: the box is blank and the code rides in "MARK FILE AS: ... Key Code '0845".
             # "Key[ \t]+Code" skips the KEYCODE label itself; the value must carry a digit.
             m_key = re.search(r"(?i)\bKey[ \t]+Code[: \t]*'?([A-Z0-9-]*\d[A-Z0-9-]*)", text)
+            # DSLF-1404: "Label file: ..., KEYCODE 0005C" -- spaceless, but the value sits on the label's own line.
+            m_key = m_key or re.search(r"(?i)\bKEYCODE[ \t]+([A-Z0-9-]*\d[A-Z0-9-]*)", text)
             if m_key:
                 key_code = m_key.group(1)
 
@@ -256,6 +258,12 @@ class CelcoParser(BaseBrokerParser):
         )
         if confirm_match and not ship_to_email:
             ship_to_email = confirm_match.group(1)
+
+        # DSLF-1404: "Notify pubc@mmidirect.com when file is posted" -- ship-to only, never the requestor.
+        notify_match = re.search(r"\bnotify[ \t]+([\w.+-]+@[\w.-]+\.\w+)", text, re.IGNORECASE)
+        if (notify_match and not ship_to_email and shipping_method == "FTP"
+                and notify_match.group(1).lower() != contact_email.lower()):
+            ship_to_email = notify_match.group(1)
 
         # Same convention as KAP/ADSTRA: on an FTP order the address is who to notify.
         if shipping_method == "FTP" and ship_to_email and not ship_to_email.upper().startswith("FTP NOTIFY:"):

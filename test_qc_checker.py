@@ -186,18 +186,70 @@ def test_prose_fields_are_never_writable():
         check(f"{field} refused", fid, None)
 
 
-def test_the_destination_is_never_writable():
-    """ship_to_email came out of _FIXABLE when fixing became the default (2026-09-11).
-
-    On the first ticket checked that way the model proposed replacing DSLF-1240's
-    "TINA.TORRES@DATA-AXLE.COM" with the bare host "ftp.lakegroupmedia.com". An
-    "Ship to: FTP <host>" block followed some lines later by a notify mailbox is the
-    normal shape on these orders, so that write would have been a regression applied
-    automatically. It is the destination: same class as the database triad.
-    """
-    fid, _, reason = qc._validate_fix("ship_to_email", "ftp.lakegroupmedia.com", {})
-    check("ship_to_email refused", fid, None)
+def test_the_destination_is_never_overwritten():
+    """DSLF-1240: the model proposed replacing a correct notify mailbox with the bare FTP host."""
+    fields = {"ship_to_email": "TINA.TORRES@DATA-AXLE.COM", "shipping_method": "FTP"}
+    fid, _, reason = qc._validate_fix("ship_to_email", "ftp.lakegroupmedia.com", fields,
+                                      order_text="Ship to: FTP ftp.lakegroupmedia.com")
+    check("filled ship_to_email refused", fid, None)
     check("ship_to_email says why", bool(reason), True)
+
+
+# DSLF-1404: SHIP TO "NOT APPLICABLE", the notify mailbox only in prose; the model's value carried a literal "...".
+_NOTIFY_ORDER = ("CONTACT\nSara Ghods\nsara@celcononprofit.com\nSHIP TO\nNOT APPLICABLE\n"
+                 "Notify pubc@mmidirect.com when file is posted with file name.\n")
+_BLANK_FTP = {"ship_to_email": "", "shipping_method": "FTP",
+              "requestor_email": "sara@celcononprofit.com"}
+
+
+def test_a_blank_ftp_ship_to_is_filled_from_the_order():
+    fid, val, reason = qc._validate_fix("ship_to_email", "FTP NOTIFY: ... pubc@mmidirect.com",
+                                        _BLANK_FTP, order_text=_NOTIFY_ORDER)
+    check("blank FTP ship-to is writable", (fid, reason), ("customfield_12275", None))
+    check("written as the house FTP NOTIFY form, no ellipsis", val, "FTP NOTIFY: pubc@mmidirect.com")
+
+
+def test_the_ship_to_fill_refuses_everything_else():
+    def refused(value, fields, text=_NOTIFY_ORDER):
+        return qc._validate_fix("ship_to_email", value, fields, order_text=text)[0] is None
+    check("email delivery is not filled", refused("pubc@mmidirect.com", dict(_BLANK_FTP, shipping_method="Email")), True)
+    check("an address not on the order is refused", refused("files@elsewhere.com", _BLANK_FTP), True)
+    check("no order text, no fill", refused("pubc@mmidirect.com", _BLANK_FTP, ""), True)
+    check("the requestor is the CC, not the destination", refused("sara@celcononprofit.com", _BLANK_FTP), True)
+    check("two addresses is not one destination", refused("pubc@mmidirect.com, sara@celcononprofit.com", _BLANK_FTP), True)
+    check("a bare host is not an address", refused("files.mmidirect.com", _BLANK_FTP), True)
+    check("no requestor on the ticket, no fill", refused("pubc@mmidirect.com", dict(_BLANK_FTP, requestor_email="")), True)
+
+
+def test_a_filled_ship_to_is_never_overwritten_even_by_a_printed_address():
+    fields = dict(_BLANK_FTP, ship_to_email="FTP NOTIFY: other@mmidirect.com")
+    fid, _, reason = qc._validate_fix("ship_to_email", "pubc@mmidirect.com", fields, order_text=_NOTIFY_ORDER)
+    check("filled ship-to refused", fid, None)
+    check("refused for being filled", "never overwritten" in (reason or ""), True)
+
+
+def test_a_same_pass_method_change_drops_the_ship_to_fill():
+    findings = [{"field": "Ship To Email", "severity": "BLOCKING-BLANK", "fix_field": "ship_to_email",
+                 "fix_value": "pubc@mmidirect.com"},
+                {"field": "Shipping Method", "severity": "WRONG", "fix_field": "shipping_method",
+                 "fix_value": "Email"}]
+    r = qc.apply_fixes("DSLF-0", findings, _BLANK_FTP, dry_run=True, order_text=_NOTIFY_ORDER)
+    check("only the method change is applied", [a.split(":")[0] for a in r["applied"]], ["shipping_method"])
+    check("the fill is reported as refused", any(x.startswith("ship_to_email:") for x in r["refused"]), True)
+
+
+def test_apply_fixes_reports_the_value_it_wrote():
+    findings = [{"field": "Ship To Email", "severity": "BLOCKING-BLANK", "ticket_value": "",
+                 "fix_field": "ship_to_email", "fix_value": "FTP NOTIFY: ... pubc@mmidirect.com"}]
+    r = qc.apply_fixes("DSLF-0", findings, _BLANK_FTP, dry_run=True, order_text=_NOTIFY_ORDER)
+    check("the comment shows the written value",
+          r["applied"], ["ship_to_email: (empty) -> FTP NOTIFY: pubc@mmidirect.com"])
+
+
+def test_the_model_may_propose_the_ship_to_fill():
+    desc = qc._finding_props(True)["fix_field"]["description"]
+    check("ship_to_email offered as a fix_field", "ship_to_email" in desc, True)
+    check("still not a plain _FIXABLE field", "ship_to_email" in qc._FIXABLE, False)
 
 
 def test_empty_fix_value_is_refused():

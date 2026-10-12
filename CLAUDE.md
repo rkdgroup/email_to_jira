@@ -85,7 +85,7 @@ python test_duplicate_check.py       # dup key: PO, blank-PO fallback, AMLC
 python test_wo_failure_report.py     # WO failure/skip posted on the ticket, never fails the create
 python test_ncc_dnm_omit.py          # NCC do-not-mail line stripped for N11D only
 python test_household_omit.py       # 1 PER HOUSEHOLD reaches the omission for every broker
-python test_celco_fields.py          # CELCO wrapped segment, CONTACT requestor, FTP notify, Key Code line
+python test_celco_fields.py          # CELCO wrapped segment, CONTACT requestor, FTP notify (+ "Notify X" prose), Key Code lines
 python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
 python "WO#/test_ibmi_credentials.py"        # blank env var cannot mask .env; empty password fails loudly
 ```
@@ -612,7 +612,7 @@ writes them in **one PUT**. What it refuses, and why the refusals are the design
   `client_lookup`, not off the order; they are select fields resolved against a live
   createmeta lookup; and a wrong write here is the worst outcome in this system. Reported,
   never written.
-- **`ship_to_email` is never writable either — it is the destination**, the same class of
+- **`ship_to_email` is never overwritten — it is the destination**, the same class of
   field. It came out of `_FIXABLE` when fixing became the default (2026-09-11) and no human
   vetted each write any more. `Ship to: FTP <host>` followed 8–14 lines later by a notify
   mailbox is the **normal** shape on WE ARE MOORE / DATA-AXLE orders, and that mailbox is
@@ -620,6 +620,12 @@ writes them in **one PUT**. What it refuses, and why the refusals are the design
   replacing the notify address with the bare FTP host and be wrong. **The field holds the
   notify address; the FTP is carried by Shipping Method.** Destination rules belong in
   `apply_ship_to_rules`, where they are house rules rather than one model's read.
+  **The one sanctioned write is `_ship_to_fill`** (2026-10-12, DSLF-1404): a **blank** Ship To
+  on a ticket already `FTP`, filled with exactly one address that the order text prints and
+  that is not the Requestor Email, always written `FTP NOTIFY: <addr>` as the order spells it.
+  A filled value is never overwritten. On FTP the field is only the notify mailbox: PP21's
+  `TO:` line is email-delivery only (LRF_Processing `dslf_printplus.py`), so the file's route
+  never depends on it.
 - **`description` / `omission` are never overwritten** — ADF prose owned by the parsers and
   `tools_polish`, and a field-level overwrite flattens the bullet structure
   `_build_adf_description` builds. **The one sanctioned edit is `fix_field: "omission_move"`**

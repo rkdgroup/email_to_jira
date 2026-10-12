@@ -509,7 +509,7 @@ def _finding_props(with_fix: bool) -> dict:
             "type": "string",
             "description": "Machine key of the ticket field to correct, or \"\" when this "
                            "finding is not a simple field correction. Must be one of: "
-                           + ", ".join(sorted(_FIXABLE) + [_MOVE_FIELD]),
+                           + ", ".join(sorted(_FIXABLE) + [_SHIP_TO_FILL, _MOVE_FIELD]),
         }
         props["fix_value"] = {
             "type": "string",
@@ -566,7 +566,7 @@ def _schema(with_fix: bool) -> dict:
 #     NORMAL shape (mpfiles@adstradata.com for sftp.adstramft.com, MooreDS@wearemoore.com
 #     for mooremft.wearemoore.com), and on DSLF-1082 that mailbox is at a different company
 #     from the host too. The field holds the notify address and Shipping Method carries the
-#     FTP. Reported, never written. Destination rules belong in
+#     FTP. Never overwritten; the one write is _ship_to_fill's (DSLF-1404). Destination rules belong in
 #     tools_jira.apply_ship_to_rules, where they are house rules rather than a model's read.
 #   status / work order — not data, and not this tool's business.
 #
@@ -578,6 +578,10 @@ from tools_jira import (AVAILABILITY_RULE_OPTIONS, FILE_FORMAT_OPTIONS,
 # from the ticket's own Description, not from the order. adf_move does the surgery
 # and refuses anything ambiguous. See adf_move.plan_move.
 _MOVE_FIELD = "omission_move"
+
+# Not in _FIXABLE either: only a BLANK Ship To on an FTP order is filled, from an address the order prints.
+_SHIP_TO_FILL = "ship_to_email"
+_EMAIL_RE = re.compile(r"[\w.+-]+@[\w.-]+\.\w+")
 
 _FIXABLE = {
     "summary":               ("summary",           "text"),
@@ -860,6 +864,9 @@ so propose one only when the order states the correct value plainly and you can 
 Never propose a fix for client_db, seed_db, billable_account, the Description or the
 Omission Description. Those are resolved from configuration or built by the pipeline, not
 read off the order. Report them; do not try to correct them.
+
+Propose "ship_to_email" only when the ticket's Ship To Email is (empty) on an FTP order:
+"fix_value" is the one notify address exactly as the order prints it, nothing else.
 
 ONE EXCEPTION, and only this one: when an omission/suppression instruction has been left in
 the Description that belongs in the Omission Description, set "fix_field" to "omission_move"
@@ -1486,7 +1493,28 @@ review = review_select
 # Auto-fix
 # ---------------------------------------------------------------------------
 
-def _validate_fix(field: str, value: str, ticket_fields: dict) -> tuple:
+def _ship_to_fill(value: str, ticket_fields: dict, order_text: str) -> tuple:
+    """(field_id, 'FTP NOTIFY: <addr>', None) for a blank FTP Ship To the order names, else (None, None, reason)."""
+    if (ticket_fields.get("ship_to_email") or "").strip():
+        return None, None, "Ship To Email is the destination: a filled one is never overwritten"
+    if (ticket_fields.get("shipping_method") or "").strip() != "FTP":
+        return None, None, "Ship To Email is filled only on an FTP order"
+    proposed = _EMAIL_RE.findall(value or "")
+    if len(proposed) != 1:
+        return None, None, f"{value!r} does not name exactly one address"
+    printed = {a.lower(): a for a in _EMAIL_RE.findall(order_text or "")}
+    addr = printed.get(proposed[0].lower())
+    if not addr:
+        return None, None, f"{proposed[0]} is not printed on the order"
+    requestor = (ticket_fields.get("requestor_email") or "").strip().lower()
+    if not requestor:
+        return None, None, "no Requestor Email to tell the CC from the destination"
+    if addr.lower() == requestor:
+        return None, None, f"{addr} is the requestor -- the CC, not the destination"
+    return "customfield_12275", f"FTP NOTIFY: {addr}", None
+
+
+def _validate_fix(field: str, value: str, ticket_fields: dict, order_text: str = "") -> tuple:
     """(jira_field_id, jira_value, None) if writable, else (None, None, reason).
 
     Same job as LLM_writes._validate_and_fix, in the opposite direction: that one blanks a
@@ -1494,6 +1522,8 @@ def _validate_fix(field: str, value: str, ticket_fields: dict) -> tuple:
     option Jira cannot resolve is dropped server-side WITHOUT failing the request, so an
     unchecked write here looks like it worked and silently changed nothing.
     """
+    if field == _SHIP_TO_FILL:
+        return _ship_to_fill(value, ticket_fields, order_text)
     if field not in _FIXABLE:
         return None, None, f"{field!r} is not an auto-fixable field (reported only)"
     value = (value or "").strip()
@@ -1541,7 +1571,7 @@ def _validate_fix(field: str, value: str, ticket_fields: dict) -> tuple:
 
 
 def apply_fixes(ticket_key: str, findings: list, ticket_fields: dict,
-                dry_run: bool = False) -> dict:
+                dry_run: bool = False, order_text: str = "") -> dict:
     """Write the order check's field corrections back to the ticket.
 
     One PUT for every accepted fix at once. Returns {"applied": [...], "refused": [...]}.
@@ -1570,7 +1600,7 @@ def apply_fixes(ticket_key: str, findings: list, ticket_fields: dict,
                 payload["customfield_12270"] = plan.omission
                 applied.append(f"{field}: {plan.reason}")
             continue
-        fid, jval, reason = _validate_fix(field, value, ticket_fields)
+        fid, jval, reason = _validate_fix(field, value, ticket_fields, order_text)
         if reason:
             refused.append(f"{field}: {reason}")
             continue
@@ -1578,7 +1608,15 @@ def apply_fixes(ticket_key: str, findings: list, ticket_fields: dict,
             refused.append(f"{field}: a second fix for the same field, ignored")
             continue
         payload[fid] = jval
-        applied.append(f"{field}: {f.get('ticket_value') or '(empty)'} -> {value}")
+        # The comment names what was WRITTEN: the ship-to fill rewrites the model's value.
+        applied.append(f"{field}: {f.get('ticket_value') or '(empty)'} -> "
+                       f"{jval if isinstance(jval, str) else value}")
+
+    # The fill was judged against the ticket's FTP; a same-pass method change voids that.
+    if "customfield_12275" in payload and "customfield_12276" in payload:
+        del payload["customfield_12275"]
+        applied = [a for a in applied if not a.startswith(f"{_SHIP_TO_FILL}:")]
+        refused.append(f"{_SHIP_TO_FILL}: Shipping Method changes in the same pass")
 
     if not payload:
         return {"applied": [], "refused": refused, "ok": True}
@@ -1800,6 +1838,7 @@ def check_ticket(ticket_key: str, post: bool = False, fix: bool = False,
 
     attachments = fields.get("attachments") or []
     tmp_dir = tempfile.mkdtemp(prefix="dslf_qc_")
+    order_text = ""
     try:
         if do_order:
             order_att, broker, warns = find_order_attachment(attachments, ticket_key)
@@ -1813,6 +1852,11 @@ def check_ticket(ticket_key: str, post: bool = False, fix: bool = False,
                     out["order"] = review_order(path, fields, model=model, effort=effort)
                 except Exception as e:
                     out["order"] = _unverified(f"order PDF download failed: {e}", "ORDER")
+                try:
+                    from tools_pdf import extract_pdf_text
+                    order_text = extract_pdf_text(path)
+                except Exception as e:                  # no text only refuses the ship-to fill
+                    log.warning("Order text unreadable on %s: %s", ticket_key, e)
             elif warns:
                 out["order"] = _unverified("; ".join(warns), "ORDER")
 
@@ -1837,7 +1881,7 @@ def check_ticket(ticket_key: str, post: bool = False, fix: bool = False,
         # the ticket to match it would erase the evidence that it was wrong.
         if fix and out.get("order"):
             out["fixes"] = apply_fixes(ticket_key, out["order"].get("findings") or [],
-                                       fields, dry_run=dry_run)
+                                       fields, dry_run=dry_run, order_text=order_text)
 
         out["report"] = format_report(ticket_key, out)
 

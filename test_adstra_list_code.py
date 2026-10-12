@@ -165,6 +165,16 @@ def test_a_value_cannot_start_with_punctuation():
     check("leading slash is not a PO", _po("\n/19217"), "")
 
 
+def test_ftp_notification_line_is_the_notify_address():
+    """DSLF-1383/1385/1386: Ship-To DATA AXLE via F.T.P., the mailbox only on a SEND NOTIFICATION line."""
+    ftp = (_order("3-SDCA CHARITABLE APPEALS MF\n(00123)")
+           .replace("Ship-To:\nVERADATA\nVIA:\nE-MAIL\nATTN:\nDATA@VERADATA.COM\n", "Ship-To:\nDATA AXLE\nVIA:\nF.T.P.\nATTN:\n"))
+    for line in ("SEND NOTIFICATION TO: INCOMING.FILES@DATA-AXLE.COM",
+                 "SEND NOTIFICATION: INCOMING.FILES@DATA-AXLE.COM"):
+        r = PARSER_REGISTRY["adstra"].parse(ftp + "HTTPS://WWW.IGXFER.COM\n" + line + "\n")
+        check(f"notify from {line[:22]!r}", r.ship_to_email, "FTP NOTIFY: INCOMING.FILES@DATA-AXLE.COM")
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),

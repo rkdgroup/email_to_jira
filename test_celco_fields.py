@@ -117,6 +117,18 @@ _EMAIL_TAIL = (_D04_086888
                         "NOTIFICATION TO apiper@data-management.com\n"))
 
 
+# D04-086938-NI (DSLF-1404) tail: the FTP notify mailbox and key code ride in prose; its sFTP login line is left out.
+_NOTIFY_TAIL = (_D04_086888
+                .replace("PLEASE POST FILE TO:\n"
+                         "https://nexusdirect.sharefile.com/r-rb12a71eb67094b40a717d7ab6d2a4565\n"
+                         "PLEASE SEND CONFIRMATION TO: incoming.files@nexusdirect.com\n"
+                         "PLEASE MARK FILE AS:  PO#, Mailer, List, Segment, Key Code '0845, Quantity\n",
+                         "MMI Direct / Public Citizen\n"
+                         "https://files.mmidirect.com/\n"
+                         "Label file: PC, Job#, ListName, KEYCODE 0005C\n"
+                         "Notify pubc@mmidirect.com when file is posted with file name.\n"))
+
+
 def _parse(text=_D04_086888):
     return PARSER_REGISTRY["celco"].parse(text)
 
@@ -187,6 +199,26 @@ def test_file_destination_beats_the_notification_on_one_line():
         "tlibrarian@data-management.com AND SEND SHIPMENT\nNOTIFICATION TO apiper@data-management.com",
         "data@mailshop.com AND SEND SHIPMENT NOTIFICATION TO rep@broker.com")
     check("destination, not the notification", _parse(one_line).ship_to_email, "data@mailshop.com")
+
+
+def test_notify_line_is_the_ftp_notify_address():
+    r = _parse(_NOTIFY_TAIL)
+    check("Notify <addr> is the ship-to", r.ship_to_email, "FTP NOTIFY: pubc@mmidirect.com")
+    check("requestor stays the CONTACT AT rep", r.requestor_email, "sara@celcononprofit.com")
+    check("cc stays the requestor", r.shipping_instructions, "CC: sara@celcononprofit.com")
+
+
+def test_notify_us_of_changes_is_not_an_address():
+    no_notify = _NOTIFY_TAIL.replace("Notify pubc@mmidirect.com when file is posted with file name.\n", "")
+    check("NOTIFY US OF CHANGES names nobody", _parse(no_notify).ship_to_email, "")
+    rep = _NOTIFY_TAIL.replace("Notify pubc@mmidirect.com", "Notify sara@celcononprofit.com")
+    check("notifying the CONTACT rep is not a destination", _parse(rep).ship_to_email, "")
+    emailed = _NOTIFY_TAIL.replace("FTP\nSHIP VIA", "EMAIL\nSHIP VIA")
+    check("Notify on an EMAIL order is not the drop point", _parse(emailed).ship_to_email, "")
+
+
+def test_key_code_from_a_spaceless_keycode_line():
+    check("KEYCODE 0005C on the label line", _parse(_NOTIFY_TAIL).key_code, "0005C")
 
 
 def main():
