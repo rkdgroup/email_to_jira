@@ -163,6 +163,12 @@ def send_via_outlook(path: Path, to: str, cc: str, today: datetime) -> None:
                 sys.exit("Couldn't reach classic Outlook - open it once and run again with --send.")
             print("Waiting for Outlook to start...")
             time.sleep(20)
+    ns = outlook.GetNamespace("MAPI")
+    # An Outlook started by this script has no main window, and it quits the
+    # moment the draft window closes on Send() - before the Outbox is flushed
+    # (09-Oct and 12-Oct: reports stuck there). Opening the Inbox keeps it alive.
+    if outlook.Explorers.Count == 0:
+        ns.GetDefaultFolder(6).Display()  # 6 = olFolderInbox
     mail = outlook.CreateItem(0)  # 0 = MailItem
     # Opening the draft makes Outlook insert the account's default signature (a
     # hidden GetInspector does too, but then Send() fails). The message goes right
@@ -175,15 +181,23 @@ def send_via_outlook(path: Path, to: str, cc: str, today: datetime) -> None:
                            mail.HTMLBody, count=1, flags=re.IGNORECASE)
     mail.Attachments.Add(str(path.resolve()))
     subject = mail.Subject
-    mail.Send()
-    # Send() only queues the mail. An Outlook this script started can close again
-    # on exit before flushing the Outbox (09-Oct: three reports stuck there), so
-    # push a send/receive and wait for the Outbox to let go of it.
-    ns = outlook.GetNamespace("MAPI")
     outbox = ns.GetDefaultFolder(4)  # 4 = olFolderOutbox
+    # A stuck copy from an earlier failed run has the same subject; only watch ours
+    stale = {item.EntryID for item in outbox.Items if item.Subject == subject}
+    mail.Send()
+    # Send() only queues the mail: push a send/receive and wait for the Outbox to
+    # let go of it, so "sent" is never printed for a mail that is still sitting there.
     ns.SendAndReceive(False)
+
+    def pending() -> bool:
+        try:
+            return any(item.Subject == subject and item.EntryID not in stale
+                       for item in outbox.Items)
+        except pywintypes.com_error:
+            return True  # Outlook locks an item while it is transmitting it
+
     for _ in range(60):
-        if not any(item.Subject == subject for item in outbox.Items):
+        if not pending():
             print(f"Email sent to {to}" + (f" (cc {cc})" if cc else ""))
             return
         time.sleep(2)
