@@ -141,6 +141,7 @@ class CelcoParser(BaseBrokerParser):
                         # DSLF-1366: a long segment wraps ("... SCFS 940-941," / "943-947, 949 ONLY").
                         # ponytail: joins only after a visibly unfinished line - the label-block
                         # layout puts the FORMAT value next, which must not be swallowed.
+                        # Revisit when a CELCO segment is cut after a line that ends cleanly.
                         k = j + 1
                         while (k < len(lines) and lines[k] not in _CELCO_LABELS
                                and re.search(r"(?:[,&/-]|\bAND|\bOR)$", segment)):

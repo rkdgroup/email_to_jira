@@ -71,6 +71,35 @@ def test_unverified_carries_no_findings_and_a_reason():
     check("UNVERIFIED names the check", r["check"], "SELECT")
 
 
+def test_a_billed_call_with_unusable_output_still_shows_its_cost():
+    """Unparseable JSON is UNVERIFIED, but the call was paid for — the footer must say so."""
+    import tempfile
+    from types import SimpleNamespace as NS
+    usage = NS(input_tokens=10_000, output_tokens=1_000,
+               cache_read_input_tokens=0, cache_creation_input_tokens=0)
+    resp = NS(stop_reason="end_turn", usage=usage,
+              content=[NS(type="text", text="not json {")])
+    fake = NS(Anthropic=lambda **kw: NS(messages=NS(create=lambda **kw: resp)))
+    saved_mod, saved_rec = sys.modules.get("anthropic"), qc.usage_log.record
+    sys.modules["anthropic"] = fake
+    qc.usage_log.record = lambda *a, **k: None
+    os.environ.setdefault("ANTHROPIC_API_KEY", "test-key-not-used")
+    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+        f.write(b"%PDF-1.4 billed-but-unparsed")
+    try:
+        r = qc._review(f.name, "sys", {}, "user", "ORDER", model=qc.QC_MODEL)
+    finally:
+        qc.usage_log.record = saved_rec
+        if saved_mod is None:
+            sys.modules.pop("anthropic", None)
+        else:
+            sys.modules["anthropic"] = saved_mod
+        os.unlink(f.name)
+    check("unparseable output is UNVERIFIED", r["verdict"], qc.UNVERIFIED)
+    check("its cost is reported", r.get("cost_usd", 0) > 0, True)
+    check("its model is named so the footer prints", r.get("model"), qc.QC_MODEL)
+
+
 def test_review_never_raises_on_a_broken_ticket():
     """The prompt build reads the profile YAML and the ticket ADF; both can throw."""
     class Exploding(dict):

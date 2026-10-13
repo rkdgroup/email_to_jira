@@ -1307,6 +1307,17 @@ def _review(pdf_path: str, system: str, schema: dict, user_text: str,
         return hit
 
     started = time.monotonic()
+    resp = None
+
+    def _paid_unverified(reason: str) -> dict:
+        # A call that reached the API was billed even when its answer is unusable, so
+        # the footer still shows what it cost.
+        r = _unverified(reason, check)
+        if resp is not None:
+            r["model"] = model
+            r["cost_usd"] = _cost_usd(getattr(resp, "usage", None), model)
+        return r
+
     try:
         import anthropic
         client = anthropic.Anthropic(timeout=QC_TIMEOUT_S)
@@ -1345,22 +1356,19 @@ def _review(pdf_path: str, system: str, schema: dict, user_text: str,
         )
         usage_log.record(f"qc_checker.{check}", resp, Path(pdf_path).name)
         if resp.stop_reason == "refusal":
-            return _unverified("the model refused this PDF", check)
+            return _paid_unverified("the model refused this PDF")
         text = next((b.text for b in resp.content if b.type == "text"), "")
         if not text:
-            return _unverified("the model returned no output", check)
+            return _paid_unverified("the model returned no output")
         result = json.loads(text)
     except Exception as e:
-        return _unverified(f"API call failed ({e}) — no QC ran on this ticket", check)
+        return _paid_unverified(f"API call failed ({e}) — no QC ran on this ticket")
 
     elapsed = time.monotonic() - started
     result["findings"] = [f for f in (result.get("findings") or [])
                           if isinstance(f, dict) and f.get("field")]
     result["model"]     = model
     result["elapsed_s"] = elapsed
-    # ponytail: a call that succeeds and then fails json.loads returns UNVERIFIED above,
-    # and the money it spent is not reported. Under-reporting a failed parse is the safe
-    # direction; over-reporting is not.
     result["cost_usd"]  = _cost_usd(getattr(resp, "usage", None), model)
     result["check"]     = check
     result = _reconcile(result)
