@@ -1391,7 +1391,7 @@ I12:
   - OPEN UP WORK ORDER IN PEPBOOK AS I13D.
   - COUNTS ARE RAN MONTHLY THROUGH THE END OF THE COMPLETED PREVIOUS MONTH.
 I16:
-  select_by: MOST RECENT DATE &
+  select_by: MOST RECENT DATE & LARGEST DOLLAR
   flags: $, D, R, X
   dollar_cap: $249.99
   standard_suppressions:
@@ -2473,7 +2473,7 @@ P82D:
   - OMIT NCOA REASON CODES
   - D  M
 P88D:
-  select_by: MOST RECENT DATE &
+  select_by: MOST RECENT DATE & LARGEST DOLLAR
   flags: '!, $'
   dollar_cap: $99.99
   standard_suppressions:
