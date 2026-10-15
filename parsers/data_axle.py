@@ -1,7 +1,7 @@
 """Parser for Data Axle and SimioCloud broker PDF orders."""
 
 import re
-from parsers.base import BaseBrokerParser, CONFIDENCE_RULE_BASED
+from parsers.base import BaseBrokerParser, CONFIDENCE_RULE_BASED, HOUSEHOLD, HOUSEHOLD_RE
 from parse_result import ParseResult
 
 # --- Ship Label PO extraction ------------------------------------------------------
@@ -68,10 +68,8 @@ class DataAxleParser(BaseBrokerParser):
     # the field label ("Base: ...", "Selects: SCF=") or base criteria, which belong in the
     # description rather than the omission.
     _OMIT_CLAUSE_RE = re.compile(r"\*?\s*OMIT\b.*", re.IGNORECASE)
-    # Same wording LRF's criteria_parser reads as the household dedupe; never "2 PER HH".
-    _HOUSEHOLD_RE = re.compile(r"\b(?:1|ONE)\s*(?:NAMES?\s+)?/?\s*PER\s+H(?:OUSEHOLD|H)\b",
-                               re.IGNORECASE)
-    _HOUSEHOLD = "1 PER HOUSEHOLD"
+    _HOUSEHOLD_RE = HOUSEHOLD_RE
+    _HOUSEHOLD = HOUSEHOLD
 
     def _collect_omit_clauses(self, text: str) -> list[str]:
         """Every OMIT clause printed on the order, in page order, de-duplicated.

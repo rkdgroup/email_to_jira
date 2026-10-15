@@ -95,6 +95,23 @@ def _strip_ncc_dnm(omission: str) -> str:
     return "\n".join(kept)
 
 
+_NEGATED_RE = re.compile(r"\bDO\s+NOT\b|\bDON'?T\b", re.IGNORECASE)
+
+
+def _with_household(omission: str, order_text: str) -> str:
+    """Append 1 PER HOUSEHOLD when the order asks for it and no parser kept it (DSLF-1429)."""
+    from parsers.base import HOUSEHOLD, HOUSEHOLD_RE
+    if HOUSEHOLD_RE.search(omission or ""):
+        return omission
+    text = order_text or ""
+    # Only the words before the match on its own line can negate it ("DO NOT supply 1 per HH").
+    asked = any(not _NEGATED_RE.search(text[text.rfind("\n", 0, m.start()) + 1:m.start()])
+                for m in HOUSEHOLD_RE.finditer(text))
+    if not asked:
+        return omission
+    return f"{omission}\n{HOUSEHOLD}" if omission else HOUSEHOLD
+
+
 def _find_supplementary_files(pdf_path: str, order_number: str) -> list[Path]:
     """
     Find supplementary files (xlsx, xls, csv) in the same folder as the PDF
@@ -348,6 +365,8 @@ def finalize_and_create(result, pdf_path: str, text: str,
         result.segment_criteria, kwargs.get("omission_description", ""))
     if polished_omission:
         kwargs["omission_description"] = polished_omission
+    # Every broker: a household line with no OMIT word slips past the per-parser omit filters.
+    kwargs["omission_description"] = _with_household(kwargs.get("omission_description", ""), text)
 
     # profile_blocks_to_omission: the caller wants the profile's suppression and
     # instruction blocks filed as omission criteria rather than description body. Default

@@ -84,6 +84,7 @@ python test_qty_subject_and_body.py  # qty-email subject codes + requestor in th
 python test_duplicate_check.py       # dup key: PO, blank-PO fallback, AMLC
 python test_wo_failure_report.py     # WO failure/skip posted on the ticket, never fails the create
 python test_ncc_dnm_omit.py          # NCC do-not-mail line stripped for N11D only
+python test_household_omit.py       # 1 PER HOUSEHOLD reaches the omission for every broker
 python test_celco_fields.py          # CELCO wrapped segment, CONTACT requestor, FTP notify, Key Code line
 python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
 python "WO#/test_ibmi_credentials.py"        # blank env var cannot mask .env; empty password fails loudly
@@ -93,7 +94,7 @@ Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap
 `parsers/adstra.py`, `parsers/data_axle.py`, `qc_checker.py`,
 `parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
 `parse_pipeline._dup_check_key`, `parse_pipeline._create_and_link_work_order`,
-`parse_pipeline._strip_ncc_dnm`, `parsers/celco.py`, `qty_approval_scanner.py`, `WO#/work_order.py`,
+`parse_pipeline._strip_ncc_dnm`, `parse_pipeline._with_household`, `parsers/celco.py`, `qty_approval_scanner.py`, `WO#/work_order.py`,
 `WO#/base.py`, `adf_move.py`, or `usage_log.py`. Verified all seventeen pass (224 tests)
 2026-10-06. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
@@ -201,6 +202,12 @@ PDF → [tools_pdf] extract text (PyMuPDF primary; pdfminer fallback only if PyM
 
 Load-bearing behaviors that are easy to get wrong:
 
+- **A household dedupe is added for every broker, after the parser.** Each parser keeps only
+  OMIT-ish lines, so `**PLEASE PROVIDE ONE NAME PER HOUSEHOLD.` (KAP, DSLF-1429) and
+  `Please supply one per household.` (Data Axle, DSLF-1402) were dropped and the ticket check
+  failed. `parse_pipeline._with_household` reads the raw order text with `parsers.base.HOUSEHOLD_RE`
+  — the pattern LRF's `criteria_parser` reads — and appends `1 PER HOUSEHOLD` unless the
+  omission already says it or the line says DO NOT. Never `2 PER HH`.
 - **Validation is advisory.** `validate_result()` errors only abort when `result.confidence == 0.0`. Rule-based parsers always return 0.92, so missing required fields (mailer_name, mailer_po, list_name, list_manager, requested_quantity) just log "proceeding" and a **partial ticket is still created**. Only a totally-unparsed PDF is blocked.
 - **The ADSTRA STANDARD OMITS block is hardcoded in the parser, and one of its lines is not
   standard.** `parsers/adstra.py:141` prepends the same nine-line block to every ADSTRA

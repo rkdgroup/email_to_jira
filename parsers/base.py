@@ -6,6 +6,11 @@ from parse_result import ParseResult
 
 CONFIDENCE_RULE_BASED = 0.92
 
+# Same wording LRF's criteria_parser reads as the household dedupe; never "2 PER HH".
+HOUSEHOLD_RE = re.compile(r"\b(?:1|ONE)\s*(?:NAMES?\s+)?/?\s*PER\s+H(?:OUSEHOLD|H)\b",
+                          re.IGNORECASE)
+HOUSEHOLD = "1 PER HOUSEHOLD"
+
 
 class BaseBrokerParser(ABC):
     """All broker parsers inherit from this and implement parse()."""
