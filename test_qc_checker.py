@@ -209,6 +209,47 @@ def test_a_blank_ftp_ship_to_is_filled_from_the_order():
     check("written as the house FTP NOTIFY form, no ellipsis", val, "FTP NOTIFY: pubc@mmidirect.com")
 
 
+_OMIT_1429 = {"type": "doc", "version": 1, "content": [
+    {"type": "paragraph", "content": [{"type": "text", "text": "Omit all APO, FPO, Foreign addresses DMA Panders"}]},
+    {"type": "paragraph", "content": [{"type": "text", "text": "FLAG OMITS: A, N, O, X, Y, Z, 2, 3, 4, 7, !, $"}]}]}
+_ORDER_1429 = "**PLEASE PROVIDE ONE NAME PER HOUSEHOLD. Must supply individual names.\n"
+
+
+def test_a_household_the_order_asks_for_is_added_without_the_model():
+    # DSLF-1429: the ticket lost it, the check knew, and nothing was allowed to write it.
+    doc = qc._household_fix(_OMIT_1429, _ORDER_1429)
+    import adf_move
+    check("1 PER HOUSEHOLD appended", adf_move.lines(doc)[-1], "1 PER HOUSEHOLD")
+    check("the rest is untouched", adf_move.lines(doc)[:2], adf_move.lines(_OMIT_1429))
+    r = qc.apply_fixes("DSLF-0", [], {"omission_adf": _OMIT_1429}, dry_run=True, order_text=_ORDER_1429)
+    check("applied under its own label, never masking an Omission finding",
+          [a.split(":")[0] for a in r["applied"]], ["household"])
+
+
+def test_the_household_fix_leaves_everything_else_alone():
+    import adf_move
+    check("already there", qc._household_fix(adf_move_doc("1 PER HOUSEHOLD"), _ORDER_1429), None)
+    check("the order never asked", qc._household_fix(_OMIT_1429, "Omit all APO, FPO"), None)
+    check("2 per household is not ours to add", qc._household_fix(_OMIT_1429, "2 PER HOUSEHOLD"), None)
+    check("a spaced one gets the spelling LRF reads (DSLF-1385)",
+          adf_move.lines(qc._household_fix(adf_move_doc("1 PER HOUSE HOLD"), "1 PER HOUSE HOLD")),
+          ["1 PER HOUSE HOLD", "1 PER HOUSEHOLD"])
+    check("a plain-string omission is not edited", qc._household_fix("OMIT: NJ", _ORDER_1429), None)
+
+
+def adf_move_doc(line: str) -> dict:
+    import adf_move
+    return adf_move.append_line(None, line)
+
+
+def test_one_address_named_twice_is_one_address():
+    # DSLF-1373: "FTP NOTIFY: idm@... (source: Notify idm@... when file is posted)".
+    text = _NOTIFY_ORDER + "Notify idm@mmidirect.com when file is posted\n"
+    val = qc._validate_fix("ship_to_email", "FTP NOTIFY: idm@mmidirect.com (source: Notify "
+                           "idm@mmidirect.com when file is posted)", _BLANK_FTP, order_text=text)[1]
+    check("a repeated address is still one destination", val, "FTP NOTIFY: idm@mmidirect.com")
+
+
 def test_the_ship_to_fill_refuses_everything_else():
     def refused(value, fields, text=_NOTIFY_ORDER):
         return qc._validate_fix("ship_to_email", value, fields, order_text=text)[0] is None
@@ -221,11 +262,56 @@ def test_the_ship_to_fill_refuses_everything_else():
     check("no requestor on the ticket, no fill", refused("pubc@mmidirect.com", dict(_BLANK_FTP, requestor_email="")), True)
 
 
-def test_a_filled_ship_to_is_never_overwritten_even_by_a_printed_address():
+def test_a_filled_ship_to_the_order_names_is_never_overwritten():
+    text = _NOTIFY_ORDER + "Files also to other@mmidirect.com\n"
     fields = dict(_BLANK_FTP, ship_to_email="FTP NOTIFY: other@mmidirect.com")
-    fid, _, reason = qc._validate_fix("ship_to_email", "pubc@mmidirect.com", fields, order_text=_NOTIFY_ORDER)
-    check("filled ship-to refused", fid, None)
-    check("refused for being filled", "never overwritten" in (reason or ""), True)
+    fid, _, reason = qc._validate_fix("ship_to_email", "pubc@mmidirect.com", fields, order_text=text)
+    check("printed, non-requestor ship-to refused", fid, None)
+    check("refused for being a destination the order names", "never overwritten" in (reason or ""), True)
+
+
+# DSLF-1430: ADSTRA's Saturn order; the ticket carried the right mailbox without the label.
+_SATURN_ORDER = "Ship-To:\nSATURN CORP.\nCONVERT@SATURNCORP.COM\nSHIP TO SATURN CORP\n"
+_SATURN_FTP = {"ship_to_email": "FTP NOTIFY: CONVERT@SATURNCORP.COM", "shipping_method": "FTP",
+               "file_format": "ASCII Fixed", "requestor_email": "BOBBI.DURRETT@ADSTRADATA.COM"}
+
+
+def test_the_same_address_is_relabelled_by_the_house_rules():
+    fid, val, reason = qc._validate_fix("ship_to_email",
+                                        "FTP NOTIFY: CONVERT@SATURNCORP.COM (SATURN CORP)",
+                                        _SATURN_FTP, order_text=_SATURN_ORDER)
+    check("same-address relabel is writable", (fid, reason), ("customfield_12275", None))
+    check("written through apply_ship_to_rules", val, "FTP NOTIFY: CONVERT@SATURNCORP.COM (SATURN CORP)")
+
+
+def test_a_ship_to_that_is_the_requestor_or_off_the_order_is_replaced():
+    # DSLF-1365/1374: the broker's own rep stood where the order printed a drop point.
+    text = _NOTIFY_ORDER + "Contact Jenny Gomez at jgomez@keyacquisition.com\n"
+    rep = dict(_BLANK_FTP, ship_to_email="FTP NOTIFY: jgomez@keyacquisition.com",
+               requestor_email="jgomez@keyacquisition.com")
+    check("the requestor in Ship To is replaced",
+          qc._validate_fix("ship_to_email", "pubc@mmidirect.com", rep, order_text=text)[1],
+          "FTP NOTIFY: pubc@mmidirect.com")
+    stray = dict(_BLANK_FTP, ship_to_email="FTP NOTIFY: nobody@nowhere.com")
+    check("an address the order never prints is replaced",
+          qc._validate_fix("ship_to_email", "pubc@mmidirect.com", stray, order_text=_NOTIFY_ORDER)[1],
+          "FTP NOTIFY: pubc@mmidirect.com")
+
+
+def test_the_ship_to_write_refuses_when_the_house_rules_disagree():
+    inhouse = _NOTIFY_ORDER + "Upload to tlibrarian@data-management.com\n"
+    fid, _, reason = qc._validate_fix("ship_to_email", "tlibrarian@data-management.com",
+                                      _BLANK_FTP, order_text=inhouse)
+    check("an in-house address would change the method", fid, None)
+    check("says the rules disagree", "house rules" in (reason or ""), True)
+    fid, _, reason = qc._validate_fix("ship_to_email", "CONVERT@SATURNCORP.COM",
+                                      dict(_SATURN_FTP, file_format="ASCII Delimited"),
+                                      order_text=_SATURN_ORDER)
+    check("a format the rules would change is refused", fid, None)
+    fid, _, reason = qc._validate_fix("ship_to_email", "CONVERT@SATURNCORP.COM",
+                                      dict(_SATURN_FTP, ship_to_email="FTP NOTIFY: CONVERT@SATURNCORP.COM (SATURN CORP)"),
+                                      order_text=_SATURN_ORDER)
+    check("nothing to change is refused", (fid, "already" in (reason or "")), (None, True))
 
 
 def test_a_same_pass_method_change_drops_the_ship_to_fill():

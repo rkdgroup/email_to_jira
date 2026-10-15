@@ -27,7 +27,7 @@ def test_kap_wording_adds_the_canonical_line():
 def test_every_wording_seen_on_tickets_is_read():
     for said in ("SUPPLY 1 NAME PER HOUSEHOLD", "1 PER HOUSEHOLD", "ONE PER HOUSEHOLD",
                  "Please supply one per household.", "1 PER HH", "1/PER HH",
-                 "ONE NAME PER\nHOUSEHOLD"):
+                 "ONE NAME PER\nHOUSEHOLD", "1 PER HOUSE HOLD"):
         assert pp._with_household("OMIT: NJ", said) == "OMIT: NJ\n1 PER HOUSEHOLD", said
     print("PASS every wording on past tickets, and a PDF wrap, is read")
 
@@ -36,6 +36,13 @@ def test_an_omission_that_already_says_it_is_untouched():
     for omission in ("OMIT MN,NJ,APO/FPO - SUPPLY 1 NAME PER HOUSEHOLD", "1 PER HOUSEHOLD"):
         assert pp._with_household(omission, "SUPPLY 1 NAME PER HOUSEHOLD") == omission
     print("PASS adstra's verbatim line and data_axle's canonical line are not doubled")
+
+
+def test_a_spaced_house_hold_is_respelled_not_doubled():
+    # DSLF-1385: LRF's criteria_parser reads only "HOUSEHOLD", so the spaced form is rewritten.
+    out = pp._with_household("OMIT: NJ\n1 PER HOUSE HOLD", "1 PER HOUSE HOLD")
+    assert out == "OMIT: NJ\n1 PER HOUSEHOLD", out
+    print("PASS a kept 1 PER HOUSE HOLD becomes 1 PER HOUSEHOLD, once")
 
 
 def test_other_counts_and_negations_add_nothing():
@@ -67,6 +74,7 @@ if __name__ == "__main__":
     test_kap_wording_adds_the_canonical_line()
     test_every_wording_seen_on_tickets_is_read()
     test_an_omission_that_already_says_it_is_untouched()
+    test_a_spaced_house_hold_is_respelled_not_doubled()
     test_other_counts_and_negations_add_nothing()
     test_an_empty_omission_gets_just_the_line()
     test_the_line_written_is_the_line_the_pattern_reads()

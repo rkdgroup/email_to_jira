@@ -7,9 +7,17 @@ from parse_result import ParseResult
 CONFIDENCE_RULE_BASED = 0.92
 
 # Same wording LRF's criteria_parser reads as the household dedupe; never "2 PER HH".
-HOUSEHOLD_RE = re.compile(r"\b(?:1|ONE)\s*(?:NAMES?\s+)?/?\s*PER\s+H(?:OUSEHOLD|H)\b",
+HOUSEHOLD_RE = re.compile(r"\b(?:1|ONE)\s*(?:NAMES?\s+)?/?\s*PER\s+H(?:OUSE\s*HOLD|H)\b",
                           re.IGNORECASE)
 HOUSEHOLD = "1 PER HOUSEHOLD"
+_NEGATED_RE = re.compile(r"\bDO\s+NOT\b|\bDON'?T\b", re.IGNORECASE)
+
+
+def household_asked(text: str) -> bool:
+    """Does the order ask for one per household? Only words before it on its line can negate it."""
+    text = text or ""
+    return any(not _NEGATED_RE.search(text[text.rfind("\n", 0, m.start()) + 1:m.start()])
+               for m in HOUSEHOLD_RE.finditer(text))
 
 
 class BaseBrokerParser(ABC):

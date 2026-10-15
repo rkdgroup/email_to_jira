@@ -132,7 +132,8 @@ def apply_ship_to_rules(ship_to_email: str, file_format: str, shipping_method: s
             st = ship_to_email.strip()
             if "@" in st and not st.upper().startswith("FTP NOTIFY:"):
                 st = f"FTP NOTIFY: {st}"
-            if "saturn" not in st.lower():
+            # Every address is labelled, Saturn's own mailbox too (DSLF-1430); prose stays as written.
+            if "(SATURN CORP)" not in st.upper() and ("@" in st or "saturn" not in st.lower()):
                 st = f"{st} (SATURN CORP)"
             ship_to_email = st
         else:

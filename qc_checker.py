@@ -566,7 +566,9 @@ def _schema(with_fix: bool) -> dict:
 #     NORMAL shape (mpfiles@adstradata.com for sftp.adstramft.com, MooreDS@wearemoore.com
 #     for mooremft.wearemoore.com), and on DSLF-1082 that mailbox is at a different company
 #     from the host too. The field holds the notify address and Shipping Method carries the
-#     FTP. Never overwritten; the one write is _ship_to_fill's (DSLF-1404). Destination rules belong in
+#     FTP. The one write is _ship_to_fill's: an address the order prints, replacing only a blank,
+#     the same address, the requestor or an address the order never names (DSLF-1404/1430).
+#     Destination rules belong in
 #     tools_jira.apply_ship_to_rules, where they are house rules rather than a model's read.
 #   status / work order — not data, and not this tool's business.
 #
@@ -579,7 +581,7 @@ from tools_jira import (AVAILABILITY_RULE_OPTIONS, FILE_FORMAT_OPTIONS,
 # and refuses anything ambiguous. See adf_move.plan_move.
 _MOVE_FIELD = "omission_move"
 
-# Not in _FIXABLE either: only a BLANK Ship To on an FTP order is filled, from an address the order prints.
+# Not in _FIXABLE either: an FTP Ship To is written only from an address the order prints (_ship_to_fill).
 _SHIP_TO_FILL = "ship_to_email"
 _EMAIL_RE = re.compile(r"[\w.+-]+@[\w.-]+\.\w+")
 
@@ -865,8 +867,10 @@ Never propose a fix for client_db, seed_db, billable_account, the Description or
 Omission Description. Those are resolved from configuration or built by the pipeline, not
 read off the order. Report them; do not try to correct them.
 
-Propose "ship_to_email" only when the ticket's Ship To Email is (empty) on an FTP order:
-"fix_value" is the one notify address exactly as the order prints it, nothing else.
+Propose "ship_to_email" on an FTP order whenever its Ship To Email is wrong and the order
+prints the right address: "fix_value" is that one address exactly as the order prints it,
+nothing else. The code decides whether it may be written, and adds the "FTP NOTIFY:" prefix
+and any house label such as (SATURN CORP) itself.
 
 ONE EXCEPTION, and only this one: when an omission/suppression instruction has been left in
 the Description that belongs in the Omission Description, set "fix_field" to "omission_move"
@@ -1493,17 +1497,29 @@ review = review_select
 # Auto-fix
 # ---------------------------------------------------------------------------
 
+def _ship_to_blocker(current: str, addr: str, printed: dict, requestor: str) -> str:
+    """Why the ticket's Ship To may not be replaced by addr; "" when it provably may. Pure."""
+    held = [a.lower() for a in _EMAIL_RE.findall(current)]
+    if not current or held == [addr.lower()]:
+        return ""                                   # blank, or the same address relabelled (DSLF-1430)
+    if len(held) == 1 and (held[0] == requestor or held[0] not in printed):
+        return ""                                   # the CC, or an address the order never prints
+    return (f"Ship To Email {current!r} is a destination the order names: it is never "
+            f"overwritten by the model's read (DSLF-1240)")
+
+
 def _ship_to_fill(value: str, ticket_fields: dict, order_text: str) -> tuple:
-    """(field_id, 'FTP NOTIFY: <addr>', None) for a blank FTP Ship To the order names, else (None, None, reason)."""
-    if (ticket_fields.get("ship_to_email") or "").strip():
-        return None, None, "Ship To Email is the destination: a filled one is never overwritten"
-    if (ticket_fields.get("shipping_method") or "").strip() != "FTP":
-        return None, None, "Ship To Email is filled only on an FTP order"
-    proposed = _EMAIL_RE.findall(value or "")
+    """(field_id, house-rule Ship To, None) for an address the order proves, else (None, None, reason)."""
+    from tools_jira import apply_ship_to_rules
+    method = (ticket_fields.get("shipping_method") or "").strip()
+    if method != "FTP":
+        return None, None, "Ship To Email is written only on an FTP order"
+    # DSLF-1373: the model quoted its source, naming the one address twice.
+    proposed = list(dict.fromkeys(a.lower() for a in _EMAIL_RE.findall(value or "")))
     if len(proposed) != 1:
         return None, None, f"{value!r} does not name exactly one address"
     printed = {a.lower(): a for a in _EMAIL_RE.findall(order_text or "")}
-    addr = printed.get(proposed[0].lower())
+    addr = printed.get(proposed[0])
     if not addr:
         return None, None, f"{proposed[0]} is not printed on the order"
     requestor = (ticket_fields.get("requestor_email") or "").strip().lower()
@@ -1511,7 +1527,18 @@ def _ship_to_fill(value: str, ticket_fields: dict, order_text: str) -> tuple:
         return None, None, "no Requestor Email to tell the CC from the destination"
     if addr.lower() == requestor:
         return None, None, f"{addr} is the requestor -- the CC, not the destination"
-    return "customfield_12275", f"FTP NOTIFY: {addr}", None
+    current = (ticket_fields.get("ship_to_email") or "").strip()
+    blocker = _ship_to_blocker(current, addr, printed, requestor)
+    if blocker:
+        return None, None, blocker
+    fmt = (ticket_fields.get("file_format") or "").strip()
+    written, new_fmt, new_method = apply_ship_to_rules(f"FTP NOTIFY: {addr}", fmt, method, order_text)
+    if new_method != method or (fmt and new_fmt != fmt) or addr.lower() not in written.lower():
+        return None, None, (f"the house rules disagree: {addr} would ship as {written!r} "
+                            f"{new_method}/{new_fmt}, the ticket is {method}/{fmt or '(blank)'}")
+    if written == current:
+        return None, None, f"Ship To Email already reads {written!r}"
+    return "customfield_12275", written, None
 
 
 def _validate_fix(field: str, value: str, ticket_fields: dict, order_text: str = "") -> tuple:
@@ -1570,6 +1597,19 @@ def _validate_fix(field: str, value: str, ticket_fields: dict, order_text: str =
     return fid, value, None
 
 
+def _household_fix(omission_adf, order_text: str):
+    """The omission ADF with 1 PER HOUSEHOLD appended when the order asks and the ticket lacks it, else None."""
+    import adf_move
+    from parsers.base import HOUSEHOLD, HOUSEHOLD_RE, household_asked
+    if omission_adf is not None and not isinstance(omission_adf, dict):
+        return None
+    have = " ".join(adf_move.lines(omission_adf))
+    # A spaced "HOUSE HOLD" is not the spelling LRF reads (DSLF-1385), so it does not count.
+    if HOUSEHOLD_RE.search(have) and not re.search(r"HOUSE\s+HOLD", have, re.IGNORECASE):
+        return None
+    return adf_move.append_line(omission_adf, HOUSEHOLD) if household_asked(order_text) else None
+
+
 def apply_fixes(ticket_key: str, findings: list, ticket_fields: dict,
                 dry_run: bool = False, order_text: str = "") -> dict:
     """Write the order check's field corrections back to the ticket.
@@ -1611,6 +1651,14 @@ def apply_fixes(ticket_key: str, findings: list, ticket_fields: dict,
         # The comment names what was WRITTEN: the ship-to fill rewrites the model's value.
         applied.append(f"{field}: {f.get('ticket_value') or '(empty)'} -> "
                        f"{jval if isinstance(jval, str) else value}")
+
+    # Deterministic, not the model's read: the rule ticket creation applies (DSLF-1429). Its own
+    # label, so the auto-runner never counts it as curing another Omission Description finding.
+    household = _household_fix(payload.get("customfield_12270", ticket_fields.get("omission_adf")),
+                               order_text)
+    if household:
+        payload["customfield_12270"] = household
+        applied.append("household: added 1 PER HOUSEHOLD to the Omission Description (the order asks)")
 
     # The fill was judged against the ticket's FTP; a same-pass method change voids that.
     if "customfield_12275" in payload and "customfield_12276" in payload:

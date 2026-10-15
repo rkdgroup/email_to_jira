@@ -95,19 +95,12 @@ def _strip_ncc_dnm(omission: str) -> str:
     return "\n".join(kept)
 
 
-_NEGATED_RE = re.compile(r"\bDO\s+NOT\b|\bDON'?T\b", re.IGNORECASE)
-
-
 def _with_household(omission: str, order_text: str) -> str:
     """Append 1 PER HOUSEHOLD when the order asks for it and no parser kept it (DSLF-1429)."""
-    from parsers.base import HOUSEHOLD, HOUSEHOLD_RE
-    if HOUSEHOLD_RE.search(omission or ""):
-        return omission
-    text = order_text or ""
-    # Only the words before the match on its own line can negate it ("DO NOT supply 1 per HH").
-    asked = any(not _NEGATED_RE.search(text[text.rfind("\n", 0, m.start()) + 1:m.start()])
-                for m in HOUSEHOLD_RE.finditer(text))
-    if not asked:
+    from parsers.base import HOUSEHOLD, HOUSEHOLD_RE, household_asked
+    # DSLF-1385: LRF's criteria_parser reads only the one-word spelling.
+    omission = re.sub(r"\bHOUSE\s+HOLD\b", "HOUSEHOLD", omission or "", flags=re.IGNORECASE)
+    if HOUSEHOLD_RE.search(omission) or not household_asked(order_text):
         return omission
     return f"{omission}\n{HOUSEHOLD}" if omission else HOUSEHOLD
 

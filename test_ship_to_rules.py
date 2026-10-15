@@ -67,7 +67,7 @@ def test_fixed_format_house_stays_email():
 def test_saturn_rules():
     check("saturn ship-to",
           apply_ship_to_rules("convert@saturncorp.com", "", "Email"),
-          ("FTP NOTIFY: convert@saturncorp.com", "ASCII Fixed", "FTP"))
+          ("FTP NOTIFY: convert@saturncorp.com (SATURN CORP)", "ASCII Fixed", "FTP"))
     check("saturn named only in the order body",
           apply_ship_to_rules("a@b.com", "", "Email", "PLACE ON SATURN'S FTP SITE"),
           ("FTP NOTIFY: a@b.com (SATURN CORP)", "ASCII Fixed", "FTP"))
@@ -84,9 +84,10 @@ def test_saturn_mailbox_in_the_body_is_the_destination():
             "Please contact Jenny Gomez at Email: jgomez@keyacquisition.com")
     check("saturn mailbox replaces the rep",
           apply_ship_to_rules("FTP NOTIFY: jgomez@keyacquisition.com", "", "FTP", body),
-          ("FTP NOTIFY: CONVERT@SATURNCORP.COM", "ASCII Fixed", "FTP"))
+          ("FTP NOTIFY: CONVERT@SATURNCORP.COM (SATURN CORP)", "ASCII Fixed", "FTP"))
     check("blank ship-to takes the saturn mailbox too",
-          apply_ship_to_rules("", "", "", body)[0], "FTP NOTIFY: CONVERT@SATURNCORP.COM")
+          apply_ship_to_rules("", "", "", body)[0],
+          "FTP NOTIFY: CONVERT@SATURNCORP.COM (SATURN CORP)")
     check("in-house still wins",
           apply_ship_to_rules("tlibrarian@data-management.com", "", "Email", body)[0],
           "tlibrarian@data-management.com")
@@ -243,11 +244,24 @@ def test_in_house_wins_over_the_saturn_and_data_axle_forcing():
           "tlibrarian@data-management.com")
 
 
+def test_saturn_label_is_added_once_and_matches_qc():
+    """DSLF-1430: a Saturn mailbox went out unlabelled, and the ticket check refused it."""
+    check("an already labelled ship-to is not labelled twice",
+          apply_ship_to_rules("FTP NOTIFY: CONVERT@SATURNCORP.COM (SATURN CORP)", "", "FTP")[0],
+          "FTP NOTIFY: CONVERT@SATURNCORP.COM (SATURN CORP)")
+    check("prose naming Saturn is left as written",
+          apply_ship_to_rules("PLACE ON SATURN'S FTP SITE", "", "FTP")[0],
+          "PLACE ON SATURN'S FTP SITE")
+    import qc_checker
+    check("the ticket check asks for the same label",
+          '"FTP NOTIFY: ... (SATURN CORP)"' in qc_checker._SYSTEM_ORDER, True)
+
+
 def test_the_other_house_rules_are_unaffected():
     """Regression guard: only data-management.com destinations may change."""
     check("saturn still forces FTP + ASCII Fixed",
           apply_ship_to_rules("convert@saturncorp.com", "", "Email"),
-          ("FTP NOTIFY: convert@saturncorp.com", "ASCII Fixed", "FTP"))
+          ("FTP NOTIFY: convert@saturncorp.com (SATURN CORP)", "ASCII Fixed", "FTP"))
     check("data-axle drop-box still forces FTP + ASCII Fixed",
           apply_ship_to_rules("incoming.files@data-axle.com", "", "Email"),
           ("FTP NOTIFY: incoming.files@data-axle.com", "ASCII Fixed", "FTP"))

@@ -620,15 +620,25 @@ writes them in **one PUT**. What it refuses, and why the refusals are the design
   replacing the notify address with the bare FTP host and be wrong. **The field holds the
   notify address; the FTP is carried by Shipping Method.** Destination rules belong in
   `apply_ship_to_rules`, where they are house rules rather than one model's read.
-  **The one sanctioned write is `_ship_to_fill`** (2026-10-12, DSLF-1404): a **blank** Ship To
-  on a ticket already `FTP`, filled with exactly one address that the order text prints and
-  that is not the Requestor Email, always written `FTP NOTIFY: <addr>` as the order spells it.
-  A filled value is never overwritten. On FTP the field is only the notify mailbox: PP21's
+  **The one sanctioned write is `_ship_to_fill`** (2026-10-12, DSLF-1404; widened 2026-10-15,
+  DSLF-1430): on a ticket already `FTP`, exactly one address that the order text prints and
+  that is not the Requestor Email, run through `apply_ship_to_rules` (so the `FTP NOTIFY:`
+  prefix and the `(SATURN CORP)` label are the house rules', not the model's) and refused if
+  those rules would change Shipping Method or File Format. It replaces only what is provably
+  not the destination: a blank, the same address (a relabel), the Requestor, or an address
+  the order never prints. A filled address the order does print is never overwritten
+  (`_ship_to_blocker`). Replayed against the 15 Ship To refusals of 09-17..10-15 plus
+  DSLF-1240: 5 matched the human's final value, 3 wrote the same address more cleanly, the
+  rest refused, none wrote a different destination. On FTP the field is only the notify mailbox: PP21's
   `TO:` line is email-delivery only (LRF_Processing `dslf_printplus.py`), so the file's route
   never depends on it.
 - **`description` / `omission` are never overwritten** — ADF prose owned by the parsers and
   `tools_polish`, and a field-level overwrite flattens the bullet structure
-  `_build_adf_description` builds. **The one sanctioned edit is `fix_field: "omission_move"`**
+  `_build_adf_description` builds. **Two edits are sanctioned.** `_household_fix` appends
+  `1 PER HOUSEHOLD` when `parsers.base.household_asked` finds it on the order and the
+  Omission lacks it — deterministic, the same rule ticket creation applies (DSLF-1429), and
+  reported as `household:` so the auto-runner never counts it as curing another Omission
+  finding. **The other is `fix_field: "omission_move"`**
   (since 2026-09-28, `adf_move.plan_move`): it drops exactly one matching node from the
   Description and appends it as one paragraph to the Omission Description, leaving every
   other node untouched and writing both fields in the same PUT. One move per pass, never at
