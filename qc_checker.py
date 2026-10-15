@@ -1014,6 +1014,11 @@ WHAT TO CHECK
    - Ship To Email equal to the Requestor Email is WRONG. The requestor is the broker's
      own rep — they are the CC, not the destination.
    - Ship To at a broker's own domain (keyacquisition.com, adstradata.com) is WRONG.
+   - EXCEPT for both rules above: an FTP order whose Ship-To block gives only an FTP host or
+     folder and prints no notify mailbox (DSLF-1427: "FTP: data.net60.net / FOLDER:
+     Call_Trader"). The file goes to that host and the order attached to the ticket carries
+     it; Ship To Email only names who is told the file landed, so "FTP NOTIFY: <requestor>"
+     is the house form there and is correct. Do not report it, and never propose the host.
    - Ship To at a list-agency domain (rmlc.net, veradata.com, esteemarketing.com,
      dmgroup.com, maryegranger.com) is usually the mailer's agency contact rather than the
      drop point. WRONG when the ticket looks like a plain email delivery; name the address.
@@ -1045,6 +1050,8 @@ WHAT TO CHECK
      for rwojack@keyacquisition.com — is WRONG and fixable: mail to it bounces. Quote the
      corrected spelling.
    - Blank File Format is not a defect: new tickets default to ASCII Delimited.
+   - File Format has no CSV option: an order asking for CSV or comma-delimited is ASCII
+     Delimited on the ticket (parsers/base.py reads it so). Never report it (DSLF-1427).
 
 6. REQUESTOR — the LIST MANAGER's contact, never the mailer's or the broker's rep.
    Defaults when the order names nobody: ADSTRA -> BOBBI DURRETT,

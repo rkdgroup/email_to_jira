@@ -627,7 +627,11 @@ writes them in **one PUT**. What it refuses, and why the refusals are the design
   those rules would change Shipping Method or File Format. It replaces only what is provably
   not the destination: a blank, the same address (a relabel), the Requestor, or an address
   the order never prints. A filled address the order does print is never overwritten
-  (`_ship_to_blocker`). Separately, `_ship_to_house_fix` rewrites the ticket's own FTP Ship To
+  (`_ship_to_blocker`). An FTP order whose Ship-To block gives only a host/folder and no
+  mailbox (DSLF-1427, `FTP: data.net60.net / FOLDER: Call_Trader`) carries
+  `FTP NOTIFY: <requestor>`: `tools_jira.ftp_notify_default` writes it at creation, and the
+  ORDER prompt exempts that case from its requestor and broker-domain rules — the host stays on
+  the attached order, as on every FTP ticket. Separately, `_ship_to_house_fix` rewrites the ticket's own FTP Ship To
   into the house wording (`FTP NOTIFY:` prefix, `(SATURN CORP)` label) with no model finding at
   all, refusing any change of address, method or format — DSLF-1430's re-check passed the
   unlabelled mailbox, so the label cannot depend on the model noticing. Replayed against the 15 Ship To refusals of 09-17..10-15 plus

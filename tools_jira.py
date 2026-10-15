@@ -171,6 +171,13 @@ def apply_ship_to_rules(ship_to_email: str, file_format: str, shipping_method: s
     return ship_to_email, file_format, shipping_method
 
 
+def ftp_notify_default(ship_to_email: str, shipping_method: str, requestor_email: str) -> str:
+    """A blank FTP Ship To becomes FTP NOTIFY: <requestor>, the house form for a host-only order (DSLF-1427)."""
+    if (ship_to_email or "").strip() or shipping_method != "FTP" or not (requestor_email or "").strip():
+        return ship_to_email
+    return f"FTP NOTIFY: {requestor_email.strip()}"
+
+
 def create_jira_ticket(
     summary: str,
     mailer_name: str = "",
@@ -205,6 +212,7 @@ def create_jira_ticket(
 
     ship_to_email, file_format, shipping_method = apply_ship_to_rules(
         ship_to_email, file_format, shipping_method, order_text)
+    ship_to_email = ftp_notify_default(ship_to_email, shipping_method, requestor_email)
 
     fields: dict = {
         "project": {"key": DSLF_PROJECT_KEY},

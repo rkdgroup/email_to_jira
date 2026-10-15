@@ -704,6 +704,15 @@ def test_order_prompt_lets_the_ship_to_block_name_an_agency_drop_box():
           "ship to block names that address" in s, True)
 
 
+def test_order_prompt_accepts_the_requestor_as_notify_on_a_host_only_ftp_order():
+    """DSLF-1427: the order's Ship-To block gave only "FTP: data.net60.net / FOLDER: Call_Trader",
+    a person set FTP NOTIFY: <requestor>, and the requestor/broker-domain rules would refuse it."""
+    s = qc._SYSTEM_ORDER
+    check("the host-only FTP exception is stated", "prints no notify mailbox" in s, True)
+    check("and names the house form", '"FTP NOTIFY: <requestor>"' in s, True)
+    check("CSV is ASCII Delimited, never a finding", "an order asking for CSV" in s, True)
+
+
 def test_order_prompt_does_not_resurrect_the_kap_title_exception():
     """knowledge.md line 161 called `P.O. {DL#} {LIST NAME}` a KAP design. It was a bug,
     fixed in 39d94bc, and 64 tickets carried it. Treating it as design hides a real defect.

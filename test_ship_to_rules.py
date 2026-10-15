@@ -257,6 +257,17 @@ def test_saturn_label_is_added_once_and_matches_qc():
           '"FTP NOTIFY: ... (SATURN CORP)"' in qc_checker._SYSTEM_ORDER, True)
 
 
+def test_a_blank_ftp_ship_to_names_the_requestor_as_notify():
+    """DSLF-1427: the order gave only "FTP: data.net60.net / FOLDER: Call_Trader"; blank failed every check."""
+    from tools_jira import ftp_notify_default
+    req = "BOBBI.DURRETT@ADSTRADATA.COM"
+    check("blank FTP gets the requestor", ftp_notify_default("", "FTP", req), f"FTP NOTIFY: {req}")
+    check("a parsed destination is kept", ftp_notify_default("FTP NOTIFY: a@b.com", "FTP", req),
+          "FTP NOTIFY: a@b.com")
+    check("email delivery is left blank", ftp_notify_default("", "Email", req), "")
+    check("no requestor, nothing to write", ftp_notify_default("", "FTP", ""), "")
+
+
 def test_the_other_house_rules_are_unaffected():
     """Regression guard: only data-management.com destinations may change."""
     check("saturn still forces FTP + ASCII Fixed",
