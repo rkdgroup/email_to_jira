@@ -431,6 +431,7 @@ def test_select_prompt_keeps_the_rules_the_regex_checker_knew():
         ("hosted",               "the host-vs-rented-list exception (DSLF-1066/1083)"),
         ("FLAGS LISTED",         "flags deferred to prose are unverifiable"),
         ("12 MOS HOTLINE",       "one block can satisfy several priced selects (DSLF-1140)"),
+        ("the BASE line governs", "a trailing hotline recency is boilerplate (DSLF-1420)"),
         ("SATISFIED VERSUS DROPPED", "the satisfied-vs-dropped rule (DSLF-1140 vs -1092)"),
         ("ALSO EVIDENCE THAT A CRITERION WAS APPLIED",
                                  "the include set can satisfy a criterion (DSLF-1138)"),

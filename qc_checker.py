@@ -705,6 +705,14 @@ WHAT TO CHECK, WORST FIRST
    "RECENT PAYMENT DATE = 7/31/2025 THRU 7/30/2026". A 12-month recency window IS a
    12-month hotline. Both lines are answered; there is no second block to look for.
 
+   SATISFIED (report nothing): when two priced lines name DIFFERENT recencies,
+   the BASE line governs — the one carrying the geo / "W/GEO" instruction, which varies per
+   ticket. A trailing "N MONTH HOTLINE" line is boilerplate on some brokers' forms.
+   DSLF-1202, -1204 and -1420 read "4M $5+ W/GEO" over "3 MONTH HOTLINE" and are 4-MONTH
+   orders (ops ruling 2026-09-09): a 4-month date range is correct, and the hotline line is
+   not a gap, a contradiction or a WRONG. Two recencies mean two orders only if the ticket
+   says so.
+
    DROPPED (report WRONG): DSLF-1092 asked for "DONORS IN SCF'S 900-908, 913-916" and the
    SELECT applied "ZIP CODE = 00001 THRU 99998" — the whole country. Nothing in the applied
    criteria narrows the geography at all, so that select was never executed and records

@@ -585,6 +585,8 @@ each one is still present:
   is `WRONG`; an extra omit in the SELECT is a `NOTE`
 - flags deferred to prose (`FLAG OMITS: FLAGS LISTED BELOW IN SPECIAL INST.`) are
   `BLOCKING-BLANK`, not a pass — they cannot be verified at all
+- when two priced lines name different recencies, **the base `W/GEO` line governs**: a
+  trailing `3 MONTH HOTLINE` under `4M $5+ W/GEO` is a 4-month order (DSLF-1420)
 - ADSTRA's published per-seed-database flag defaults still load from
   `config/adstra_omit_database.yaml` (`_adstra_flag_context`) as a third source
 
