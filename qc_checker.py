@@ -509,7 +509,7 @@ def _finding_props(with_fix: bool) -> dict:
             "type": "string",
             "description": "Machine key of the ticket field to correct, or \"\" when this "
                            "finding is not a simple field correction. Must be one of: "
-                           + ", ".join(sorted(_FIXABLE) + [_SHIP_TO_FILL, _MOVE_FIELD]),
+                           + ", ".join(sorted(_FIXABLE) + [_SHIP_TO_FILL, _MOVE_FIELD, _ADD_FIELD]),
         }
         props["fix_value"] = {
             "type": "string",
@@ -580,6 +580,8 @@ from tools_jira import (AVAILABILITY_RULE_OPTIONS, FILE_FORMAT_OPTIONS,
 # from the ticket's own Description, not from the order. adf_move does the surgery
 # and refuses anything ambiguous. See adf_move.plan_move.
 _MOVE_FIELD = "omission_move"
+# The one ADD to the Omission Description: an omit the order prints verbatim (_omission_add).
+_ADD_FIELD = "omission_add"
 
 # Not in _FIXABLE either: an FTP Ship To is written only from an address the order prints (_ship_to_fill).
 _SHIP_TO_FILL = "ship_to_email"
@@ -872,7 +874,15 @@ prints the right address: "fix_value" is that one address exactly as the order p
 nothing else. The code decides whether it may be written, and adds the "FTP NOTIFY:" prefix
 and any house label such as (SATURN CORP) itself.
 
-ONE EXCEPTION, and only this one: when an omission/suppression instruction has been left in
+TWO EXCEPTIONS, and only these. The first: when the order prints an omission/suppression
+instruction that the Omission Description lacks, set "fix_field" to "omission_add" and
+"fix_value" to that one instruction COPIED VERBATIM from the order -- the exact words, no
+paraphrase, no merging of lines, nothing added. It must be wholly an omission (OMIT /
+SUPPRESS / EXCLUDE / DEDUPE): never a line carrying a dollar amount or a recency, and never
+one the ticket already satisfies another way (a FLAG OMITS code such as $ for DMA panders, a
+prior order already named). The code refuses anything the order does not print.
+
+The second: when an omission/suppression instruction has been left in
 the Description that belongs in the Omission Description, set "fix_field" to "omission_move"
 and "fix_value" to THAT ONE LINE, quoted as the Description stores it -- not paraphrased,
 not re-cased, not merged with a neighbouring line, and WITHOUT any bullet or list marker
@@ -1597,6 +1607,34 @@ def _validate_fix(field: str, value: str, ticket_fields: dict, order_text: str =
     return fid, value, None
 
 
+_OMIT_INTENT_RE = re.compile(r"\b(?:OMIT|SUPPRESS|EXCLUD|DEDUP|DUPE|PANDER)", re.IGNORECASE)
+_NEGATION_RE = re.compile(r"\bDO\s+NOT\b|\bDON'?T\b", re.IGNORECASE)
+# A dollar amount or a recency makes it a select line, which belongs in the Description.
+_SELECT_RE = re.compile(r"\$\s*\d|\b\d+\s*(?:-\s*\d+\s*)?(?:MOS?|MONTHS?|M)\b", re.IGNORECASE)
+
+
+def _flat(text: str) -> str:
+    """Case, list markers and line wraps never decide whether the order printed it."""
+    return " ".join(re.sub(r"[*•]+", " ", text or "").split()).casefold()
+
+
+def _omission_add(value: str, omission_adf, order_text: str) -> tuple:
+    """(omission ADF with value appended, None), or (None, reason) unless value is an omit the order prints."""
+    import adf_move
+    line = (value or "").strip()
+    if omission_adf is not None and not isinstance(omission_adf, dict):
+        return None, "the Omission Description is not ADF; it is not edited in place"
+    if "\n" in line or len(_flat(line).split()) < 2 or len(line) > 200:
+        return None, f"{line!r} is not one omission instruction"
+    if _flat(line) not in _flat(order_text):
+        return None, f"{line!r} is not printed on the order -- only the order's own words are added"
+    if not _OMIT_INTENT_RE.search(line) or _NEGATION_RE.search(line) or _SELECT_RE.search(line):
+        return None, f"{line!r} is not wholly an omission instruction"
+    if _flat(line) in _flat(" ".join(adf_move.lines(omission_adf))):
+        return None, f"{line!r} is already in the Omission Description"
+    return adf_move.append_line(omission_adf, line), None
+
+
 def _household_fix(omission_adf, order_text: str):
     """The omission ADF with 1 PER HOUSEHOLD appended when the order asks and the ticket lacks it, else None."""
     import adf_move
@@ -1627,10 +1665,21 @@ def apply_fixes(ticket_key: str, findings: list, ticket_fields: dict,
         if str(f.get("severity", "")).upper() == "NOTE":
             refused.append(f"{field}: NOTE-level finding, not auto-applied")
             continue
+        if field == _ADD_FIELD:
+            doc, reason = _omission_add(value, payload.get("customfield_12270",
+                                                           ticket_fields.get("omission_adf")), order_text)
+            if reason:
+                refused.append(f"{field}: {reason}")
+            else:
+                payload["customfield_12270"] = doc
+                applied.append(f"{field}: added {value.strip()!r} as the order prints it")
+            continue
         if field == _MOVE_FIELD:
             import adf_move
+            # Built on any omission already written this pass, so an add is never undone.
             plan = adf_move.plan_move(ticket_fields.get("description_adf"),
-                                      ticket_fields.get("omission_adf"), value)
+                                      payload.get("customfield_12270", ticket_fields.get("omission_adf")),
+                                      value)
             if not plan.ok:
                 refused.append(f"{field}: {plan.reason}")
             elif "description" in payload:

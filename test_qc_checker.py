@@ -242,6 +242,59 @@ def adf_move_doc(line: str) -> dict:
     return adf_move.append_line(None, line)
 
 
+# DSLF-1397 / DSLF-1362: the order printed an omit the ticket lost; a person had to add it.
+_ORDER_1397 = "Base: 12 Month (10/25-9/26) Donors w/Geo Selects *Omit\nOmits: Order #71090\n09/28/2026\n"
+_ORDER_1362 = "4-6MOS $10+ OMIT NJ\nAPPLY GLOBAL SUPPRESSION\nPlease do not omit Canada.\n"
+
+
+def _add(value: str, omission=None, text: str = _ORDER_1362):
+    return qc._omission_add(value, omission if omission is not None else adf_move_doc("OMIT NJ"), text)
+
+
+def test_an_omit_the_order_prints_is_added_verbatim():
+    import adf_move
+    doc, reason = _add("APPLY GLOBAL SUPPRESSION")
+    check("added as its own paragraph", (adf_move.lines(doc), reason),
+          (["OMIT NJ", "APPLY GLOBAL SUPPRESSION"], None))
+    doc, _ = qc._omission_add("Omits: Order #71090 09/28/2026", adf_move_doc("Omit"), _ORDER_1397)
+    check("a PDF line wrap still counts as printed", adf_move.lines(doc)[-1], "Omits: Order #71090 09/28/2026")
+    r = qc.apply_fixes("DSLF-0", [{"field": "Omission Description", "severity": "WRONG",
+                                   "fix_field": "omission_add", "fix_value": "APPLY GLOBAL SUPPRESSION"}],
+                       {"omission_adf": adf_move_doc("OMIT NJ")}, dry_run=True, order_text=_ORDER_1362)
+    check("applied under its own label", [a.split(":")[0] for a in r["applied"]], ["omission_add"])
+
+
+def test_the_omission_add_refuses_what_it_cannot_prove():
+    def refused(value, omission=None, text=_ORDER_1362):
+        return _add(value, omission, text)[0] is None
+    check("not printed on the order", refused("APPLY NCOA SUPPRESSION"), True)
+    check("a paraphrase is not the order's words", refused("Apply the global suppression"), True)
+    check("a select line is not an omission", refused("4-6MOS $10+ OMIT NJ"), True)
+    check("no omit word, not an omission", refused("Base: 12 Month (10/25-9/26) Donors", text=_ORDER_1397), True)
+    check("a negation is never added", refused("Please do not omit Canada."), True)
+    check("already on the ticket", refused("OMIT NJ", text="OMIT NJ\n"), True)
+    check("a bare keyword means nothing", refused("Omit", text=_ORDER_1397), True)
+    check("two words is enough", refused("OMIT NJ", omission=adf_move_doc("OMIT PR"), text="OMIT NJ\n"), False)
+    check("two lines are two fixes", refused("APPLY GLOBAL SUPPRESSION\nOMIT NJ"), True)
+    check("a plain-string omission is not edited", refused("APPLY GLOBAL SUPPRESSION", "OMIT NJ"), True)
+
+
+def test_the_add_and_the_move_build_on_each_other():
+    import adf_move
+    desc = adf_move.append_line(adf_move_doc("3M $5+ W/GEO"), "STATE OMIT")
+    fields = {"description_adf": desc, "omission_adf": adf_move_doc("OMIT NJ")}
+    findings = [{"severity": "WRONG", "fix_field": "omission_add", "fix_value": "APPLY GLOBAL SUPPRESSION"},
+                {"severity": "WRONG", "fix_field": "omission_move", "fix_value": "STATE OMIT"}]
+    r = qc.apply_fixes("DSLF-0", findings, fields, dry_run=True, order_text=_ORDER_1362)
+    check("both applied", sorted(a.split(":")[0] for a in r["applied"]), ["omission_add", "omission_move"])
+
+
+def test_the_model_is_offered_the_add_and_told_its_limits():
+    check("omission_add in the schema", "omission_add" in qc._finding_props(True)["fix_field"]["description"], True)
+    check("the prompt demands verbatim", "COPIED VERBATIM from the order" in qc._SYSTEM_ORDER, True)
+    check("and names the flag-code case", "$ for DMA panders" in qc._SYSTEM_ORDER, True)
+
+
 def test_one_address_named_twice_is_one_address():
     # DSLF-1373: "FTP NOTIFY: idm@... (source: Notify idm@... when file is posted)".
     text = _NOTIFY_ORDER + "Notify idm@mmidirect.com when file is posted\n"

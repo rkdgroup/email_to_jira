@@ -634,7 +634,14 @@ writes them in **one PUT**. What it refuses, and why the refusals are the design
   never depends on it.
 - **`description` / `omission` are never overwritten** — ADF prose owned by the parsers and
   `tools_polish`, and a field-level overwrite flattens the bullet structure
-  `_build_adf_description` builds. **Two edits are sanctioned.** `_household_fix` appends
+  `_build_adf_description` builds. **Three edits are sanctioned.** `fix_field: "omission_add"`
+  (2026-10-15, `_omission_add`) appends one omit the order prints **verbatim** — matched
+  ignoring case, list markers and line wraps — that carries an OMIT/SUPPRESS/EXCLUDE/DEDUPE
+  word, no dollar amount or recency, no DO NOT, and is not already there. Replayed on the
+  omission refusals: DSLF-1362 (`APPLY GLOBAL SUPPRESSION`) and DSLF-1397 (`Omits: Order
+  #71090 09/28/2026`) are added as a person added them; DSLF-1278's pander line would be added
+  too, but LRF's parser reads nothing from it and the `$` flag already covers it.
+  `_household_fix` appends
   `1 PER HOUSEHOLD` when `parsers.base.household_asked` finds it on the order and the
   Omission lacks it — deterministic, the same rule ticket creation applies (DSLF-1429), and
   reported as `household:` so the auto-runner never counts it as curing another Omission
