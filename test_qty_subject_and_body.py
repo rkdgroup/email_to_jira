@@ -149,6 +149,26 @@ def test_duplicate_requestors_collapse_and_blanks_are_skipped():
     check("no requestor line when none is known", "Requestor" in body2, False)
 
 
+# ---------------------------------------------------------------------------
+# 4. One email per requestor
+# ---------------------------------------------------------------------------
+
+def test_one_mailer_two_requestors_is_two_emails():
+    """The live case: one ADSTRA email named both requestors for orders neither shared."""
+    bobbi, matt = "BOBBI.DURRETT@ADSTRADATA.COM", "MATTHEW.DOTSON@ADSTRADATA.COM"
+    waiting = [_t("J5444", "M", qty=3082, email=bobbi),
+               _t("J5475", "M", qty=5022, email=matt),
+               _t("J5477", "M", qty=12386, email=bobbi.lower()),
+               _t("J5488", "M", qty=4501, email=matt)]
+    groups = q.group_by_mailer([], waiting)
+    check("two emails, one per requestor", sorted(groups), [("M", bobbi), ("M", matt)])
+    for (mailer, req), g in groups.items():
+        body = q.build_mailer_report(mailer, g["processed"], g["waiting"])
+        check(f"{req} body names only them", body.count("@"), 1)
+    check("bobbi's orders", [t["manager_order"] for t in groups[("M", bobbi)]["waiting"]],
+          ["J5444", "J5477"])
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),

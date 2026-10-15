@@ -526,8 +526,8 @@ def build_mailer_report(mailer: str, processed: list[dict], waiting: list[dict])
     The '<order#> = <qty>' lines stay first and stay exactly that shape: the recipient
     replies in the same format and scan_approval_emails parses it back out with a pattern
     anchored on the order number, so trailing lines are safe but a change to those lines
-    is not. Measured on the live queue every mailer group had exactly one requestor;
-    several are joined with a comma rather than guessing which order belongs to whom.
+    is not. group_by_mailer splits on requestor, so in practice there is one address;
+    if a caller passes several, they are joined with a comma.
     """
     rows: list[tuple[str, int | None]] = []
     for t in processed:
@@ -543,7 +543,7 @@ def build_mailer_report(mailer: str, processed: list[dict], waiting: list[dict])
     seen: list[str] = []
     for t in processed + waiting:
         addr = (t.get("requestor_email") or "").strip()
-        if addr and addr not in seen:
+        if addr and addr.upper() not in (s.upper() for s in seen):
             seen.append(addr)
     if seen:
         lines += ["", f"Requestor: {', '.join(seen)}"]
@@ -551,13 +551,25 @@ def build_mailer_report(mailer: str, processed: list[dict], waiting: list[dict])
     return "\n".join(lines)
 
 
-def group_by_mailer(processed: list[dict], waiting: list[dict]) -> dict[str, dict]:
-    """Group both processed and waiting tickets by mailer name (blank → '')."""
-    groups: dict[str, dict] = defaultdict(lambda: {"processed": [], "waiting": []})
+def group_by_mailer(processed: list[dict], waiting: list[dict]) -> dict[tuple[str, str], dict]:
+    """
+    Group both processed and waiting tickets by (mailer name, requestor email), blank → ''.
+
+    The requestor is part of the key so every email goes to exactly one person: one mailer
+    can carry orders from two requestors (J5444/J5475/J5477/J5488 went out as one email
+    naming both BOBBI.DURRETT@ and MATTHEW.DOTSON@ADSTRADATA.COM), and neither of them
+    asked for the other's orders. The email is compared case-insensitively.
+    """
+    groups: dict[tuple[str, str], dict] = defaultdict(lambda: {"processed": [], "waiting": []})
+
+    def key(t: dict) -> tuple[str, str]:
+        return ((t.get("mailer_name") or "").strip(),
+                (t.get("requestor_email") or "").strip().upper())
+
     for t in processed:
-        groups[(t.get("mailer_name") or "").strip()]["processed"].append(t)
+        groups[key(t)]["processed"].append(t)
     for t in waiting:
-        groups[(t.get("mailer_name") or "").strip()]["waiting"].append(t)
+        groups[key(t)]["waiting"].append(t)
     return groups
 
 
@@ -694,15 +706,15 @@ def main():
         send_email(args.email, subject, report, cc=args.cc)
         out_chunks = [report]
     else:
-        # One email per mailer, all to the same recipient
+        # One email per (mailer, requestor), all to the same recipient
         groups     = group_by_mailer(processed, waiting)
         out_chunks = []
-        for mailer in sorted(groups):
-            g       = groups[mailer]
+        for mailer, requestor in sorted(groups):
+            g       = groups[(mailer, requestor)]
             report  = build_mailer_report(mailer, g["processed"], g["waiting"])
             subject = _subject_for(mailer, g["processed"], g["waiting"], args.subject)
             mailer_disp = _abbrev_mailer(mailer) if mailer else "Unspecified Mailer"
-            print(f"  Sending {mailer_disp}: "
+            print(f"  Sending {mailer_disp} ({requestor or 'no requestor'}): "
                   f"{len(g['processed'])} approved, {len(g['waiting'])} pending")
             send_email(args.email, subject, report, cc=args.cc)
             out_chunks.append(report)
