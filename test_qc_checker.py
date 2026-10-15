@@ -351,6 +351,37 @@ def test_a_ship_to_that_is_the_requestor_or_off_the_order_is_replaced():
           "FTP NOTIFY: pubc@mmidirect.com")
 
 
+def test_the_house_label_is_applied_without_the_model():
+    # DSLF-1430's re-check passed the unlabelled Saturn mailbox; the label cannot hang on the model.
+    check("saturn mailbox relabelled", qc._ship_to_house_fix(_SATURN_FTP),
+          "FTP NOTIFY: CONVERT@SATURNCORP.COM (SATURN CORP)")
+    r = qc.apply_fixes("DSLF-0", [], _SATURN_FTP, dry_run=True, order_text=_SATURN_ORDER)
+    check("applied under its own label", [a.split(":")[0] for a in r["applied"]], ["ship_to_house"])
+    check("a data-axle drop box gets its FTP NOTIFY prefix",
+          qc._ship_to_house_fix(dict(_SATURN_FTP, ship_to_email="INCOMING.FILES@DATA-AXLE.COM")),
+          "FTP NOTIFY: INCOMING.FILES@DATA-AXLE.COM")
+
+
+def test_a_same_pass_method_change_drops_the_relabel_too():
+    findings = [{"severity": "WRONG", "fix_field": "shipping_method", "fix_value": "Email"}]
+    r = qc.apply_fixes("DSLF-0", findings, _SATURN_FTP, dry_run=True, order_text=_SATURN_ORDER)
+    check("only the method change is reported", [a.split(":")[0] for a in r["applied"]], ["shipping_method"])
+
+
+def test_the_house_label_never_changes_the_address_or_the_route():
+    check("already labelled", qc._ship_to_house_fix(
+        dict(_SATURN_FTP, ship_to_email="FTP NOTIFY: CONVERT@SATURNCORP.COM (SATURN CORP)")), None)
+    check("an ordinary FTP address is left alone", qc._ship_to_house_fix(
+        dict(_SATURN_FTP, ship_to_email="FTP NOTIFY: pubc@mmidirect.com")), None)
+    check("email delivery is not touched", qc._ship_to_house_fix(
+        dict(_SATURN_FTP, shipping_method="Email")), None)
+    check("a format the rules would change is refused", qc._ship_to_house_fix(
+        dict(_SATURN_FTP, file_format="ASCII Delimited")), None)
+    check("in-house would move it to Email: refused", qc._ship_to_house_fix(
+        dict(_SATURN_FTP, ship_to_email="FTP NOTIFY: x@data-management.com")), None)
+    check("blank is the fill's job, not this", qc._ship_to_house_fix(dict(_SATURN_FTP, ship_to_email="")), None)
+
+
 def test_the_ship_to_write_refuses_when_the_house_rules_disagree():
     inhouse = _NOTIFY_ORDER + "Upload to tlibrarian@data-management.com\n"
     fid, _, reason = qc._validate_fix("ship_to_email", "tlibrarian@data-management.com",

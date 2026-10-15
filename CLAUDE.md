@@ -627,7 +627,10 @@ writes them in **one PUT**. What it refuses, and why the refusals are the design
   those rules would change Shipping Method or File Format. It replaces only what is provably
   not the destination: a blank, the same address (a relabel), the Requestor, or an address
   the order never prints. A filled address the order does print is never overwritten
-  (`_ship_to_blocker`). Replayed against the 15 Ship To refusals of 09-17..10-15 plus
+  (`_ship_to_blocker`). Separately, `_ship_to_house_fix` rewrites the ticket's own FTP Ship To
+  into the house wording (`FTP NOTIFY:` prefix, `(SATURN CORP)` label) with no model finding at
+  all, refusing any change of address, method or format — DSLF-1430's re-check passed the
+  unlabelled mailbox, so the label cannot depend on the model noticing. Replayed against the 15 Ship To refusals of 09-17..10-15 plus
   DSLF-1240: 5 matched the human's final value, 3 wrote the same address more cleanly, the
   rest refused, none wrote a different destination. On FTP the field is only the notify mailbox: PP21's
   `TO:` line is email-delivery only (LRF_Processing `dslf_printplus.py`), so the file's route

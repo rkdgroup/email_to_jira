@@ -1551,6 +1551,22 @@ def _ship_to_fill(value: str, ticket_fields: dict, order_text: str) -> tuple:
     return "customfield_12275", written, None
 
 
+def _ship_to_house_fix(ticket_fields: dict, order_text: str = ""):
+    """The house-rule wording of the ticket's own FTP Ship To when only the wording differs, else None."""
+    from tools_jira import apply_ship_to_rules
+    current = (ticket_fields.get("ship_to_email") or "").strip()
+    method = (ticket_fields.get("shipping_method") or "").strip()
+    fmt = (ticket_fields.get("file_format") or "").strip()
+    if not current or method != "FTP":
+        return None
+    written, new_fmt, new_method = apply_ship_to_rules(current, fmt, method, order_text)
+    same = (sorted(a.lower() for a in _EMAIL_RE.findall(written))
+            == sorted(a.lower() for a in _EMAIL_RE.findall(current)))
+    if written == current or not same or new_method != method or (fmt and new_fmt != fmt):
+        return None
+    return written
+
+
 def _validate_fix(field: str, value: str, ticket_fields: dict, order_text: str = "") -> tuple:
     """(jira_field_id, jira_value, None) if writable, else (None, None, reason).
 
@@ -1709,10 +1725,16 @@ def apply_fixes(ticket_key: str, findings: list, ticket_fields: dict,
         payload["customfield_12270"] = household
         applied.append("household: added 1 PER HOUSEHOLD to the Omission Description (the order asks)")
 
+    # Same address, house wording (DSLF-1430): never waits on the model noticing the label.
+    house = None if "customfield_12275" in payload else _ship_to_house_fix(ticket_fields, order_text)
+    if house:
+        payload["customfield_12275"] = house
+        applied.append(f"ship_to_house: {ticket_fields.get('ship_to_email')} -> {house} (house rules)")
+
     # The fill was judged against the ticket's FTP; a same-pass method change voids that.
     if "customfield_12275" in payload and "customfield_12276" in payload:
         del payload["customfield_12275"]
-        applied = [a for a in applied if not a.startswith(f"{_SHIP_TO_FILL}:")]
+        applied = [a for a in applied if not a.startswith((f"{_SHIP_TO_FILL}:", "ship_to_house:"))]
         refused.append(f"{_SHIP_TO_FILL}: Shipping Method changes in the same pass")
 
     if not payload:
