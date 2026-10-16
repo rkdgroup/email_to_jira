@@ -56,8 +56,8 @@ python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 `--dry-run` and `--verbose` are the **only** two CLI flags for `parse_pipeline.py`. `broker_hint` is a function argument (used by the email scanner), not a flag.
 
 **Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
-protect you if you run them. Seventeen regression files, all hermetic: no Jira, no DB, no PDFs,
-no network — the QC tests never call the API. **Run the whole suite with pytest** (224 tests,
+protect you if you run them. Twenty regression files, all hermetic: no Jira, no DB, no PDFs,
+no network — the QC tests never call the API. **Run the whole suite with pytest** (273 tests,
 ~17s; no `pytest.ini`/`conftest.py` needed):
 
 ```bash
@@ -86,6 +86,7 @@ python test_wo_failure_report.py     # WO failure/skip posted on the ticket, nev
 python test_ncc_dnm_omit.py          # NCC do-not-mail line stripped for N11D only
 python test_household_omit.py       # 1 PER HOUSEHOLD reaches the omission for every broker
 python test_celco_fields.py          # CELCO wrapped segment, CONTACT requestor, FTP notify (+ "Notify X" prose), Key Code lines
+python test_cost_report.py           # QC-comment cost footer parse, month bucketing
 python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
 python "WO#/test_ibmi_credentials.py"        # blank env var cannot mask .env; empty password fails loudly
 ```
@@ -95,8 +96,8 @@ Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap
 `parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
 `parse_pipeline._dup_check_key`, `parse_pipeline._create_and_link_work_order`,
 `parse_pipeline._strip_ncc_dnm`, `parse_pipeline._with_household`, `parsers/celco.py`, `qty_approval_scanner.py`, `WO#/work_order.py`,
-`WO#/base.py`, `adf_move.py`, or `usage_log.py`. Verified all seventeen pass (224 tests)
-2026-10-06. Everything else is tested manually via `--dry-run --verbose` against real
+`WO#/base.py`, `adf_move.py`, `usage_log.py`, or `cost_report.py`. Verified all twenty pass (273 tests)
+2026-10-16. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
 in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
@@ -113,7 +114,7 @@ and fail on the agent.
 **`README.md` is a lighter duplicate of this file.** Its Quick Start now installs from
 `requirements.txt` rather than a hand-listed set, so that drift cannot recur, but its
 project tree still omits `tools_polish.py`, `tools_zip_omit.py`, `LLM_writes.py`, the
-offline AI tools, `adf_move.py`, `usage_log.py`, the `WO#/` step and the seventeen test files. Treat CLAUDE.md as authoritative
+offline AI tools, `adf_move.py`, `usage_log.py`, the `WO#/` step and the twenty test files. Treat CLAUDE.md as authoritative
 and update README only when a change is user-facing.
 
 ```bash
@@ -139,6 +140,12 @@ python build_profile_yaml.py  # regenerate config/client_profiles.yaml from Clie
 # One-off correction — adds the client Dollar Cap line to existing ticket descriptions.
 # DRY RUN by default; --live writes. The durable fix is in _build_adf_description.
 python backfill_dollar_cap.py [DSLF-123 ...] [--status S] [--live]
+
+# Monthly Claude API spend -> DSLF Task "API Cost Report - YYYY-MM" (issue type 11772, never
+# List Fulfillment). DRY RUN unless --live; default month = last month; re-run updates, never
+# duplicates. Source = the `$x.xxx` footer on QC comments, because logs/api_usage.jsonl is
+# wiped by every Jenkins re-clone. Excludes tools_polish + manual LLM_writes (not logged durably).
+python cost_report.py [--month YYYY-MM] [--live]
 
 # Pure-LLM create — unrecognized brokers only (see "Pure-LLM Ticket Creation")
 # NOTE: inverted default — this one is a DRY RUN unless you pass --live.
