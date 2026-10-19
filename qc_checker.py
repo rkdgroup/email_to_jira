@@ -1277,6 +1277,31 @@ def _reconcile(result: dict) -> dict:
     return result
 
 
+# No household dupes set (LRF household_set, 2026-10-19), so 1 PER HOUSEHOLD ships without it; drop a code once ops builds one.
+NO_HOUSEHOLD_SET = frozenset({"S05D", "S52D", "H67D"})
+
+
+def _excuse_household(result: dict, db: str) -> dict:
+    """A household finding is a NOTE for a customer with no household set; PASS when nothing else blocks."""
+    from parsers.base import HOUSEHOLD_RE
+    if str(db or "").upper() not in NO_HOUSEHOLD_SET:
+        return result
+    excused = 0
+    for f in result.get("findings") or []:
+        hh = (HOUSEHOLD_RE.search(f"{f.get('ticket_value', '')} {f.get('expected', '')}")
+              or re.search(r"household", str(f.get("issue", "")), re.IGNORECASE))
+        if hh and str(f.get("severity", "")).upper() in _BLOCKING:
+            f["severity"] = "NOTE"
+            f["issue"] = f"{f.get('issue', '')} — {db} owns no household set; ships without it by rule"
+            excused += 1
+    blocking = [f for f in result.get("findings") or []
+                if str(f.get("severity", "")).upper() in _BLOCKING]
+    result["blocking_count"] = len(blocking)
+    if excused and not blocking and result.get("verdict") == FAIL:
+        result["verdict"] = PASS
+    return result
+
+
 def _worst(*verdicts) -> str:
     """Combine check verdicts. UNVERIFIED outranks FAIL: not knowing is worse than knowing."""
     vs = [v for v in verdicts if v]
@@ -1495,7 +1520,8 @@ def review_select(pdf_path: str, ticket_fields: dict,
         # Assembling the prompt reads the profile YAML and the ticket's ADF. If that
         # throws, the check has not run — and "has not run" is UNVERIFIED, never a pass.
         return _unverified(f"could not assemble the ticket context ({e})", "SELECT")
-    return _review(pdf_path, _SYSTEM_SELECT, _schema(False), user, "SELECT", model, effort)
+    return _excuse_household(_review(pdf_path, _SYSTEM_SELECT, _schema(False), user, "SELECT",
+                                     model, effort), ticket_fields.get("client_db"))
 
 
 def review_order(pdf_path: str, ticket_fields: dict,
