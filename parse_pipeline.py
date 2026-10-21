@@ -229,6 +229,13 @@ def _dup_check_key(result) -> tuple:
     return None, None
 
 
+# Duplicate-check query -> ticket key, for tickets created by this process. Jira's search
+# index lags a create by seconds, so a second copy of the same order handled in the same
+# run searches before the first ticket is visible: DSLF-1487 duplicated DSLF-1486 (PO
+# 134012) 13s later. A later run is minutes away, by which time the search sees it.
+_created_this_run: dict = {}
+
+
 def finalize_and_create(result, pdf_path: str, text: str,
                         dry_run: bool = False, verbose: bool = False,
                         profile_blocks_to_omission: bool = False) -> dict:
@@ -269,10 +276,14 @@ def finalize_and_create(result, pdf_path: str, text: str,
             return {"success": False, "source": result.source, "errors": validation.errors}
 
     # Step 4: Duplicate check
+    dup_jql = None
     if not dry_run:
         dup_jql, dup_label = _dup_check_key(result)
         if dup_jql:
-            existing = search_jira_tickets(dup_jql)
+            if dup_jql in _created_this_run:
+                existing = {"total": 1, "issues": [{"key": _created_this_run[dup_jql]}]}
+            else:
+                existing = search_jira_tickets(dup_jql)
             if existing.get("total", 0) > 0:
                 keys = [i["key"] for i in existing.get("issues", [])]
                 log.warning("Duplicate detected — existing tickets: %s", keys)
@@ -433,6 +444,8 @@ def finalize_and_create(result, pdf_path: str, text: str,
         return {"success": False, "source": result.source, "errors": [ticket["error"]]}
 
     log.info("Created ticket: %s — %s", ticket["key"], ticket.get("url", ""))
+    if dup_jql:
+        _created_this_run[dup_jql] = ticket["key"]
 
     # Create IBM i work order and write WO# back to the Jira ticket
     wo_number = _create_and_link_work_order(

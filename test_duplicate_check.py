@@ -69,6 +69,40 @@ def test_amlc_with_no_manager_order_skips():
           _dup_check_key(_r(list_manager="AMLC", mailer_po="668769")), (None, None))
 
 
+def test_second_copy_in_the_same_run_is_caught_before_jira_can_see_the_first():
+    """DSLF-1486/1487: same PO 134012 created 13s apart; the search had not indexed 1486.
+
+    Jira is stubbed to never find anything, as it did then, so only the in-process record
+    can stop the second create.
+    """
+    import os, tempfile
+    import parse_pipeline as pp
+    import tools_jira as tj
+    created = []
+    saved = (tj.create_jira_ticket, tj.search_jira_tickets, tj.attach_file_to_ticket,
+             pp._create_and_link_work_order, os.environ.pop("ANTHROPIC_API_KEY", None))
+    tj.create_jira_ticket = lambda **kw: created.append(kw) or {"key": f"DSLF-{9000 + len(created)}"}
+    tj.search_jira_tickets = lambda jql, **kw: {"total": 0, "issues": []}
+    tj.attach_file_to_ticket = lambda *a, **k: None
+    pp._create_and_link_work_order = lambda **kw: ""
+    pp._created_this_run.clear()
+    order = _r(list_manager="ADSTRA", mailer_po="134012", manager_order_number="J5991",
+               mailer_name="SILENT CRY FOUNDATION", list_name="3-CARI CHILDREN AT RISK INTL")
+    pdf = os.path.join(tempfile.mkdtemp(), "order.pdf")
+    try:
+        first = pp.finalize_and_create(order, pdf, "")
+        second = pp.finalize_and_create(order, pdf, "")
+    finally:
+        (tj.create_jira_ticket, tj.search_jira_tickets, tj.attach_file_to_ticket,
+         pp._create_and_link_work_order, key) = saved
+        if key is not None:
+            os.environ["ANTHROPIC_API_KEY"] = key
+        pp._created_this_run.clear()
+    check("first copy creates a ticket", first.get("ticket_key"), "DSLF-9001")
+    check("second copy creates nothing", len(created), 1)
+    check("second copy names the first", second.get("errors"), ["Duplicate: ['DSLF-9001']"])
+
+
 def main():
     for fn in sorted(
         (v for k, v in globals().items() if k.startswith("test_") and callable(v)),
