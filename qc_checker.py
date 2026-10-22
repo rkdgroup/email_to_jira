@@ -1148,6 +1148,14 @@ def _state_omit_count_text(omission_text: str) -> str:
             f"The rule fires at 6, so Other Fees should be {expected} — do not recount.")
 
 
+def _client_profile(ticket_fields: dict) -> dict | None:
+    """The client's profile by database code, then without its client letter; None when none is on file."""
+    from parse_pipeline import _PROFILE_MAP
+
+    db = str(ticket_fields.get("client_db") or "").upper()
+    return _PROFILE_MAP.get(db) or _PROFILE_MAP.get(db[:-1] if db else "") or None
+
+
 def _profile_context(ticket_fields: dict) -> str:
     """The client's own profile terms, as the authority on what the order's shorthand means.
 
@@ -1157,14 +1165,13 @@ def _profile_context(ticket_fields: dict) -> str:
     $49.99, and a tail run to $249.99, $499.99, $999.99 or no cap at all. Judging "$10+"
     against an assumed open range reports every correctly-executed pull as a defect.
     """
-    from parse_pipeline import _PROFILE_MAP
-
     db = str(ticket_fields.get("client_db") or "").upper()
-    prof = _PROFILE_MAP.get(db) or _PROFILE_MAP.get(db[:-1] if db else "")
+    prof = _client_profile(ticket_fields)
     if not prof:
         return ("\n\nCLIENT PROFILE: none on file for this database. You cannot confirm a "
                 "dollar-band ceiling without it — if the SELECT applied one, say it could "
-                "not be verified rather than calling it wrong.")
+                "not be verified rather than calling it wrong: report it as a NOTE, never "
+                "WRONG or BLOCKING-BLANK.")
 
     rows = [f"  Dollar cap: {prof.get('dollar_cap') or '(not recorded)'}"]
     if prof.get("select_by"):
@@ -1328,6 +1335,33 @@ def _excuse_title_tag(result: dict, suffix: str, client: str, ticket: str) -> di
             return f
         return {**f, "severity": "NOTE",
                 "issue": f"{f.get('issue', '')} — '{tag}' ends the REPORT title as the client's tag ({client}), not a criterion"}
+
+    findings = [excuse(f) for f in result.get("findings") or []]
+    excused = sum(new is not old for new, old in zip(findings, result.get("findings") or []))
+    return _rescore({**result, "findings": findings}, excused)
+
+
+# A range counts only with a $ or cents, so "4-6 LINE ADDRESS" or a zip range never reads as a band.
+_STATED_CEILING = re.compile(r"Dollar Cap\s*:\s*\$?\d"
+                             r"|(?:\$\d+(?:\.\d\d)?|\d+\.\d\d)\s*(?:-|–|THRU|TO)\s*\$?\d+"
+                             r"|\b(?:UNDER|UP\s+TO|BELOW)\s+\$\d", re.IGNORECASE)
+_CEILING = re.compile(r"ceiling|\bcap\b", re.IGNORECASE)
+_UNVERIFIED = re.compile(r"(?:cannot|can't|could not|couldn't|unable to|not) (?:be )?verif|unverifiable",
+                         re.IGNORECASE)
+
+
+def _excuse_unverifiable_cap(result: dict, ticket_fields: dict, ticket: str) -> dict:
+    """No profile and no ceiling on the ticket: a ceiling finding that says it cannot be verified is a NOTE (DSLF-1456)."""
+    if _client_profile(ticket_fields) or _STATED_CEILING.search(ticket or ""):
+        return result
+
+    def excuse(f: dict) -> dict:
+        about = " ".join(str(f.get(k, "")) for k in ("field", "issue", "expected"))
+        if (str(f.get("severity", "")).upper() != "BLOCKING-BLANK" or not _CEILING.search(about)
+                or not _UNVERIFIED.search(str(f.get("issue", "")))):
+            return f
+        return {**f, "severity": "NOTE",
+                "issue": f"{f.get('issue', '')} — no profile on file and the ticket states no ceiling, so this is a NOTE"}
 
     findings = [excuse(f) for f in result.get("findings") or []]
     excused = sum(new is not old for new, old in zip(findings, result.get("findings") or []))
@@ -1555,6 +1589,7 @@ def review_select(pdf_path: str, ticket_fields: dict,
         return _unverified(f"could not assemble the ticket context ({e})", "SELECT")
     result = _excuse_household(_review(pdf_path, _SYSTEM_SELECT, _schema(False), user, "SELECT",
                                        model, effort), ticket_fields.get("client_db"))
+    result = _excuse_unverifiable_cap(result, ticket_fields, ticket)
     try:
         suffix = parse_select_pdf(pdf_path).get("criteria_suffix", "")
     except Exception:  # an unreadable title only means no excuse; the verdict stands
