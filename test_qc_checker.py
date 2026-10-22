@@ -660,6 +660,8 @@ def test_select_prompt_keeps_the_rules_the_regex_checker_knew():
         ("NAME IS NOT AN APPLIED CRITERION",
                                  "a block title is shorthand, only '=' lines apply"),
         ("00001 THRU 99998",     "the contrast case: a genuinely dropped geo (DSLF-1092)"),
+        ("THE SAME HOLDS FOR THE CLIENT TAG",
+                                 "the title's client tag is not a criterion (DSLF-1484 'SCF')"),
     ):
         check(f"SELECT prompt keeps {why}", needle.lower() in s.lower(), True)
 

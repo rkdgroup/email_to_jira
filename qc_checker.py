@@ -775,6 +775,14 @@ WHAT TO CHECK, WORST FIRST
    because the block applies no date line at all. Never treat a block title, or the REPORT
    header, as evidence that a window was applied or misapplied; read the "=" lines.
 
+   THE SAME HOLDS FOR THE CLIENT TAG. The REPORT header ends in a short client tag, and
+   the Mailing Information page repeats it as "Work Order Description.: <tag>" and in
+   "Mailing Description....". The tag abbreviates the CLIENT (the mailer the list is
+   rented to) and is never a criterion: "P.O.# J5989 $5+L6M SCF" is Silent Cry
+   Foundation, not an SCF select (DSLF-1484), the same way FLAG, CBTB or KWN name a
+   client. Never read a geography, flag or segment ask out of the tag; only the ticket and
+   the "=" lines decide whether an SCF or zip select was ordered and applied.
+
    Judge it in ONE direction only. The include set is a STANDING universe and is routinely
    WIDER than any single order: "0-49.99 L3M" backing a "$5+" order, an L6M window backing
    a 4-month ask. Wider is correct and must not be reported. What matters is that the
