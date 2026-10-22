@@ -1294,12 +1294,44 @@ def _excuse_household(result: dict, db: str) -> dict:
             f["severity"] = "NOTE"
             f["issue"] = f"{f.get('issue', '')} — {db} owns no household set; ships without it by rule"
             excused += 1
+    return _rescore(result, excused)
+
+
+def _rescore(result: dict, excused: int) -> dict:
+    """Recount blocking findings after an excuse; PASS when an excuse left nothing blocking."""
     blocking = [f for f in result.get("findings") or []
                 if str(f.get("severity", "")).upper() in _BLOCKING]
-    result["blocking_count"] = len(blocking)
-    if excused and not blocking and result.get("verdict") == FAIL:
-        result["verdict"] = PASS
-    return result
+    passed = excused and not blocking and result.get("verdict") == FAIL
+    return {**result, "blocking_count": len(blocking), "verdict": PASS if passed else result.get("verdict")}
+
+
+_TAG_STOPWORDS = {"OF", "THE", "AND", "FOR"}
+
+
+def _client_initials(name: str) -> set:
+    """'SILENT CRY FOUNDATION' -> {'SCF'}, with and without stopwords."""
+    words = re.findall(r"[A-Z0-9]+", str(name or "").upper())
+    return {"".join(w[0] for w in ws) for ws in (words, [w for w in words if w not in _TAG_STOPWORDS]) if ws}
+
+
+def _excuse_title_tag(result: dict, suffix: str, client: str, ticket: str) -> dict:
+    """A finding citing the REPORT title's client tag is a NOTE when the ticket never names it (DSLF-1484)."""
+    tag = (str(suffix or "").split() or [""])[-1].upper()
+    said = re.compile(rf"\b{re.escape(tag)}S?\b", re.IGNORECASE)
+    # 3+ letters only: a two-letter tag could be a state code the ticket really asked for.
+    if len(tag) < 3 or not tag.isalpha() or tag not in _client_initials(client) or said.search(ticket or ""):
+        return result
+
+    def excuse(f: dict) -> dict:
+        text = " ".join(str(f.get(k, "")) for k in ("issue", "ticket_value", "select_value", "expected"))
+        if str(f.get("severity", "")).upper() not in _BLOCKING or not said.search(text):
+            return f
+        return {**f, "severity": "NOTE",
+                "issue": f"{f.get('issue', '')} — '{tag}' ends the REPORT title as the client's tag ({client}), not a criterion"}
+
+    findings = [excuse(f) for f in result.get("findings") or []]
+    excused = sum(new is not old for new, old in zip(findings, result.get("findings") or []))
+    return _rescore({**result, "findings": findings}, excused)
 
 
 def _worst(*verdicts) -> str:
@@ -1509,8 +1541,9 @@ def review_select(pdf_path: str, ticket_fields: dict,
                   model: str = None, effort: str = None) -> dict:
     """Did the SELECT deliver what the ticket asked for?"""
     try:
+        ticket = _ticket_text(ticket_fields)
         user = ("THE ORDER, as the ticket states it:\n\n"
-                + _ticket_text(ticket_fields)
+                + ticket
                 + _profile_context(ticket_fields)
                 + _adstra_flag_context(ticket_fields)
                 + _quantity_context(pdf_path, ticket_fields)
@@ -1520,8 +1553,13 @@ def review_select(pdf_path: str, ticket_fields: dict,
         # Assembling the prompt reads the profile YAML and the ticket's ADF. If that
         # throws, the check has not run — and "has not run" is UNVERIFIED, never a pass.
         return _unverified(f"could not assemble the ticket context ({e})", "SELECT")
-    return _excuse_household(_review(pdf_path, _SYSTEM_SELECT, _schema(False), user, "SELECT",
-                                     model, effort), ticket_fields.get("client_db"))
+    result = _excuse_household(_review(pdf_path, _SYSTEM_SELECT, _schema(False), user, "SELECT",
+                                       model, effort), ticket_fields.get("client_db"))
+    try:
+        suffix = parse_select_pdf(pdf_path).get("criteria_suffix", "")
+    except Exception:  # an unreadable title only means no excuse; the verdict stands
+        suffix = ""
+    return _excuse_title_tag(result, suffix, ticket_fields.get("mailer_name", ""), ticket)
 
 
 def review_order(pdf_path: str, ticket_fields: dict,
