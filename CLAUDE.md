@@ -56,22 +56,26 @@ python parse_pipeline.py /path/to/order.pdf --dry-run --verbose
 `--dry-run` and `--verbose` are the **only** two CLI flags for `parse_pipeline.py`. `broker_hint` is a function argument (used by the email scanner), not a flag.
 
 **Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
-protect you if you run them. Twenty regression files, all hermetic: no Jira, no DB, no PDFs,
-no network — the QC tests never call the API. **Run the whole suite with pytest** (273 tests,
-~17s; no `pytest.ini`/`conftest.py` needed):
+protect you if you run them. Twenty-three regression files, all hermetic: no Jira, no DB, no PDFs,
+no network — the QC tests never call the API. **Run the whole suite with pytest** (292 tests,
+under 20s; no `pytest.ini`/`conftest.py` needed):
 
 ```bash
 python -m pytest -q test_*.py "WO#/"              # everything
 python -m pytest -q test_kap_fields.py -k below   # one file / one test
 ```
 
-Fifteen files are also standalone runners that print `PASS` lines and `ALL PASSED`.
-**`test_adf_move.py` and `test_usage_log.py` are pytest-only** — they have no `__main__`, so
-`python test_adf_move.py` exits 0 having run nothing. Use pytest for those two.
+Eighteen files are also standalone runners that print `PASS` lines and `ALL PASSED`.
+**Five files are pytest-only** — `test_adf_move.py`, `test_usage_log.py` and the three
+`test_qc_*` excuse files have no `__main__`, so `python test_adf_move.py` exits 0 having run
+nothing. Use pytest for those five.
 
 ```bash
 python -m pytest -q test_adf_move.py  # omission_move: one misfiled line Description -> Omission
 python -m pytest -q test_usage_log.py # usage-log row shape + pricing, parity with LRF_Processing
+python -m pytest -q test_qc_household_no_set.py  # household finding = NOTE for a NO_HOUSEHOLD_SET db
+python -m pytest -q test_qc_unverifiable_cap.py  # no profile + no stated ceiling: cap finding = NOTE
+python -m pytest -q test_qc_title_tag.py         # REPORT title's client tag (SCF) is not a criterion
 python test_ship_to_rules.py         # ship-to house rules + KAP FTP-boilerplate false positive
 python test_kap_fields.py            # KAP exchange qty, spaced order #, $-select, BELOW ref
 python test_adstra_list_code.py      # ADSTRA 5-digit list code vs address digits
@@ -87,6 +91,7 @@ python test_ncc_dnm_omit.py          # NCC do-not-mail line stripped for N11D on
 python test_household_omit.py       # 1 PER HOUSEHOLD reaches the omission for every broker
 python test_celco_fields.py          # CELCO wrapped segment, CONTACT requestor, FTP notify (+ "Notify X" prose), Key Code lines
 python test_cost_report.py           # QC-comment cost footer parse, month bucketing
+python test_profile_select_by.py     # build_profile_yaml: a Select By that wraps keeps its second line
 python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
 python "WO#/test_ibmi_credentials.py"        # blank env var cannot mask .env; empty password fails loudly
 ```
@@ -96,8 +101,8 @@ Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap
 `parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
 `parse_pipeline._dup_check_key`, `parse_pipeline._create_and_link_work_order`,
 `parse_pipeline._strip_ncc_dnm`, `parse_pipeline._with_household`, `parsers/celco.py`, `qty_approval_scanner.py`, `WO#/work_order.py`,
-`WO#/base.py`, `adf_move.py`, `usage_log.py`, or `cost_report.py`. Verified all twenty pass (273 tests)
-2026-10-16. Everything else is tested manually via `--dry-run --verbose` against real
+`WO#/base.py`, `adf_move.py`, `usage_log.py`, `cost_report.py`, or `build_profile_yaml.py`. Verified all
+twenty-three pass (292 tests) 2026-10-23. Everything else is tested manually via `--dry-run --verbose` against real
 broker PDFs.
 The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
 in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
@@ -114,7 +119,7 @@ and fail on the agent.
 **`README.md` is a lighter duplicate of this file.** Its Quick Start now installs from
 `requirements.txt` rather than a hand-listed set, so that drift cannot recur, but its
 project tree still omits `tools_polish.py`, `tools_zip_omit.py`, `LLM_writes.py`, the
-offline AI tools, `adf_move.py`, `usage_log.py`, the `WO#/` step and the twenty test files. Treat CLAUDE.md as authoritative
+offline AI tools, `adf_move.py`, `usage_log.py`, `handoff.py`, `cost_report.py`, the `WO#/` step and the twenty-three test files. Treat CLAUDE.md as authoritative
 and update README only when a change is user-facing.
 
 ```bash
@@ -172,8 +177,9 @@ pip install -r requirements.txt   # same file Jenkins installs; never hand-list 
 |------|---------|
 | `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` | Everything (Jira REST) |
 | `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_SERVICE_ACCOUNT`, `MS_SERVICE_PASSWORD`, `MS_TENANT_ID`, `IMAP_EMAIL` | email + qty scanners (MSAL ROPC auth) |
-| `IBMI_HOST`, `IBMI_USER`, `IBMI_PASSWORD` | work-order creation |
+| `IBMI_HOST`, `IBMI_USER`, `IBMI_PASSWORD` (+ optional `IBMI_JT400_JAR`) | work-order creation |
 | `ANTHROPIC_API_KEY` | `tools_polish` (live pipeline) + `qc_checker` (QC) + `LLM_writes` + offline AI tools |
+| `HANDOFF_EMAIL_TO`, `HANDOFF_EMAIL_CC` | `handoff.py --send` recipients (not credentials) |
 
 The `JIRA_API_TOKEN` in `.env` **can create and edit tickets** — `tools_jira` uses it to create issues (POST), update fields (`update_ticket_fields`, PUT → 204), comment, and attach. (Verified 2026-07-27: created DSLF-919, updated DSLF-936.) **The local `.env` token is not the Jenkins one and they can diverge:** on 2026-09-30 the local token returned 401 while Jenkins kept creating tickets. Test with `GET /rest/api/3/myself` before a live script that writes Jira. The Atlassian MCP connector authenticates as the same **Jira Service Account** (accountId `712020:73a21996-…`) and is the working fallback for reads and field writes when the local token fails.
 
@@ -217,7 +223,7 @@ Load-bearing behaviors that are easy to get wrong:
   omission already says it or the line says DO NOT. Never `2 PER HH`.
 - **Validation is advisory.** `validate_result()` errors only abort when `result.confidence == 0.0`. Rule-based parsers always return 0.92, so missing required fields (mailer_name, mailer_po, list_name, list_manager, requested_quantity) just log "proceeding" and a **partial ticket is still created**. Only a totally-unparsed PDF is blocked.
 - **The ADSTRA STANDARD OMITS block is hardcoded in the parser, and one of its lines is not
-  standard.** `parsers/adstra.py:141` prepends the same nine-line block to every ADSTRA
+  standard.** `_STANDARD_OMITS` in `parsers/adstra.py` prepends the same block to every ADSTRA
   order, `NCC DNM FILE FOR LIST RENTAL (W/O 222222)` among them. **N11D does not suppress
   against that file** and had it on 54 of its 55 tickets. `_NCC_DNM_EXCLUDED_DB_CODES`
   (`parse_pipeline`, currently `{"N11D"}`) strips it after enrichment — the parser
@@ -273,8 +279,8 @@ The repo `Jenkinsfile` does not drive the live job (see "QC" below). The freesty
 `cp`s a full credential file to `.env` before running, which is where
 `email_scanner.get_access_token()`'s hard requirements (`MS_CLIENT_SECRET`,
 `MS_SERVICE_ACCOUNT`, `MS_SERVICE_PASSWORD` — `sys.exit(1)` if any is missing) and
-`ANTHROPIC_API_KEY` (live `tools_polish` + QC) come from. The Jenkinsfile's three injected
-vars are not the credential picture.
+`ANTHROPIC_API_KEY` (live `tools_polish` + QC) come from. The Jenkinsfile's `environment`
+block is not the credential picture either — nothing runs it.
 
 ## Config System
 
@@ -554,6 +560,15 @@ python qc_checker.py --model M --effort low|medium|high|xhigh|max --json FILE
 - **The gate overrides the model, not the reverse.** `_reconcile()` forces `FAIL` whenever
   any finding is `WRONG` or `BLOCKING-BLANK`, whatever the model wrote in `verdict`, and
   records `verdict_forced`. `NOTE` never forces a fail.
+- **Three code-side excuses run after the gate, on the SELECT check only** (`review_select`,
+  2026-10-19..22). Each downgrades one known false positive to `NOTE`, and `_rescore` turns
+  `FAIL` into `PASS` when nothing else still blocks: `_excuse_household` (client DB in
+  `NO_HOUSEHOLD_SET` — no LRF household set exists, so `1 PER HOUSEHOLD` ships without it;
+  drop a code once ops builds one), `_excuse_unverifiable_cap` (no profile on file and no
+  ceiling stated on the ticket), and `_excuse_title_tag` (the REPORT title ends in the
+  client's initials, `SCF` = Silent Cry Foundation on DSLF-1484, which is never a criterion).
+  They are code, not prompt text, so the rule holds whatever the model writes. Pinned in
+  `test_qc_household_no_set.py`, `test_qc_unverifiable_cap.py`, `test_qc_title_tag.py`.
 - **`_profile_context()` sends the client's `dollar_cap` and it is load-bearing.** `$10+` on
   an order is **not** an open-ended floor — it means $10 through *that client's* contracted
   cap (60 clients at `$99.99`, 48 at `$49.99`, a tail at `$249.99`/`$499.99`/`$999.99`, some
@@ -924,9 +939,9 @@ Two agents are documented, both `model: opus` and both **write-capable**
 
 They can create and edit live Jira tickets through `tools_jira`, same as the pipeline. Prefer
 `bff_agent` when the order is BFF — it carries the program-level knowledge `jira_Auto` does not.
-**Only `jira_Auto` actually exists in this checkout** (checked 2026-09-30: `bff_agent.md` is in
-neither `.claude/agents/` nor `~/.claude/agents/`), so on a machine without it, BFF work falls
-back to `jira_Auto`.
+**Only `jira_Auto` is tracked in git.** `bff_agent.md` can sit in `.claude/agents/` as a local
+file (it does on the main dev box, 2026-10-23), but `.claude/` is gitignored, so a fresh clone has
+no `bff_agent` and BFF work there falls back to `jira_Auto`.
 
 ## Github Rules
 
