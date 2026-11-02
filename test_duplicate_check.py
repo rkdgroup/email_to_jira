@@ -12,6 +12,8 @@ which would have matched. A blank key now falls back instead of skipping.
 
 AMLC keeps keying on Manager Order # even when a Mailer PO is present: its columnar orders
 put someone else's number in that field, so matching on it finds the wrong ticket.
+
+A search that errors (401, timeout) refuses the order rather than reading as "no duplicate".
 """
 
 import sys
@@ -101,6 +103,35 @@ def test_second_copy_in_the_same_run_is_caught_before_jira_can_see_the_first():
     check("first copy creates a ticket", first.get("ticket_key"), "DSLF-9001")
     check("second copy creates nothing", len(created), 1)
     check("second copy names the first", second.get("errors"), ["Duplicate: ['DSLF-9001']"])
+
+
+def test_a_failed_search_creates_nothing():
+    """A 401 or timeout used to come back as {"error": ...} with no "total", read as zero
+    matches, and create the ticket with nothing logged. Now it refuses the order instead."""
+    import os, tempfile
+    import parse_pipeline as pp
+    import tools_jira as tj
+    created = []
+    saved = (tj.create_jira_ticket, tj.search_jira_tickets, tj.attach_file_to_ticket,
+             pp._create_and_link_work_order, os.environ.pop("ANTHROPIC_API_KEY", None))
+    tj.create_jira_ticket = lambda **kw: created.append(kw) or {"key": "DSLF-9101"}
+    tj.search_jira_tickets = lambda jql, **kw: {"error": "HTTP 401: Unauthorized"}
+    tj.attach_file_to_ticket = lambda *a, **k: None
+    pp._create_and_link_work_order = lambda **kw: ""
+    pp._created_this_run.clear()
+    order = _r(list_manager="KAP", mailer_po="132991", manager_order_number="DM092",
+               mailer_name="HERITAGE FOUNDATION", list_name="JUDICIAL WATCH DONORS")
+    try:
+        res = pp.finalize_and_create(order, os.path.join(tempfile.mkdtemp(), "order.pdf"), "")
+    finally:
+        (tj.create_jira_ticket, tj.search_jira_tickets, tj.attach_file_to_ticket,
+         pp._create_and_link_work_order, key) = saved
+        if key is not None:
+            os.environ["ANTHROPIC_API_KEY"] = key
+    check("failed search creates no ticket", created, [])
+    check("failed search is a failure", res.get("success"), False)
+    check("failed search says why", res.get("errors"),
+          ["Duplicate check failed: HTTP 401: Unauthorized"])
 
 
 def main():

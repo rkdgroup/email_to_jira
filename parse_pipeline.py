@@ -284,6 +284,14 @@ def finalize_and_create(result, pdf_path: str, text: str,
                 existing = {"total": 1, "issues": [{"key": _created_this_run[dup_jql]}]}
             else:
                 existing = search_jira_tickets(dup_jql)
+            if "error" in existing:
+                # A failed search is not "no duplicate". It used to read as total 0 and create
+                # the ticket with nothing logged; a missed duplicate costs more than a re-run
+                # (DSLF-1211), so refuse and let the order go to review.
+                log.error("Duplicate check could not run for %s: %s", dup_label, existing["error"])
+                flag_for_review("Duplicate check failed", f"{dup_label}: {existing['error'][:200]}")
+                return {"success": False, "source": result.source,
+                        "errors": [f"Duplicate check failed: {existing['error'][:200]}"]}
             if existing.get("total", 0) > 0:
                 keys = [i["key"] for i in existing.get("issues", [])]
                 log.warning("Duplicate detected — existing tickets: %s", keys)
