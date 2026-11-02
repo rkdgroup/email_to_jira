@@ -166,8 +166,7 @@ def test_key_code_from_the_mark_file_line():
 
 def test_fields_that_were_already_right():
     r = _parse()
-    check("manager order", r.manager_order_number, "D04-086888-NI")
-    check("mailer po = order #", r.mailer_po, "D04-086888-NI")
+    check("mailer po = order # as printed", r.mailer_po, "D04-086888-NI")
     check("list name", r.list_name, "PROJECT OPEN HAND")
     check("mailer", r.mailer_name, "GLIDE MEMORIAL - CLIENT ID")
     check("quantity", r.requested_quantity, 1923)
@@ -176,6 +175,20 @@ def test_fields_that_were_already_right():
     check("mail date", r.mail_date, "2026-11-13")
     check("wanted by", r.ship_by_date, "2026-10-02")
     check("omission", r.omission_description, "CANADA, PUERTO RICO, FOREIGN AND MILITARY NAMES.")
+
+
+def test_manager_order_is_the_order_number_digits():
+    """Manager Order # is the ORDER #'s digit group only, so the title and Seed Tracking carry
+    086888, not D04-086888-NI. Mailer PO (the duplicate-check key) keeps the full value."""
+    r = _parse()
+    check("manager order = ORDER # digits", r.manager_order_number, "086888")
+    check("title ends with the digits", r.summary.endswith(" - 086888"), True)
+    check("CE suffix, other order", _parse(_D04_086888.replace("D04-086888-NI", "D04-085463-CE"))
+          .manager_order_number, "085463")
+    check("digits-only ORDER # unchanged", _parse(_D04_086888.replace("D04-086888-NI", "086888"))
+          .manager_order_number, "086888")
+    check("no digit group: kept as printed", _parse(_D04_086888.replace("D04-086888-NI", "D04086888NI"))
+          .manager_order_number, "D04086888NI")
 
 
 def test_one_line_segment_stops_at_the_next_label():

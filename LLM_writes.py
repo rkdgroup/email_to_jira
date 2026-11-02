@@ -106,7 +106,7 @@ MAILER PO vs MANAGER ORDER NUMBER — these are different fields on every order.
   KAP               mailer_po = Broker order # value    | manager_order = KAP ORDER, DL-prefix
   CONRAD            mailer_po = "BROK/MAIL PO:" field   | manager_order = PURCHASE ORDER NO
   NAMES IN THE NEWS mailer_po = 6-7 digit number        | manager_order = LR #
-  CELCO             both come from ORDER #
+  CELCO             mailer_po = ORDER # as printed (D04-086888-NI) | manager_order = its digits only (086888)
   SimioCloud        mailer_po = Ship Label "PO#", else the first 4+ digit run in the label
   RKD / AMLC        mailer_po = "Client P.O.:"          | manager_order = first 5-6 digit
                     number in the first 10 lines (Service Bureau No. / Purchase Order No.)

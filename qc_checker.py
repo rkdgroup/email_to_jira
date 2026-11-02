@@ -923,7 +923,8 @@ WHAT TO CHECK
        KAP             the "Broker order:" value           | "KAP Order:" DL- or DM-prefix
        CONRAD DIRECT   BROK/MAIL PO: field                 | PURCHASE ORDER NO
        NAMES IN NEWS   6-7 digit number                    | LR #
-       CELCO           ORDER #                             | ORDER #  (same value)
+       CELCO           ORDER # as printed (D04-086888-NI)  | the ORDER # digits only (086888);
+                       those digits sitting inside the PO are correct for CELCO
        RKD / AMLC      "Client P.O.:" — in AMLC's columnar layout the value can sit up to
                        25 lines BELOW its label            | first 5-6 digit number in the
                                                              first 10 lines

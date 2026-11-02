@@ -846,7 +846,7 @@ Run at the top of `create_jira_ticket` and **override** whatever the parser prod
 | KAP | Broker order # value | the `KAP ORDER:` value, read as the first `D[LM]\d+` on the page (DL or DM, no hyphen) |
 | CONRAD DIRECT | BROK/MAIL PO: field | PURCHASE ORDER NO |
 | Names in News | 6-7 digit number | LR # |
-| CELCO | ORDER # | ORDER # |
+| CELCO | ORDER # as printed (`D04-086888-NI`) | the ORDER #'s digit group only (`086888`, since 2026-11-02), so Title and Seed Tracking carry it too; an ORDER # without a hyphen-delimited 5+ digit group is kept as printed |
 | SimioCloud | Ship Label, by `_ship_label_po` — see the note below | Order# (inherits `DataAxleParser.parse`) |
 | RKD / AMLC | `Client P.O.:` — in AMLC's columnar layout the value can sit up to 25 lines *below* its label | first 5-6 digit number in the first 10 lines (Service Bureau No. / Purchase Order No.) |
 

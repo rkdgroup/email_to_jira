@@ -12,16 +12,21 @@ class CelcoParser(BaseBrokerParser):
         """Parse CELCO list rental/exchange order PDF text."""
         lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
 
-        # --- Manager order number (ORDER #) ---
+        # --- ORDER # ---
         # Format: "ORDER #\nD04-085280-NI"
-        manager_order_number = ""
+        order_no = ""
         for i, ln in enumerate(lines):
             if ln == "ORDER #" and i + 1 < len(lines):
-                manager_order_number = lines[i + 1]
+                order_no = lines[i + 1]
                 break
 
-        # --- mailer_po = ORDER # (e.g. D04-085463-CE) ---
-        mailer_po = manager_order_number
+        # --- mailer_po = ORDER # as printed (e.g. D04-085463-CE) ---
+        mailer_po = order_no
+        # Manager Order # is only the ORDER #'s digit group, leading zeros kept:
+        # D04-086888-NI -> 086888 (2026-11-02; staff had keyed DSLF-111 that way by hand).
+        # An ORDER # without a hyphen-delimited digit group is kept as printed.
+        m_digits = re.search(r"(?:^|-)(\d{5,})(?:-|$)", order_no)
+        manager_order_number = m_digits.group(1) if m_digits else order_no
 
         # --- Order date ---
         order_date_raw = ""
