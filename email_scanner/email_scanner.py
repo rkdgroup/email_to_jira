@@ -57,6 +57,10 @@ PROCESSED_IDS_FILE  = _SCRIPT_DIR / "processed_ids.json"  # message IDs already 
 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
+# Kill switch. False = read no mail, create no tickets; still exits 0 so the Jenkins job runs QC.
+# Off since 2026-11-11: two scanners were creating every order twice (DSLF-1567/1568).
+SCANNER_ENABLED = False
+
 # Sender domain → broker key.  Used to route orders that lack standard PDF fingerprints.
 SENDER_BROKER_MAP = {
     "keyacquisition.com":         "kap",
@@ -442,6 +446,9 @@ def process_message(token: str, message: dict, failed_folder_id: str, processed_
 # ── Main scan ─────────────────────────────────────────────────────────────────
 
 def run_scan() -> None:
+    if not SCANNER_ENABLED:
+        log.warning("Scanner disabled (SCANNER_ENABLED = False): no mail read, no tickets created.")
+        return
     token        = get_access_token()
     source_id    = _get_folder_id(token, SOURCE_FOLDER)
     failed_id    = _get_folder_id(token, FAILED_FOLDER)
