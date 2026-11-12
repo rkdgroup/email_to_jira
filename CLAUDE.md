@@ -285,12 +285,11 @@ replies never reach this mailbox), and 17 tickets had Requested Quantity written
 
 ### Email scanner specifics
 
-- **⚠ DISABLED since 2026-11-11 by `SCANNER_ENABLED = False`** in `email_scanner.py`.
-  `run_scan` logs a warning and returns before reading mail, so the job creates no tickets
-  and posts no thread comments, and it still exits 0, so QC still runs. It was turned off
-  because two runners were creating every order twice (DSLF-1567/1568). It stops only
-  runners that use current `main`: the Jenkins job re-clones every build, but a static
-  checkout elsewhere ignores it. Turn it back on with `True`, then push.
+- **`SCANNER_ENABLED` in `email_scanner.py` is the kill switch.** `False` makes `run_scan`
+  log a warning and return before reading mail: no tickets, no thread comments, exit 0 so
+  QC still runs. It was off from 2026-11-11 16:27Z to 2026-11-12 while two runners were
+  creating every order twice (DSLF-1567/1568). It reaches only runners that re-clone `main`
+  each build, as the Jenkins job does. Flip it, push, and the next build picks it up.
 - **Runtime state lives in two gitignored JSON files** next to the script:
   `processed_ids.json` (message IDs already handled) and `thread_map.json`
   (`conversationId` → ticket key). Deleting them is not harmless — the scanner will

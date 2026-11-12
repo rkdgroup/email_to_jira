@@ -58,8 +58,8 @@ PROCESSED_IDS_FILE  = _SCRIPT_DIR / "processed_ids.json"  # message IDs already 
 GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 # Kill switch. False = read no mail, create no tickets; still exits 0 so the Jenkins job runs QC.
-# Off since 2026-11-11: two scanners were creating every order twice (DSLF-1567/1568).
-SCANNER_ENABLED = False
+# Was off 2026-11-11 while two scanners were creating every order twice (DSLF-1567/1568).
+SCANNER_ENABLED = True
 
 # Sender domain → broker key.  Used to route orders that lack standard PDF fingerprints.
 SENDER_BROKER_MAP = {
