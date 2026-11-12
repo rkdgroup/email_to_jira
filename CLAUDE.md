@@ -63,8 +63,8 @@ python parse_pipeline.py /path/to/order.pdf --dry-run
 `--dry-run` and `--verbose` are the **only** two CLI flags for `parse_pipeline.py`. `broker_hint` is a function argument (used by the email scanner), not a flag.
 
 **Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
-protect you if you run them. Twenty-three regression files, all hermetic: no Jira, no DB, no PDFs,
-no network — the QC tests never call the API. **Run the whole suite with pytest** (292 tests,
+protect you if you run them. Twenty-four regression files, all hermetic: no Jira, no DB, no PDFs,
+no network — the QC tests never call the API. **Run the whole suite with pytest** (298 tests,
 ~30s; no `pytest.ini`/`conftest.py` needed). `pytest` is not in `requirements.txt` — install it
 separately:
 
@@ -75,9 +75,9 @@ python -m pytest -q test_kap_fields.py -k below   # one file / one test
 ```
 
 Eighteen files are also standalone runners that print `PASS` lines and `ALL PASSED`.
-**Five files are pytest-only** — `test_adf_move.py`, `test_usage_log.py` and the three
-`test_qc_*` excuse files have no `__main__`, so `python test_adf_move.py` exits 0 having run
-nothing. Use pytest for those five. `test_qc_checker.py` is a partial runner: its five
+**Six files are pytest-only** — `test_adf_move.py`, `test_usage_log.py`, `test_scanner_host_lock.py`
+and the three `test_qc_*` excuse files have no `__main__`, so `python test_adf_move.py` exits 0
+having run nothing. Use pytest for those six. `test_qc_checker.py` is a partial runner: its five
 `omission_move` wiring tests sit after the `__main__` guard, so only pytest runs them.
 
 ```bash
@@ -86,6 +86,7 @@ python -m pytest -q test_usage_log.py # usage-log row shape + pricing; pins QC's
 python -m pytest -q test_qc_household_no_set.py  # household finding = NOTE for a NO_HOUSEHOLD_SET db
 python -m pytest -q test_qc_unverifiable_cap.py  # no profile + no stated ceiling: cap finding = NOTE
 python -m pytest -q test_qc_title_tag.py         # REPORT title's client tag (SCF) is not a criterion
+python -m pytest -q test_scanner_host_lock.py    # email scanner exits 1 on any host but the rkdc2 Jenkins box
 python test_ship_to_rules.py         # ship-to house rules + KAP FTP-boilerplate false positive
 python test_kap_fields.py            # KAP exchange qty, spaced order #, $-select, BELOW ref
 python test_adstra_list_code.py      # ADSTRA 5-digit list code vs address digits
@@ -111,8 +112,8 @@ Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap
 `parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
 `parse_pipeline._dup_check_key`, `parse_pipeline._create_and_link_work_order`,
 `parse_pipeline._strip_ncc_dnm`, `parse_pipeline._with_household`, `parsers/celco.py`, `qty_approval_scanner.py`, `WO#/work_order.py`,
-`WO#/base.py`, `adf_move.py`, `usage_log.py`, `cost_report.py`, or `build_profile_yaml.py`. Verified all
-twenty-three pass (292 tests) 2026-10-28. Everything else is tested manually via `--dry-run` against real
+`WO#/base.py`, `adf_move.py`, `usage_log.py`, `cost_report.py`, `build_profile_yaml.py`, or
+`email_scanner.run_scan` / `ALLOWED_HOSTS`. Verified all twenty-four pass (298 tests) 2026-11-12. Everything else is tested manually via `--dry-run` against real
 broker PDFs — but that printout is not the ticket's Description: `_print_result` rebuilds it without
 `profile_data` and prints only top-level paragraphs, so `Selects:` bullets and the Standard
 Suppressions / Special Instructions blocks never show (Select By and Dollar Cap do). Read
@@ -134,7 +135,7 @@ and fail on the agent.
 **`README.md` is a lighter duplicate of this file.** Its Quick Start now installs from
 `requirements.txt` rather than a hand-listed set, so that drift cannot recur, but its
 project tree still omits `tools_polish.py`, `tools_zip_omit.py`, `LLM_writes.py`, the
-offline AI tools, `adf_move.py`, `usage_log.py`, `handoff.py`, `cost_report.py`, `backfill_dollar_cap.py`, the `WO#/` step and the twenty-three test files. Treat CLAUDE.md as authoritative
+offline AI tools, `adf_move.py`, `usage_log.py`, `handoff.py`, `cost_report.py`, `backfill_dollar_cap.py`, the `WO#/` step and the twenty-four test files. Treat CLAUDE.md as authoritative
 and update README only when a change is user-facing.
 
 ```bash
@@ -290,6 +291,13 @@ replies never reach this mailbox), and 17 tickets had Requested Quantity written
   QC still runs. It was off from 2026-11-11 16:27Z to 2026-11-12 while two runners were
   creating every order twice (DSLF-1567/1568). It reaches only runners that re-clone `main`
   each build, as the Jenkins job does. Flip it, push, and the next build picks it up.
+- **`ALLOWED_HOSTS` locks the scanner to the rkdc2 Jenkins box** (`{"rkdc2-dmiappsdev01"}`, since
+  2026-11-12). `run_scan` compares `platform.node()` (first label, lower-cased) and exits 1 on any
+  other host before touching the mailbox; under the job's `sh -xe` that also skips `qc_checker`.
+  It exists because a second, never-located runner of the same Jenkins script created every
+  order twice from 10-27 to 11-10; it re-clones `main`, so the lock reaches it. Moving Jenkins
+  means adding the new hostname here first, or the first build on the new box goes red with
+  `Refusing to run on host`. Pinned in `test_scanner_host_lock.py`.
 - **Runtime state lives in two gitignored JSON files** next to the script:
   `processed_ids.json` (message IDs already handled) and `thread_map.json`
   (`conversationId` → ticket key). Deleting them is not harmless — the scanner will

@@ -15,6 +15,7 @@ import re
 import sys
 import json
 import logging
+import platform
 import tempfile
 import base64
 import requests
@@ -60,6 +61,12 @@ GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 # Kill switch. False = read no mail, create no tickets; still exits 0 so the Jenkins job runs QC.
 # Was off 2026-11-11 while two scanners were creating every order twice (DSLF-1567/1568).
 SCANNER_ENABLED = True
+
+# Only the Jenkins job on this host may run the scanner (2026-11-12). From 10-27 to 11-10 a second
+# runner of the same script, never located, created every order twice. It re-clones main each
+# build, so this reaches it: any other host exits 1 before touching the mailbox, which under the
+# job's `sh -xe` also skips its qc_checker. Moving Jenkins means adding the new host here.
+ALLOWED_HOSTS = {"rkdc2-dmiappsdev01"}
 
 # Sender domain → broker key.  Used to route orders that lack standard PDF fingerprints.
 SENDER_BROKER_MAP = {
@@ -449,6 +456,11 @@ def run_scan() -> None:
     if not SCANNER_ENABLED:
         log.warning("Scanner disabled (SCANNER_ENABLED = False): no mail read, no tickets created.")
         return
+    host = platform.node().split(".")[0].lower()
+    if host not in ALLOWED_HOSTS:
+        log.error("Refusing to run on host %r: only %s may run the scanner (ALLOWED_HOSTS).",
+                  platform.node(), sorted(ALLOWED_HOSTS))
+        sys.exit(1)
     token        = get_access_token()
     source_id    = _get_folder_id(token, SOURCE_FOLDER)
     failed_id    = _get_folder_id(token, FAILED_FOLDER)
