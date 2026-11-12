@@ -13,6 +13,7 @@ Usage:
 import os
 import re
 import sys
+import time
 import json
 import logging
 import platform
@@ -122,25 +123,53 @@ def _headers(token: str) -> dict:
     return {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
 
+_GRAPH_TIMEOUT = 30
+_GRAPH_TRIES   = 3
+_RETRY_STATUS  = {429, 502, 503, 504}
+
+
+def _send(method: str, url: str, safe_to_repeat: bool = True, **kw) -> requests.Response:
+    """Graph call that rides out throttling and slow answers (503s, 20s read timeouts, 2026-11-12).
+
+    Retries 429/502/503/504 (Retry-After honoured, capped at 30s) and timeouts. A POST is not
+    safe to repeat after a timeout or 502/504 (the move or create may have run), so it retries
+    only 429/503, where Graph refused it outright.
+    """
+    refused = {429, 503} if not safe_to_repeat else _RETRY_STATUS
+    for attempt in range(1, _GRAPH_TRIES + 1):
+        last = attempt == _GRAPH_TRIES
+        try:
+            resp = requests.request(method, url, timeout=_GRAPH_TIMEOUT, **kw)
+        except (requests.Timeout, requests.ConnectionError) as e:
+            if last or not safe_to_repeat:
+                raise
+            log.warning("Graph %s: %s (try %d/%d)", method.upper(), type(e).__name__, attempt, _GRAPH_TRIES)
+            time.sleep(2 * attempt)
+            continue
+        if resp.status_code in refused and not last:
+            try:
+                wait = min(float(resp.headers.get("Retry-After", 2 * attempt)), 30)
+            except ValueError:
+                wait = 2 * attempt
+            log.warning("Graph %s: HTTP %d, retry in %.0fs (try %d/%d)",
+                        method.upper(), resp.status_code, wait, attempt, _GRAPH_TRIES)
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()
+        return resp
+
+
 def _get(token: str, url: str, params: dict = None) -> dict:
-    resp = requests.get(url, headers=_headers(token), params=params, timeout=20)
-    resp.raise_for_status()
-    return resp.json()
+    return _send("get", url, headers=_headers(token), params=params).json()
 
 
 def _patch(token: str, url: str, body: dict) -> None:
-    resp = requests.patch(
-        url, headers={**_headers(token), "Content-Type": "application/json"},
-        json=body, timeout=20)
-    resp.raise_for_status()
+    _send("patch", url, headers={**_headers(token), "Content-Type": "application/json"}, json=body)
 
 
 def _post(token: str, url: str, body: dict) -> dict:
-    resp = requests.post(
-        url, headers={**_headers(token), "Content-Type": "application/json"},
-        json=body, timeout=20)
-    resp.raise_for_status()
-    return resp.json()
+    return _send("post", url, safe_to_repeat=False,
+                 headers={**_headers(token), "Content-Type": "application/json"}, json=body).json()
 
 
 # ── Folder resolution ─────────────────────────────────────────────────────────
@@ -156,7 +185,11 @@ def _get_folder_id(token: str, folder_path: str) -> str:
     parts     = folder_path.split("/")
     parent_id = "inbox"
 
-    for part in parts:
+    for i, part in enumerate(parts, 1):
+        prefix = "/".join(parts[:i])
+        if prefix in _folder_cache:  # List Rental is shared by Processed and Failed: one lookup, not three
+            parent_id = _folder_cache[prefix]
+            continue
         data    = _get(token, f"{base}/mailFolders/{parent_id}/childFolders",
                        params={"$filter": f"displayName eq '{part}'"})
         folders = data.get("value", [])
@@ -167,8 +200,8 @@ def _get_folder_id(token: str, folder_path: str) -> str:
                               {"displayName": part})
             parent_id = created["id"]
             log.info("Created folder: %s", part)
+        _folder_cache[prefix] = parent_id
 
-    _folder_cache[folder_path] = parent_id
     return parent_id
 
 
@@ -215,13 +248,11 @@ def _fetch_full_body(token: str, msg_id: str) -> str:
     """Fetch the full message body as plain text.
     Requests text/plain explicitly to avoid HTML <style> bloat pushing
     key content past the broker detection scan window."""
-    resp = requests.get(
-        f"{_mailbox_base()}/messages/{msg_id}",
+    resp = _send(
+        "get", f"{_mailbox_base()}/messages/{msg_id}",
         headers={**_headers(token), "Prefer": 'outlook.body-content-type="text"'},
         params={"$select": "body"},
-        timeout=20,
     )
-    resp.raise_for_status()
     return resp.json().get("body", {}).get("content", "").strip()
 
 
