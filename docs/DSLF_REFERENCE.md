@@ -1,0 +1,1067 @@
+# DSLF Reference (full history)
+
+Archive of the long-form CLAUDE.md as of 2026-11-12, kept for the incident stories (DSLF-xxxx),
+measurements and dated rationale that were trimmed out of `CLAUDE.md`. Not loaded automatically —
+read it when a rule in `CLAUDE.md` needs its backstory. Counts and dates here are a snapshot and
+will drift; the code and `CLAUDE.md` win on any conflict.
+
+## Project Overview
+
+DSLF List Rental Pipeline — processes purchase order PDFs from brokers, extracts structured fields via **rule-based** parsing (one parser per broker), enriches from `config/*.yaml` lookups, and creates DSLF tickets in Jira (rkdgroup.atlassian.net, project DSLF, issue type 11806).
+
+**On the default path every structured field is rule-based.** `parse_pipeline.py` uses one parser per broker and calls Claude only for `tools_polish.py`, which structurally cleans the two prose fields (Description, Omission Description) after parsing — see "Prose Polish". A PDF matching none of the 12 broker fingerprints is **flagged for review and creates no ticket** — `process_pdf` has no Claude fallback.
+
+## LLM Model Policy
+
+**One pin for every Claude touchpoint: `claude-opus-5` at `medium` effort.** Set in
+`tools_polish.POLISH_MODEL` (its effort is a bare `"medium"` literal in `polish_fields()`),
+`qc_checker.QC_MODEL`/`QC_EFFORT`,
+`LLM_writes.DEFAULT_MODEL`/`DEFAULT_EFFORT`, `ai_extract.DEFAULT_MODEL` (+ its
+`extract_fields_from_pdf(effort=)` default), and the `--model` / keyword defaults in
+`compare_extraction.py` and `hybrid_create.py` (grep `claude-opus-5`). Change them together or
+they drift apart again. A new model also needs a rate in **both** price tables —
+`qc_checker._RATES_PER_MTOK` (the QC comment footer) and `usage_log._RATES` (the usage log);
+a model missing from either prices at 0. The keys differ: `qc_checker` prices the model it
+*requested*, `usage_log` the model the API *returns* (`resp.model`), so a returned snapshot ID
+needs its own `usage_log._RATES` row.
+
+**Every Claude call except `tools_polish` writes one row to `logs/api_usage.jsonl`**
+(gitignored) through `usage_log.record()` — `qc_checker` directly, `LLM_writes` /
+`compare_extraction` / `hybrid_create` via `ai_extract`. `qc_checker.check_ticket` sets
+`DSLF_TICKET` so rows carry the ticket key. `usage_log.py` is a deliberate **copy** of
+`LRF_Processing/order-processor/usage_log.py`, not an import: keep the row shape identical so
+one reader totals both repos. The live polish call is not logged.
+
+`tools_polish` sends the effort parameter only when the model is not Haiku — Haiku 4.5
+predates it and errors if it is sent. That guard stays for callers passing a model; it is not
+a second pin.
+
+There are three other Claude touchpoints; know which is which before changing one:
+
+| Where | Module | Role |
+|-------|--------|------|
+| Live pipeline, every ticket | `tools_polish.py` | structural prose clean, gated, falls back to parser text |
+| Jenkins-scheduled QC | `qc_checker.py` | the only QC. Two checks/ticket: order-vs-ticket (fixable) + ticket-vs-SELECT |
+| Manual create, opt-in | `LLM_writes.py` | Claude extracts **all** fields for an unrecognized broker |
+| Offline, never scheduled | `ai_extract` / `compare_extraction` / `hybrid_create` | see "AI-Assisted Offline Tools" |
+
+## Commands
+
+```bash
+# Core pipeline — single PDF (extract → parse → validate → dup check → create ticket)
+python parse_pipeline.py /path/to/order.pdf
+
+# Batch folder (globs *.pdf + *.PDF, non-recursive, no dedupe: the glob is case-insensitive on
+# Windows, so there every PDF is processed twice)
+python parse_pipeline.py /path/to/folder/
+
+# Dry-run: NO ticket, NO dup check, NO INSERT, but not offline: it can still make the live
+# tools_polish call (billed, unlogged) and, with a billable account, a read-only IBM i lookup
+# of the next WO#.
+# Returns the ticket kwargs under result["fields"] plus result["wo_number"]. Fields print on
+# any dry run; --verbose only adds that printout to a live run.
+python parse_pipeline.py /path/to/order.pdf --dry-run
+```
+
+`--dry-run` and `--verbose` are the **only** two CLI flags for `parse_pipeline.py`. `broker_hint` is a function argument (used by the email scanner), not a flag.
+
+**Testing**: there is no linter and no CI test stage — Jenkins never runs these, so they only
+protect you if you run them. Twenty-four regression files, all hermetic: no Jira, no DB, no PDFs,
+no network — the QC tests never call the API. **Run the whole suite with pytest** (298 tests,
+~30s; no `pytest.ini`/`conftest.py` needed). `pytest` is not in `requirements.txt` — install it
+separately:
+
+```bash
+python -m pytest -q test_*.py "WO#/"              # everything (bash / Git Bash glob)
+python -m pytest -q $(Get-ChildItem test_*.py -Name) "WO#/"   # the same, in PowerShell
+python -m pytest -q test_kap_fields.py -k below   # one file / one test
+```
+
+Eighteen files are also standalone runners that print `PASS` lines and `ALL PASSED`.
+**Six files are pytest-only** — `test_adf_move.py`, `test_usage_log.py`, `test_scanner_host_lock.py`
+and the three `test_qc_*` excuse files have no `__main__`, so `python test_adf_move.py` exits 0
+having run nothing. Use pytest for those six. `test_qc_checker.py` is a partial runner: its five
+`omission_move` wiring tests sit after the `__main__` guard, so only pytest runs them.
+
+```bash
+python -m pytest -q test_adf_move.py  # omission_move: one misfiled line Description -> Omission
+python -m pytest -q test_usage_log.py # usage-log row shape + pricing; pins QC's two cache breakpoints
+python -m pytest -q test_qc_household_no_set.py  # household finding = NOTE for a NO_HOUSEHOLD_SET db
+python -m pytest -q test_qc_unverifiable_cap.py  # no profile + no stated ceiling: cap finding = NOTE
+python -m pytest -q test_qc_title_tag.py         # REPORT title's client tag (SCF) is not a criterion
+python -m pytest -q test_scanner_host_lock.py    # email scanner exits 1 on any host but the rkdc2 Jenkins box
+python test_ship_to_rules.py         # ship-to house rules + KAP FTP-boilerplate false positive
+python test_kap_fields.py            # KAP exchange qty, spaced order #, $-select, BELOW ref
+python test_adstra_list_code.py      # ADSTRA 5-digit list code vs address digits
+python test_qc_select_parse.py       # SELECT-PDF shipping-info parsing (spaced filenames)
+python -m pytest -q test_qc_checker.py  # fail-closed verdicts, gate, auto-fix whitelist, exit codes
+python test_dollar_cap_backfill.py   # Dollar Cap placement + no-duplicate re-run
+python test_data_axle_ship_label.py  # Ship Label PO# forms, JOB exclusion, Key Code
+python test_rmi_fields.py            # RMI MGT prefix stripped from Manager Order #
+python test_qty_subject_and_body.py  # qty-email subject codes + requestor in the body
+python test_duplicate_check.py       # dup key: PO, blank-PO fallback, AMLC
+python test_wo_failure_report.py     # WO failure/skip posted on the ticket, never fails the create
+python test_ncc_dnm_omit.py          # NCC do-not-mail line stripped for N11D only
+python test_household_omit.py       # 1 PER HOUSEHOLD reaches the omission for every broker
+python test_celco_fields.py          # CELCO wrapped segment, CONTACT requestor, FTP notify (+ "Notify X" prose), Key Code lines
+python test_cost_report.py           # QC-comment cost footer parse, month bucketing
+python test_profile_select_by.py     # build_profile_yaml: a Select By that wraps keeps its second line
+python "WO#/test_work_order_allocation.py"   # WO collision loop, fake cursor
+python "WO#/test_ibmi_credentials.py"        # blank env var cannot mask .env; empty password fails loudly
+```
+
+Run the matching file after touching `tools_jira.py` ship-to rules, `parsers/kap.py`,
+`parsers/adstra.py`, `parsers/data_axle.py`, `qc_checker.py`,
+`parsers/rmi_direct.py`, `parse_pipeline._build_adf_description`,
+`parse_pipeline._dup_check_key`, `parse_pipeline._create_and_link_work_order`,
+`parse_pipeline._strip_ncc_dnm`, `parse_pipeline._with_household`, `parsers/celco.py`, `qty_approval_scanner.py`, `WO#/work_order.py`,
+`WO#/base.py`, `adf_move.py`, `usage_log.py`, `cost_report.py`, `build_profile_yaml.py`, or
+`email_scanner.run_scan` / `ALLOWED_HOSTS`. Verified all twenty-four pass (298 tests) 2026-11-12. Everything else is tested manually via `--dry-run` against real
+broker PDFs — but that printout is not the ticket's Description: `_print_result` rebuilds it without
+`profile_data` and prints only top-level paragraphs, so `Selects:` bullets and the Standard
+Suppressions / Special Instructions blocks never show (Select By and Dollar Cap do). Read
+`result["fields"]["description"]` for the real ADF. `tools_polish._validate`, the
+live polish gate, has no test file.
+The `broker_pdf/`, `Test_pdf/`, and `AMLC/` sample folders are **gitignored and not present
+in a fresh clone** — ask for sample PDFs or point at a downloaded order instead of assuming
+those paths exist.
+
+**Windows console**: `parse_pipeline.main()` never reconfigures stdout (unlike `LLM_writes`,
+`qc_checker`, `hybrid_create`), so any run that prints fields — a bare `--dry-run` included — can
+raise `UnicodeEncodeError` under cp1252. Prefix runs with `PYTHONIOENCODING=utf-8`.
+
+**Dev is Windows, Jenkins is POSIX.** Development happens on Windows/PowerShell, but the
+`Jenkinsfile` uses `sh` steps and calls `python3` / `pip3`. Anything shell-shaped you add to
+the build must be POSIX, and a path or command that only works in PowerShell will pass locally
+and fail on the agent.
+
+**`README.md` is a lighter duplicate of this file.** Its Quick Start now installs from
+`requirements.txt` rather than a hand-listed set, so that drift cannot recur, but its
+project tree still omits `tools_polish.py`, `tools_zip_omit.py`, `LLM_writes.py`, the
+offline AI tools, `adf_move.py`, `usage_log.py`, `handoff.py`, `cost_report.py`, `backfill_dollar_cap.py`, the `WO#/` step and the twenty-four test files. Treat CLAUDE.md as authoritative
+and update README only when a change is user-facing.
+
+```bash
+# Scheduled automation (see "Scheduled Automation")
+python email_scanner/email_scanner.py                 # one poll of the shared mailbox
+python qc_checker.py [DSLF-123 ...] [--status S] [--no-fix] [--dry-run]
+                     [--order-only|--select-only] [--model M] [--effort E] [--json f]
+python qty_approval_scanner.py [--no-email-scan] [--combined] [--output f] [--email a] [--cc b] [--subject s]
+python ticket_scanner/ticket_scanner.py [--loop N] [--reset] [--learn] [--reporter NAME]
+
+# EOD shift handoff (manual, Windows only): tickets moved into Done / Waiting on Qty Approval
+# in the last N hours -> ~/OneDrive/Documents/Hands-off report/EOD_Hands-off_Report_<date>.xlsx
+# (outside the repo; same-day rerun overwrites). A ticket that entered both statuses in the
+# window is one row with the later one. --send mails it through classic Outlook (pywin32 COM)
+# with the account's default signature, to HANDOFF_EMAIL_TO + HANDOFF_EMAIL_CC in .env (--to replaces both). Read-only against Jira.
+python handoff.py [--hours N (default 8)] [--send] [--to a@x.com] [--cc b@y.com]
+
+# Config tooling (see "Config System")
+python config_guard.py        # fast syntax gate over config/*.yaml (exit 1 on parse error)
+python verify_configs.py      # deep audit of YAMLs vs source Excel/docs → config_audit_report.md
+python build_profile_yaml.py  # OVERWRITES config/client_profiles.yaml (no merge, no dry run) — see Config System
+
+# One-off correction — adds the client Dollar Cap line to existing ticket descriptions.
+# DRY RUN by default; --live writes. The durable fix is in _build_adf_description.
+python backfill_dollar_cap.py [DSLF-123 ...] [--status S] [--live]
+
+# Monthly Claude API spend -> DSLF Task "API Cost Report - YYYY-MM" (issue type 11772, never
+# List Fulfillment). DRY RUN unless --live; default month = last month; re-run updates, never
+# duplicates. Source = the `$x.xxx` footer on QC comments, because logs/api_usage.jsonl is
+# wiped by every Jenkins re-clone. Excludes tools_polish + manual LLM_writes (not logged durably).
+# It never loads .env: export JIRA_EMAIL / JIRA_API_TOKEN first, or every search 401s (one
+# ERROR line), the dry run reads $0.000, and --live dies on the create.
+python cost_report.py [--month YYYY-MM] [--live]
+
+# Pure-LLM create — unrecognized brokers only (see "Pure-LLM Ticket Creation")
+# NOTE: inverted default — this one is a DRY RUN unless you pass --live.
+python LLM_writes.py order.pdf [--live] [--model M] [--effort low|medium|high|xhigh|max] [--json f]
+
+# Offline AI tools (see "AI-Assisted Offline Tools")
+python compare_extraction.py DSLF-916 [--pdf f] [--md f] [--json f]   # read-only diff
+python hybrid_create.py order.pdf [--dry-run] [--no-claude] [--no-attach]  # --dry-run first!
+```
+
+## Dependencies & Credentials
+
+```bash
+pip install -r requirements.txt   # same file Jenkins installs; never hand-list packages here
+```
+
+- `requirements.txt` now covers **every** runtime import (not `pytest`, nor `pyodbc` for the ODBC one-off `WO#/` scripts), including `python-docx` (added in `86d03d0`; needed by `client_profiles.py`, `build_profile_yaml.py`, `verify_configs.py`) and `openpyxl`/`xlrd` for the zip-omit splitter. Jenkins installs from this file *only* (`pip3 install -q -r requirements.txt`), so a new runtime import that isn't added here breaks the scheduled run, not the local one.
+- `anthropic` is imported by the offline AI tools (`ai_extract.py`), by `tools_polish.py` in the live pipeline, and by `qc_checker.py` on the Jenkins cron — so `ANTHROPIC_API_KEY` is load-bearing for scheduled runs twice over. A missing key degrades prose quality and returns `UNVERIFIED` for every QC ticket; it does not break ticket creation.
+- `jaydebeapi` + `JPype1` (+ `jt400.jar`) power the IBM i work-order step.
+
+`.env` credentials by consumer:
+
+| Vars | Used by |
+|------|---------|
+| `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN` | Everything (Jira REST); `cost_report.py` reads them from the process env only, never `.env` |
+| `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_SERVICE_ACCOUNT`, `MS_SERVICE_PASSWORD`, `MS_TENANT_ID` (default `common`) | email + qty scanners (MSAL ROPC auth); the qty scanner reads and sends from `MS_SERVICE_ACCOUNT`'s own mailbox |
+| `IMAP_EMAIL` | `email_scanner` only: the shared mailbox it reads |
+| `IBMI_HOST`, `IBMI_USER`, `IBMI_PASSWORD` (+ optional `IBMI_JT400_JAR`) | work-order creation |
+| `ANTHROPIC_API_KEY` | `tools_polish` (live pipeline) + `qc_checker` (QC) + `LLM_writes` + offline AI tools |
+| `HANDOFF_EMAIL_TO`, `HANDOFF_EMAIL_CC` | `handoff.py --send` recipients (not credentials) |
+
+The `JIRA_API_TOKEN` in `.env` **can create and edit tickets** — `tools_jira` uses it to create issues (POST), update fields (`update_ticket_fields`, PUT → 204), comment, and attach. (Verified 2026-07-27: created DSLF-919, updated DSLF-936.) **The local `.env` token is not the Jenkins one and they can diverge:** on 2026-09-30 the local token returned 401 while Jenkins kept creating tickets. Test with `GET /rest/api/3/myself` before a live script that writes Jira. The Atlassian MCP connector authenticates as the same **Jira Service Account** (accountId `712020:73a21996-…`) and is the working fallback for reads and field writes when the local token fails.
+
+## Architecture
+
+`parse_pipeline.py` is split into a **head** and a **shared tail**, and the seam matters:
+
+- `process_pdf()` — detect the broker and parse. Everything above the seam.
+- `finalize_and_create(result, pdf_path, text, …)` — everything after a `ParseResult` exists.
+  It never looks at the parser or the broker registry, so **any** producer of a `ParseResult`
+  can use it. `LLM_writes.py` is the second producer. Put new post-parse behavior here, not
+  in `process_pdf`, or the LLM path silently misses it.
+- Its `profile_blocks_to_omission=True` flag (used only by `LLM_writes`) routes the profile's
+  suppression blocks into the Omission field instead of the Description.
+
+```
+PDF → [tools_pdf] extract text (PyMuPDF primary; pdfminer fallback only if PyMuPDF <50 chars)
+    ┄┄ process_pdf ┄┄
+    → [parsers/__init__] detect_broker() — ALL of a broker's regexes must match within
+      first 3000 chars; rules tried in _RULES order, first fully-matching broker wins.
+      No match → flagged for review (no ticket).
+    → [parsers/<broker>.py] rule-based parse → ParseResult (confidence 0.92)
+    ┄┄ finalize_and_create — shared with LLM_writes ┄┄
+    → [parse_result] validate_result()  ⚠ ADVISORY — see below
+    → duplicate check (skipped in dry-run)
+    → [client_lookup] enrich db_code/billable/list_manager from config/*.yaml
+    → [client_profiles] resolve profile file (attached) + profile_data (select_by/flags/…)
+    → [tools_polish] structural polish of segment_criteria + omission (LLM; falls back
+      to the parser's text on any failure)
+    → build kwargs + ADF description + FLAG omits
+    → dry-run: return {"fields": kwargs, "wo_number"}    |    live: create ticket + WO# + attach PDF/profile
+```
+
+Load-bearing behaviors that are easy to get wrong:
+
+- **A household dedupe is added for every broker, after the parser.** Each parser keeps only
+  OMIT-ish lines, so `**PLEASE PROVIDE ONE NAME PER HOUSEHOLD.` (KAP, DSLF-1429) and
+  `Please supply one per household.` (Data Axle, DSLF-1402) were dropped and the ticket check
+  failed. `parse_pipeline._with_household` reads the raw order text with `parsers.base.HOUSEHOLD_RE`
+  — the pattern LRF's `criteria_parser` reads — and appends `1 PER HOUSEHOLD` unless the
+  omission already says it or the line says DO NOT. Never `2 PER HH`.
+- **Validation is advisory and blocks nothing.** `validate_result()` errors abort only when `result.confidence == 0.0`, which no producer returns (parsers 0.92, `LLM_writes` 0.85), so a missing mailer_po, list_manager or requested_quantity just logs "proceeding" and a **partial ticket is still created**. The real blocks sit upstream in `process_pdf`: no broker match, unreadable PDF, parser exception. **The title is the exception on the parser path:** a blank `list_name` or `mailer_name` leaves `summary` unset (`ParseResult` needs both; `LLM_writes` builds a partial title instead), and the live `create_jira_ticket(**kwargs)` (where `summary` is required) raises `TypeError` outside any try — no ticket, a multi-page PDF loses its later pages, and the email goes to Failed. `--dry-run` returns before the create, so it never shows this.
+- **The ADSTRA STANDARD OMITS block is hardcoded in the parser, and one of its lines is not
+  standard.** `_STANDARD_OMITS` in `parsers/adstra.py` prepends the same block to every ADSTRA
+  order, `NCC DNM FILE FOR LIST RENTAL (W/O 222222)` among them. **N11D does not suppress
+  against that file** and had it on 54 of its 55 tickets. `_NCC_DNM_EXCLUDED_DB_CODES`
+  (`parse_pipeline`, currently `{"N11D"}`) strips it after enrichment — the parser
+  runs before enrichment and so has no db_code to test. Only **41 of the 195** entries in
+  `client_profiles.yaml` record this suppression at all, so the exclusion set is
+  deliberately narrow rather than profile-driven: reading it off the profile would silently
+  drop the line for ~153 other clients. Pinned in `test_ncc_dnm_omit.py`.
+- **SKIP_DB_CODES** (`parse_pipeline.SKIP_DB_CODES`, currently `{"A63D"}`): orders resolving to these db_codes are extracted/validated but create **no ticket** — returns `{"success": True, "skipped": True}`, in both live and dry-run. (Separate `_ADSTRA_SWEEPS_EXCLUDED = {"A63D","N11D"}` only controls whether the ADSTRA sweeps profile is attached.)
+- **Multi-page PDFs**: every broker **except ADSTRA** splits into one ticket per page, and `process_pdf` then returns a **list** of per-page result dicts. ADSTRA multi-page is merged into one order. Callers must handle the list case.
+- **Duplicate check** (live only, `_dup_check_key`): JQL on `cf[12193]` Mailer PO, falling back to `cf[12192]` Manager Order # when the order carries no PO — **except AMLC**, which keys on Manager Order # outright because its columnar layout puts someone else's number in the PO field. Skipped in dry-run or when neither key is populated. A failed search (401, timeout: `search_jira_tickets` returns `{"error": …}` with no `total`) **fails closed** since 2026-11-02 — no ticket, flagged for review, the email goes to Failed; it used to read as no duplicate and create silently (`test_a_failed_search_creates_nothing`). The fallback exists because a blank PO used to skip the check entirely: DSLF-1211 duplicated DSLF-1209 on DM092, a follow-up email with no broker order number on it. **Jira's search index lags a create
+by seconds**, so the check also consults `_created_this_run` (keys of tickets this process
+already created): DSLF-1487 duplicated DSLF-1486 13s later in the same scanner run because
+the search could not see 1486 yet.
+- **Description is NOT raw PDF text** — see Field Rules. The PDF is preserved by **attaching the file**.
+- **`search_jira_tickets()` does not return a real total.** `/rest/api/3/search/jql` is token-paginated and omits `total`, so the helper reports `total = len(issues)` from a single page (`max_results=10` by default). Fine for the duplicate check (`total > 0`), wrong for counting. Use `search_issues_paged()` when you need every match.
+- The work-order step and all attach steps **swallow exceptions** (log + continue): a ticket can succeed with its WO#, PDF, or profile attachment silently failed.
+- **Zip-omit attachments are split** (`tools_zip_omit.py`): a supplementary `.xlsx/.xls/.csv/.txt` holding **more than `ZIP_CHUNK_SIZE` (9500)** zips also gets attached as zip-only `.xlsx` files of 9500 each, named `{original stem}_zips_{i}of{n}.xlsx` (45,000 zips → 5 files). The original attachment is still attached untouched, source order and duplicates are preserved, and a file at or under 9500 produces nothing extra. Runs in both attach paths, which feed it different files: `parse_pipeline` Step 8 picks up only `.xlsx/.xls/.csv` in the PDF's folder whose name holds the Manager Order # or Mailer PO, while the email scanner's `other_atts` loop passes every non-PDF attachment, `.txt` included.
+
+## Scheduled Automation
+
+Four independent entry points share the pipeline and `.env`. **Only `email_scanner` + QC are Jenkins-scheduled** — by a freestyle Execute-shell job whose script lives in the Jenkins config, **not** by this repo's `Jenkinsfile` (see "QC" below). It calls `python qc_checker.py` directly. `qty_approval_scanner` is run manually / emailed; `ticket_scanner` uses a Windows Task Scheduler `.bat`.
+
+| Tool | Trigger / scope | Behavior |
+|------|-----------------|----------|
+| `email_scanner/email_scanner.py` | Shared-mailbox `List Rental` folder | MSAL ROPC auth → per message: if `conversationId` in `thread_map.json`, add the HTML-stripped body as a comment on the thread's first ticket (its attachments are never downloaded, and the mail is not moved); else download PDFs (or synthesize one from the body) → `process_pdf(broker_hint=SENDER_BROKER_MAP[domain])` → move mail to `List Rental/Processed` or `/Failed`. `broker_hint` short-circuits fingerprint detection. |
+| `qc_checker.py` | `Needs QC` tickets **assigned to the service account** (`--status` for any other queue; named tickets bypass the scan) | Two LLM checks per ticket — was it **created** right from the broker order, and did the **SELECT** deliver it. Posts a comment on every ticket checked, pass included (except a failed Jira read: `UNVERIFIED`, nothing posted). **Never transitions.** The order check's field corrections are written back **by default** (`--no-fix` to report them without writing); the cron gets them. Verdict is the worse of the two; `UNVERIFIED` means QC did not run and is **not** a pass. See "QC" below. |
+| `qty_approval_scanner.py` | `Ready to Send for Qty Approval` tickets | Reads `QTY APPROVAL/<order#>` emails → sets Requested Quantity (`cf[12271]`) — but see the ⚠ note below: so far every such email has been its own digest. The SELECT-PDF `TOTAL RECORDS SELECTED` count is never written to the field directly; it only fills the emailed digest, which the next run reads back as an approval. **Never transitions.** Emails one qty digest per (mailer, requestor) — a mailer with orders from two requestors gets two emails, each naming only its own requestor. **Every subject carries a name code** — the LIST code for a single ticket, the MAILER code for a group — and both resolvers read `dslf_list_and_mailer_names.txt` (committed at the repo root, generated 2026-06-17 from 628 tickets) and fall back to initials derived by that file's own `*` convention, so a name newer than the snapshot no longer drops the code. The body is the `<order#> = <qty>` lines (the shape the reply scan parses back — change one, change both) followed by `Requestor: <email>`. The scan reads back one order per email (the subject's first token), so a reply to a group digest sets only its first order, and one whose subject starts with a collapsed range (`J1000-J1003`) sets none. |
+| `ticket_scanner/ticket_scanner.py` | New DSLF tickets (issue# > saved state) | **Read-only** audit → report under `ticket_scanner/reports/`. `--learn` mines List Name→db_code patterns into `learned_patterns.json` (enrich tier 5) — but it pages `/search/jql` by `startAt`/`total`, which that endpoint ignores, so every fetch stops at 50 tickets; the file still holds 35 patterns from DSLF-4..55. |
+
+Notes: `email_scanner.main()` has **no argparse** — `run_email_scanner.bat --loop` is a silent no-op (single scan). SKIP_DB_CODES emails are deliberately **left in `List Rental`** for manual handling (not moved). `email_scanner.py` and `qc_checker.py` call `config_guard.validate_configs_or_exit()` before doing work.
+
+**⚠ The qty scanner approves from its own outbox.** `scan_approval_emails` runs `$search
+"subject:QTY APPROVAL"` over the whole service-account mailbox (`/users/{svc}/messages`, top 100,
+no folder or sender filter), and `send_email` saves every per-mailer digest to Sent Items in exactly
+the approval shape (`<code>/QTY APPROVAL/<order#>` + `<order#> = <qty>`; the `--combined` table
+does not parse back). The next run reads that digest as an approval and writes its number (the
+SELECT count, when there is one) to the subject's first order if it is still in the queue. Measured 2026-10-30: 274 of the 275 matching messages are its own digests,
+the Inbox has never held a real approval (the digest's `replyTo` is the Heller address, so
+replies never reach this mailbox), and 17 tickets had Requested Quantity written this way
+(DSLF-807 .. DSLF-1522; DSLF-1522 went 5000 → 6978 on a run 28 minutes after the previous one).
+
+### Email scanner specifics
+
+- **`SCANNER_ENABLED` in `email_scanner.py` is the kill switch.** `False` makes `run_scan`
+  log a warning and return before reading mail: no tickets, no thread comments, exit 0 so
+  QC still runs. It was off from 2026-11-11 16:27Z to 2026-11-12 while two runners were
+  creating every order twice (DSLF-1567/1568). It reaches only runners that re-clone `main`
+  each build, as the Jenkins job does. Flip it, push, and the next build picks it up.
+- **`ALLOWED_HOSTS` locks the scanner to the rkdc2 Jenkins box** (`{"rkdc2-dmiappsdev01"}`, since
+  2026-11-12). `run_scan` compares `platform.node()` (first label, lower-cased) and exits 1 on any
+  other host before touching the mailbox; under the job's `sh -xe` that also skips `qc_checker`.
+  It exists because a second, never-located runner of the same Jenkins script created every
+  order twice from 10-27 to 11-10; it re-clones `main`, so the lock reaches it. Moving Jenkins
+  means adding the new hostname here first, or the first build on the new box goes red with
+  `Refusing to run on host`. Pinned in `test_scanner_host_lock.py`.
+- **Runtime state lives in two gitignored JSON files** next to the script:
+  `processed_ids.json` (message IDs already handled) and `thread_map.json`
+  (`conversationId` → ticket key). Deleting them is not harmless — the scanner will
+  re-process the whole folder and follow-up emails will spawn **new tickets** instead of
+  becoming comments on the existing one.
+- **Scan window**: the top **50** messages in `List Rental`, ordered `receivedDateTime asc`
+  (oldest first, no paging), minus anything in `processed_ids.json`. **Only moved mail leaves
+  the folder** (Processed: a ticket and no failure; Failed: any failure). Thread follow-ups,
+  SKIP_DB_CODES mail, unrecognised-broker PDFs, empty bodies and errors that escape
+  `process_message` are marked processed but stay, still holding window slots — once 50 of
+  those are the oldest, new mail is never fetched. File them by hand. Mail that does get moved
+  still drains a larger backlog over successive runs, 50 at a time.
+- **Non-PDF attachments** are routed by a service-bureau range in the filename:
+  `AMLC #668769-668774 ZipOmits.xls` attaches only to tickets whose
+  `manager_order_number` falls in 668769–668774 (`_resolve_attachment_targets`). With no
+  range in the name it attaches to **every** ticket created from that email.
+- **No PDF attached** → the scanner synthesizes one from the plain-text email body
+  (`_generate_pdf_from_text`, `Prefer: outlook.body-content-type="text"` so HTML `<style>`
+  bloat cannot push the fingerprint past the 3000-char detection window). A body over ~49
+  lines becomes a multi-page PDF, which `process_pdf` splits per page (non-ADSTRA): page 1 is
+  parsed without the rest, and with a `broker_hint` each later page is parsed as its own order:
+  a partial ticket if it still yields a list and mailer name, else the blank-title `TypeError`
+  (see Architecture) and the email goes to Failed.
+
+### Jenkins credentials come from a copied `.env`, not the Jenkinsfile
+
+The repo `Jenkinsfile` does not drive the live job (see "QC" below). The freestyle job
+`cp`s a full credential file to `.env` before running, which is where
+`email_scanner.get_access_token()`'s hard requirements (`MS_CLIENT_ID`, `MS_CLIENT_SECRET`,
+`MS_SERVICE_ACCOUNT`, `MS_SERVICE_PASSWORD` — `sys.exit(1)` if any is missing or auth fails) and
+`ANTHROPIC_API_KEY` (live `tools_polish` + QC) come from. The Jenkinsfile's `environment`
+block is not the credential picture either — nothing runs it.
+
+## Config System
+
+**`config/*.yaml` is the runtime source; only `client_profiles.yaml` has a generator, and running it destroys curation.** Runtime (`client_lookup.py`, plus `parse_pipeline`/`qc_checker` for the profile and ADSTRA files) reads its data only from the YAMLs and never opens the Excel. `client_profiles.find_profile` still scans the gitignored `Client Profiles/` folder to pick the file to attach, so a fresh clone (Jenkins, unless the job copies the folder in) attaches no profile file; the profile data itself still comes from the YAML.
+
+- **Sources**: `NEW LR CLIENT LIST 2026.xlsx` → the 15 Excel-lookup YAMLs (`full_client_list.yaml` + 14 per-broker); `Client Profiles/**/*.doc(x)` → `client_profiles.yaml`; `Client Profiles/ADSTRA/…xlsx` → `adstra_omit_database.yaml`. The lookup YAMLs and the ADSTRA file were built outside the repo (no script committed) and hand-corrected since. The only generator, `build_profile_yaml.py`, **overwrites** `client_profiles.yaml` from scratch and drops every hand curation — never run it to refresh.
+- `config_guard.py` = fast fail-fast **syntax** gate (Jenkins entry points call it). `verify_configs.py` = offline **semantic** audit vs source. Passing config_guard does **not** mean content is correct.
+- **Do not hand-edit these YAMLs blindly** — a structurally-valid but semantically-wrong edit (notably `client_profiles.yaml` 2-space list indent reparenting keys) passes config_guard and has broken `main` before. Edit by hand, then run `config_guard.py` + `verify_configs.py`. `client_profiles.yaml` is a hand-curated superset; do not regenerate it to "fix" verify_configs field diffs.
+- `enrich_fields()` lookup order (`client_lookup.py`): (0) ADSTRA 5-digit list-code exact, (1) exact db_code, (1.5) abbrev-token exact, (2) broker-YAML fuzzy, (3) cross-broker fuzzy, (4) full-list fuzzy, (5) learned_patterns. **Fuzzy threshold is 0.6** (0.5 for learned) — not the "50%" older docs claim. `broker_only=True` stops after tier 2. `finalize_and_create` routes by broker: an AMLC order the parser marks `T11` (a rental, or a list name containing VIGUERIE) is forced to `T11R` with no lookup; other AMLC orders and ADSTRA run `broker_only=True` (tiers 0-2 only).
+- Orphan YAMLs never read by lookup code: `adrianne.yaml`, `jordan.yaml`, `leeann.yaml`. `config_guard` still globs every `config/*.yaml`, so a syntax error in one aborts both Jenkins entry points.
+
+## IBM i Work Orders
+
+On every **live** create, `_create_and_link_work_order()` imports `WO#/work_order.py` (jt400 JDBC via `jaydebeapi`+`JPype1`) to INSERT into `DMIJOBS.ARWRKSCH`, then writes the WO# to `customfield_12089`. It re-reads the billable account from the just-created ticket. Requires `IBMI_*` env + `jt400.jar`. **Failures are non-fatal** (logged, ticket still succeeds); skipped entirely if billable_account is empty. **A dry run calls it too**, read-only: it connects to production IBM i and reads PEPBK# + MAX(WWORKO) for `result["wo_number"]` — no INSERT, no Jira write — so `parse_pipeline --dry-run`, `LLM_writes` without `--live` and `hybrid_create` all need the IBM i creds + jt400/JPype, or log a swallowed warning.
+
+- **`WCCUST` is `letter_pos * 1000 + trailing`**, not a modulo (`_billable_to_wccust`:
+  `K40` -> 11040, `T11` -> 20011). An earlier modulo version wrote wrong billing codes on
+  live work orders; `WO#/fix_wccust.py` is the one-off repair script that corrected them and
+  is a record of which WOs were affected, not something to re-run.
+- **`(WWORKO, WSUFX)` is a DB-enforced composite key** and the pipeline always writes a blank
+  suffix, so the collision guarded against is a human keying the same WWORKO with a
+  *different* suffix. `allocate_and_create()` runs scan -> insert -> verify -> auto-reassign
+  on one connection; it also reads the shop's `PEPBK#` counter as an allocation floor (read
+  only — the ARWRKSCH trigger advances it) so it won't take a number order-entry reserved
+  ahead of the committed MAX. `WO#/test_work_order_allocation.py` pins this loop.
+- **A WO failure or skip is posted as a comment on the ticket** (`_report_wo_failure`:
+  `WORK ORDER NOT CREATED`, the host that ran the pipeline, the traceback tail), since
+  2026-09-28. DSLF-1342..1346 failed with the Jenkins build history holding no log at all,
+  so the ticket is now the durable record. Posting it has its own `try/except` and cannot
+  fail the create. **Except a failed write-back**: if the INSERT succeeds but
+  `update_ticket_fields` fails (it returns `{"error"}`, never raises), only a log line records
+  it, leaving an ARWRKSCH row and a blank WO# field that LRF will eventually move to STUCK.
+- **A missing WO stalls the ticket downstream, on a clock.** LRF_Processing's auto-run
+  comments `Auto-run: NOT RUN — waiting for Work Order #` and re-checks every 15 min for up to
+  24 h, then moves the ticket to **STUCK**. So a WO outage needs backfilling within the day.
+  Whether a ticket already in STUCK resumes on its own once the WO is filled is **not
+  verified**. STUCK has other causes too (DSLF-1346: a run that returned 0 records), so read
+  the ticket's last `Auto-run:` comment before blaming the WO.
+- **⚠ WO failures are otherwise silent by design.** Since
+  2026-08-31 `_create_and_link_work_order` logs `%r` + `exc_info=True`; before that it
+  logged bare `str(e)`, and a JPype-wrapped Java exception rendered as just
+  `java.lang.ArrayIndexOutOfBoundsException: Index 0 out of bounds for length 0` with no
+  clue whether it came from the connect, the scan or the INSERT.
+- **`ArrayIndexOutOfBoundsException: Index 0 out of bounds for length 0` on connect means a
+  BLANK PASSWORD.** JTOpen's `AS400JDBCDriver.initializeAS400` reads the password's first
+  character (reproduced locally 2026-09-29 by blanking `IBMI_PASSWORD`). It cost
+  DSLF-1139..1142 (2026-08-31), DSLF-1342..1347 (2026-09-25..28) and DSLF-1348..1364
+  (2026-09-29..30) their work orders. **Cause confirmed 2026-09-30 by the diagnostic below:
+  the Jenkins credential file itself.** On every failing ticket the comment reads process env
+  `IBMI_PASSWORD=unset` and `email_to_jira/.env exists=True password=blank` — the file the job
+  `cp`s in parses with no usable `IBMI_PASSWORD` (absent or empty), while its Jira and MS keys
+  work. The earlier "blank env var masks a valid .env" theory was wrong. **No code change fixes
+  this: replace the Jenkins secret file.** It cannot be read back from the Jenkins UI, and the
+  local `.env` is not a drop-in replacement (its Jira token returned 401 on 2026-09-30), so build
+  one file that holds a working Jira token **and** the `IBMI_*` lines. If `IBMI_PASSWORD` is
+  injected by credentials binding instead, inject `IBMI_USER` with it: `_credentials` takes all
+  three from the env once it holds a password, and a user still missing after the `.env` load falls back to
+  `DMISUVAM`, which is a real failed sign-on every 5 minutes. `base._credentials`
+  takes host, user and password as ONE set - from the env when it holds a non-blank
+  password, else from the first `.env` that does. But `WO#/base.py` (like `parse_pipeline` and
+  `email_scanner`) runs `load_dotenv(override=False)` at import, so an UNSET `IBMI_*` var is
+  first filled from `WO#/.env` / the root `.env` and then reads as `source=env`, paired with
+  whatever user the env holds (a stale env `IBMI_USER` with the file's password is a real invalid
+  sign-on, the pairing the one-set rule was meant to prevent). The file branch fires only when the
+  env password is still blank or unset after those loads (a blank-but-set var, or a password held
+  only in `email_scanner/.env`, which nothing `load_dotenv`s). `get_connection` refuses an empty
+  host/user/password with a secrets-free diagnosis (which var, the source, which `.env`
+  holds one, jt400 path) that
+  `_report_wo_failure` posts on the ticket. Pinned in `WO#/test_ibmi_credentials.py`. The
+  earlier "unpinned requirements" theory was wrong: JPype1/jaydebeapi had no release in
+  either window.
+- **`jt400.jar` is auto-discovered, not configured** (`WO#/base.py:_resolve_jt400`): `IBMI_JT400_JAR`
+  first, then `/opt/jt400/jt400.jar`, the Jenkins workspace
+  `/var/lib/jenkins/workspace/DSLF-Email-Scanner/jt400.jar`, the project root, and finally a
+  hardcoded Windows RDi plugin path. The Jenkinsfile's `IBMI_JT400_JAR` line never runs, and the live job
+  re-clones, so there the jar comes from `/opt/jt400`, the hardcoded workspace path, or an
+  `IBMI_JT400_JAR` in the job env / copied `.env`.
+  Adding a machine means adding a path here or setting the env var — the jar is **not** in the repo.
+- Only `IBMI_PASSWORD` is truly required: `IBMI_HOST` and `IBMI_USER` fall back to hardcoded
+  defaults (`SYSTEM5.DATA-MANAGEMENT.COM`, `DMISUVAM`), so a missing host silently uses prod.
+- The second `WO#/requirements.txt` is **gone** — Jenkins only ever installed the root file,
+  so its three floors (`jaydebeapi>=1.2.3`, `JPype1>=1.4.0`, `python-dotenv>=1.0.0`) were
+  invisible to the scheduled run. Folded into root instead of kept in sync by hand. They are
+  floors, not pins: the rest of the file is still unpinned.
+- **Backfilling missed WOs** uses a one-off `WO#/_backfill_<range>.py`. **Copy only
+  `_backfill_1348_1364.py` or `_backfill_1343_1347.py`**: they subclass `WorkOrderManager` with a
+  pyodbc `_connect` (IBM i Access ODBC Driver; JPype is blocked on the dev box), keep the
+  pipeline's `allocate_and_create`, and are a dry run unless given `--live`. The five older ones
+  (`671`, `671_673`, `793` via JPype; `671_odbc`, `823` hand-copied with no PEPBK# floor) INSERT
+  and write Jira on a bare run — never rerun or copy them. `_backfill_1348_1364.py` never touches
+  Jira: `--live` appends each mapping to a JSONL as the INSERT returns, and the WO# goes to Jira
+  afterwards. Things that bite:
+  - **Check ARWRKSCH for rows staff keyed by hand first**, matching every order value against
+    **both** `"WXCOD#"` and `WMAILR`. Staff put the broker PO in `"WXCOD#"` under a non-blank
+    suffix, which is where the pipeline puts the manager order. `_backfill_1348_1364.py --check`
+    still matches each column one way only — add the cross-match.
+  - **Prove the check query can find something before trusting a zero.** Validate it against a
+    *recent* pipeline WO, since older ones get deleted from ARWRKSCH after production uses
+    them (DSLF-1347's 467909 was gone within a day).
+  - `"WXCOD#"` is CHAR(9). A bound parameter longer than that, such as the 10-char PO
+    `D01-122992`, fails the whole query with ODBC `22001` right truncation. Inline vetted
+    literals instead.
+  - Write the ticket-to-WO mapping to disk the moment each INSERT returns, before touching
+    Jira, so a failed Jira write can never leave an orphan WO. Then read both sides back.
+
+## Prose Polish (`tools_polish.py`) — the live LLM step
+
+Runs on every ticket inside `finalize_and_create` (so `LLM_writes` gets it too), before the ADF
+description is built and the FLAG OMITS appended.
+Cleans the two parser-produced prose values (PDF text, plus ADSTRA's `_STANDARD_OMITS`) structurally, because parsers copy PDF text verbatim
+and inherit its line wrapping (DSLF-967: one sentence wrapped across two lines, with an omit
+criterion stranded in the Description and duplicated into Omission).
+
+There are 2 parts in Jira - Description and ommision description. So the pull descriptions and all that are not to be ommited are to be places in description and everything that are to be ommited goes to ommision decription part. 
+
+- **Five permitted operations only**: join a wrapped line, move/split an omit criterion into
+  the omission field, drop a redundant line, drop an empty one, and label a run of bare
+  select criteria (see below). **No rewording, ever.** `_USER_TEMPLATE` and the module
+  docstring still say "four".
+- **The `Selects:` heading is the one exception to "add nothing".** Broker PDFs list the
+  priced selects under a `Selects:` header that the parsers drop, keeping only the values —
+  DSLF-967's Description read `$10+` / `12 MOS HOTLINE` / `GENDER` as three bare lines with
+  nothing saying what they were. The model may restore that heading over a run of **two or
+  more** consecutive bare fragments and indent them by two spaces. `_ALLOWED_NEW_TOKENS =
+  {"SELECTS"}` is the complete list of words it may introduce.
+- **Only parser output is sent**: the order's prose plus, for ADSTRA, the hardcoded
+  `_STANDARD_OMITS` block. The profile's `Select By`, `Standard Suppressions`, `Special
+  Instructions`, and `FLAG OMITS:` are config-sourced and never leave the process — the
+  existing code re-attaches them around the cleaned text. `_strip_ncc_dnm` runs after polish and
+  matches whole lines, so it relies on polish leaving the NCC DNM line intact.
+- **The gate, not the model, is the guarantee** (`_validate`): the fact-token set across
+  *both* fields must be identical before and after, apart from `_ALLOWED_NEW_TOKENS` —
+  moving a criterion between fields is allowed, inventing or dropping one is not. Output
+  lines may exceed input lines by at most one per line containing an omit keyword (a mixed
+  line legitimately splits in two) plus one per heading actually emitted. Two rules the
+  token set alone cannot enforce, because a repeated heading introduces no new token: a
+  heading may appear **at most once**, and **never in the omission field**.
+- **Every failure returns the parser's text unchanged** — no API key, budget exhausted,
+  timeout, API error, refusal, or failed validation. A ticket is never worse than before, and
+  an Anthropic outage cannot block creation.
+- **Model is `claude-opus-5` @ medium**, per the one policy above. Measured live on the
+  DSLF-967 shape: **5.8s median warm** (4.8–7.7s over three cases). The first call in a
+  process pays ~14s on a cold prompt cache — under the timeout, but that is the tight guard
+  now.
+- **Jenkins guards**: a 20s timeout with `max_retries=1` (so up to ~40s per call);
+  `POLISH_BUDGET_S` (120s) of summed polish-call time, checked before each call, after which
+  remaining tickets skip the pass (the last call can overrun it); and an in-process cache so
+  repeated text in a multi-page or batched order costs one call — but only validated results are
+  cached, so a rejected text is re-sent and re-billed every time it repeats. At ~6s/call the budget covers **~20 tickets per
+  run**; a 7-page AMLC PDF is ~40s of polish. Watch for
+  `Polish budget of 120s exhausted for this run — skipping` — raising the budget means
+  raising the Jenkins job timeout with it.
+- Inputs under two lines total skip the API entirely.
+
+## Pure-LLM Ticket Creation (`LLM_writes.py`) — live creates, manual only
+
+For orders **no parser recognizes**. `process_pdf` flags those for review and creates nothing,
+and `hybrid_create.py` can't help either (it starts from `process_pdf` and raises when the
+parse fails). This path only needs the PDF to be readable by Claude. **Prefer
+`parse_pipeline.py` for any broker that IS recognized** — a parser reads a known layout
+exactly, where this reads it fresh every run. Not scheduled; nothing calls it automatically.
+
+- **The default is a dry run — `--live` creates.** This is the inverse of `parse_pipeline.py`
+  and `hybrid_create.py`, both of which create unless told not to.
+- **Claude supplies only what is printed on the order.** Everything else comes from the shared
+  tail: db_code/Billable/Client DB/Seed DB from `client_lookup` (Claude's own db_code guess is
+  *reported and never sent* — config is authoritative), the profile blocks, `tools_polish`, the
+  duplicate check, SKIP_DB_CODES, the work order, and all four attachment steps.
+- `CONFIDENCE_LLM_BASED = 0.85` — only its being non-zero matters, since `validate_result()`
+  blocks only at exactly 0.0. The lower number records that nothing verified this read.
+- **`_validate_and_fix()` blanks values Jira would reject or store wrong** *before* building the
+  frozen `ParseResult`: a `list_manager` outside the 14 known values (the DSLF-130..134 C69
+  bug), an unknown select-option label, a non-`YYYY-MM-DD` date (which would fail the whole
+  create). `_VALID_LIST_MANAGERS` is read from `client_lookup._MANAGER_TO_FILE`, not re-typed.
+- **`_verify_created()` re-reads the ticket after a live create**, because a create writes no
+  changelog — unresolvable select options are dropped server-side without failing the create.
+  Differences on `file_format`/`shipping_method`/`ship_to_email` are reported as `~` (expected:
+  ship-to house rules rewrite them), everything else as `!`.
+- Its `_SYSTEM` prompt layers broker rules on top of `ai_extract._SYSTEM` and was **transcribed
+  from this file**, then drifted. Still current: the AMLC columnar trap, SimioCloud→WE ARE MOORE,
+  KAP's "Email to:" line, the `Selects:` indent contract. **Stale**: Data Axle Key Code from the
+  Order# suffix (also in `ai_extract._SYSTEM`), RMI manager order as `MGT#` unstripped, only the
+  old Ship Label PO rule (no E-prefix, 3-letter + 2-digit or JOB/MERGE rules), no ADSTRA `B/19217` form, and "with suffix" Data Axle / Washington Lists POs
+  (also in `qc_checker._SYSTEM_ORDER`). Fix a field rule here *and* in all three prompts, or the
+  paths disagree.
+- Model pin is `claude-opus-5` @ `medium` per the one policy above — this path reads an
+  unrecognized order fresh every run with nothing verifying it, so it is the last place to
+  economise. Override with `--model` / `--effort`.
+
+## QC (`qc_checker.py`) — one file, all LLM, both questions
+
+**There is exactly one QC file and it makes API calls.** `qc_llm.py` and `select_pdf.py` are
+gone (deleted in `d4e24fe`); everything lives in `qc_checker.py`. **The name is load-bearing** — the live Jenkins
+job hard-codes `python qc_checker.py`, so renaming or splitting it breaks the cron.
+
+It asks two questions about the same ticket, in one run, with one LLM call each:
+
+| | ORDER check | SELECT check |
+|---|---|---|
+| Question | was the ticket **created** right from the broker order? | did the **pull** deliver the order? |
+| Source of truth | the order PDF attached to the ticket | the SELECT report |
+| Runs when | a non-SELECT PDF matches a broker fingerprint | a `*SELECT*.pdf` is attached |
+| Findings carry a fix | **yes** — `fix_field` / `fix_value`, applied by default | **no**, by design |
+| Prompt | `_SYSTEM_ORDER` (absorbed from `knowledge.md`) | `_SYSTEM_SELECT` |
+
+The ticket verdict is the **worse** of the two, and `UNVERIFIED` outranks `FAIL` — not
+knowing is worse than knowing it failed.
+
+```bash
+python qc_checker.py                              # scan Needs QC and POST the verdicts
+python qc_checker.py DSLF-1075 DSLF-1082          # named tickets
+python qc_checker.py --status "Needs Assignment"  # the creation-check queue
+python qc_checker.py --dry-run                    # print only, write nothing
+python qc_checker.py --no-fix                     # comment only, write no corrections
+python qc_checker.py --order-only | --select-only
+python qc_checker.py --model M --effort low|medium|high|xhigh|max --json FILE
+```
+
+- **⚠ The `Jenkinsfile` in this repo is NOT what runs.** The live job "DSLF-Email-Scanner"
+  is a **freestyle Execute-shell step** whose script lives in the Jenkins job config. Its
+  log opens `/bin/sh -xe /tmp/jenkins….sh`, then `rm -rf email_to_jira && git clone …` into
+  a subdirectory, `python3.11 -m venv env`, `pip3 install -r requirements.txt`,
+  `cp <credential> .env`, and finally `python email_scanner/email_scanner.py` +
+  `python qc_checker.py`. Editing the Jenkinsfile changes nothing. **Verify which config
+  drives a build before assuming the repo file does** — deleting `qc_checker.py` on
+  2026-08-27 broke the cron on 2026-08-31 while the Jenkinsfile edit in the same commit did
+  nothing. (The job `cp`s a full `.env`, which is why `MS_CLIENT_SECRET` etc. are present
+  despite not being in the Jenkinsfile.)
+- **Posting AND fixing are the DEFAULT, `--dry-run` suppresses both.** The cron calls the
+  script bare, so a bare call has to post — same as the rule-based checker it replaced.
+  Auto-fix was opt-in until 2026-09-11 and therefore never once ran on a scheduled build:
+  a fault the checker could name, correct and write sat on the ticket waiting for a human
+  to retype it. `--no-fix` restores report-only. The guarantee is not the flag, it is
+  `_FIXABLE` — see below.
+- **`main()` returns 0 even when tickets fail.** The job runs under `sh -xe`, so a non-zero
+  exit reds the build, and a ticket failing QC is a *result*, not a build error. Non-zero is
+  reserved for "the scan could not run": `config_guard` exiting on a bad YAML, argparse
+  exiting on bad arguments, or an unexpected exception (`_entry` catches those and returns
+  1). The old rule-based `main()` returned `None` and so always exited 0; this preserves it.
+  `test_qc_checker.py` pins all three paths.
+- **Both system prompts are prompt-cached, and where the breakpoint sits is the whole
+  trick.** `_SYSTEM_ORDER` (~5.9k tokens) and `_SYSTEM_SELECT` (~5.5k) are over half the
+  input of every call and used to be billed at full rate once per ticket per check.
+  `cache_control: {"type": "ephemeral"}` is set **on the system block itself, never
+  top-level** — the request ends in the per-ticket PDF, so an automatic breakpoint lands
+  after it and pays the 1.25x write premium on bytes nothing ever reads back. Measured over
+  four real tickets: ~30% off per report, a 20-ticket queue ~$3.40 -> ~$2.46. The 5-minute
+  TTL is refreshed by each read, so a queue at ~45s/ticket stays warm; a single-ticket run
+  pays the write and never reads it back. **A second breakpoint sits on the PDF document
+  block** (2026-09-28): LRF_Processing's `auto_runner._run_precheck` sends the same PDF twice
+  seconds apart (the re-check after a fix) with only the trailing `user_text` differing, so
+  the PDF prefix is read back there. Compare `cache_read` vs `cache_write` in
+  `logs/api_usage.jsonl` to confirm it pays. Reordering the message blocks silently
+  un-caches it — that is cost, not correctness, so nothing fails at
+  runtime, but `test_usage_log.py` pins both breakpoints and catches a reorder.
+- **`scan()` only returns tickets assigned to the service account** (since 2026-09-15), read
+  from `/rest/api/3/myself` and **failing closed by raising** if that read fails: nothing is
+  checked or returned, the cron exits 1 (red build), and a caller such as `qc_gate` gets the
+  exception, not `[]`.
+  `qc_checker` itself never transitions, but LRF_Processing's `qc_gate` imports `scan()` and
+  **does** transition whatever it returns — unscoped, its first live pass moved five tickets
+  two people were working straight to STOREHOUSE. A ticket someone assigned to themselves is
+  theirs and is never scanned; name it on the command line to check it anyway. `scan()` is
+  therefore a cross-repo interface: keep its signature and its fail-closed behaviour.
+- **Every report carries what it cost, and three decimals is deliberate.** `_cost_usd`
+  prices each call off `_RATES_PER_MTOK` (per-1M input/output, cache read 0.10x, 5-minute
+  ephemeral write 1.25x) and the comment footer reads `model · Ns · $x.xxx`. Reports land at
+  $0.099-$0.182, so two decimals would round away the difference the prompt-cache
+  breakpoint exists to make. A model with no rate on file prices at **0.0 and the footer
+  drops the figure** — `--model` takes any string, and a wrong dollar amount on a live ticket
+  gets read as fact. `cost_report.py` reads that footer off the end of the comment body and
+  finds comments by `_QC_COMMENT_PREFIXES` + a `"QC CHECK RESULTS"` JQL, so moving the footer or
+  renaming the header makes the monthly report read $0.
+- **There is no run budget.** A queue runs to completion however long it takes — measured
+  at medium effort on DSLF-1240, **~45s per ticket** for both checks (30s ORDER + 15s
+  SELECT). Removed on request 2026-08-31; if the build starts timing out, raise the Jenkins
+  job's timeout rather than reintroducing a cap that silently leaves tickets unchecked.
+- **A comment is posted on every ticket checked, pass included** — a clean ticket's last line
+  before the cost footer is "Checked and correct — no action needed." The one exception is a
+  failed Jira read of the ticket: `UNVERIFIED`, nothing posted. Silence used to mean "clean";
+  now it means "not checked".
+- **The comment is one or two lines per finding, and length is enforced in two places.**
+  `_one_line` renders `N. SEVERITY  Field: have -> want (source: …)`, with `issue` on a second
+  indented line when it adds something, and budgets the part after `N. SEVERITY` at 110 chars,
+  dropping the source quote first and then cutting values to 40 (not re-checked) — a
+  per-field cap alone still wrapped, and a wrapped line in a Jira comment is what made the
+  original five-labelled-rows-per-finding format unreadable. The prompts do the other half:
+  value fields hold values only, `issue` is one clause of ≤15 words and must add something
+  the values do not already show, `delivered` ≤20 words. A 4-finding ticket is ~14 lines;
+  it used to be ~40. `BLOCKING-BLANK` prints as `BLANK` for width — the schema value is
+  unchanged.
+- **Three verdicts and the third is the point.** `PASS`/`FAIL` are the model's;
+  **`UNVERIFIED` is the code's** and is returned by every failure path — no API key,
+  timeout, API error, refusal, unreadable or oversize PDF, failed Jira read, and a prompt
+  that could not be assembled. `UNVERIFIED` is **not a pass**: QC did not run. It can still write: `apply_fixes` runs on an
+  `UNVERIFIED` ORDER result, so the deterministic `_household_fix` / `_ship_to_house_fix` can
+  change a ticket on a run where QC did not, and a ticket that can never be verified is
+  re-commented (its SELECT check re-billed) on every scan.
+- **An `UNVERIFIED` comment does not count as "already checked".** `_last_qc_comment_time`
+  returns `None` when the last QC comment reads `VERDICT: UNVERIFIED`, so a ticket whose
+  check failed comes back next run. Without that, the re-run guard would see an unchanged
+  ticket carrying a QC comment and skip it forever. The guard greps the report text, so
+  `format_report` and `_last_qc_comment_time` are coupled — a test pins them together.
+- **The re-run guard's grace window is 15s, and the narrowness is the point.**
+  `_RERUN_GRACE_SECONDS` only has to absorb the QC comment's own write, which is the last
+  thing `check_ticket` does. At its old 120s a SELECT PDF attached 112s after the order
+  check (DSLF-1268) fell inside the window, so every later scan called the ticket unchanged
+  and it sat in `Needs QC` order-checked and never select-checked.
+- **The gate overrides the model, not the reverse.** `_reconcile()` forces `FAIL` whenever
+  any finding is `WRONG` or `BLOCKING-BLANK`, whatever the model wrote in `verdict`, and
+  records `verdict_forced`. `NOTE` never forces a fail.
+- **Three code-side excuses run after the gate, on the SELECT check only** (`review_select`,
+  2026-10-19..22). Each downgrades one known false positive to `NOTE`, and `_rescore` turns
+  `FAIL` into `PASS` when nothing else still blocks: `_excuse_household` (client DB in
+  `NO_HOUSEHOLD_SET` — no LRF household set exists, so `1 PER HOUSEHOLD` ships without it;
+  drop a code once ops builds one), `_excuse_unverifiable_cap` (no profile on file and no
+  ceiling stated on the ticket), and `_excuse_title_tag` (the REPORT title ends in the
+  client's initials, `SCF` = Silent Cry Foundation on DSLF-1484, which is never a criterion).
+  They are code, not prompt text, so the rule holds whatever the model writes. Pinned in
+  `test_qc_household_no_set.py`, `test_qc_unverifiable_cap.py`, `test_qc_title_tag.py`.
+- **`_profile_context()` sends the client's `dollar_cap` and it is load-bearing.** `$10+` on
+  an order is **not** an open-ended floor — it means $10 through *that client's* contracted
+  cap (60 clients at `$99.99`, 48 at `$49.99`, a tail at `$249.99`/`$499.99`/`$999.99`, some
+  `NO CAP`, 37 `VARIES PER ORDER`). A SELECT reading `10.00 THRU 99.99` against a `$10+`
+  order is **correct** for a `$99.99` client. Without the cap every correctly-executed pull
+  reads as lost records — that is exactly what the first live run did, failing
+  DSLF-1077/1075/1073/1082 on it. The band test runs in the direction that loses records: a
+  ceiling **below** the cap is `WRONG`, at it is fine, and no profile on file means
+  unverifiable rather than wrong. The cap is now also written onto the ticket itself — see
+  Field Rules.
+- **`claude-opus-5` @ medium effort**, per the one model policy. A wrong database sends the
+  wrong donor file to the wrong company, so **raise the effort here first** if QC starts
+  missing faults.
+- **The SELECT-report regexes live in the same file.** `parse_select_pdf` /
+  `find_select_attachment` / `_parse_shipping_info` survive from the rule-based era because
+  `qty_approval_scanner` needs a record count and `check_ticket` needs to pick which PDF to
+  send. Two parsed values now shape the SELECT verdict: `_quantity_context` turns `TOTAL RECORDS
+  SELECTED` into a ready-made conclusion in the prompt ("Report this as WRONG"), and
+  `criteria_suffix` drives `_excuse_title_tag`, which can turn `FAIL` into `PASS` in code. Any
+  other value read there belongs in a prompt as evidence, never in a PASS/FAIL if-statement.
+- `_SYSTEM_SELECT` carries a **DO NOT REPORT list**, just before its VERDICT section, for the known-correct-by-design cases
+  (billable-vs-Client-DB prefix mismatch, house-rule ASCII Fixed/FTP, auto STATE OMITS,
+  blank Mail Date/File Format/Other Fees/Key Code/Special Seed, qty mismatch under All
+  Available, profile-sourced suppressions absent from the SELECT, Seed Tracking == Manager
+  Order #, Seed DB = Client DB + S, and the hosted-list case below). `_SYSTEM_ORDER` states its
+  exemptions inline and grades some differently (billable mismatch = `NOTE`, Mail Date must
+  match the order), and only it carries the in-house `tlibrarian@` + Email override of an
+  order's own `Via: FTP` line. Add new known-good patterns to whichever prompt raises the false positive, or QC fills with noise.
+  Related, also `_SYSTEM_ORDER` only: a `FLAG OMITS` **code satisfies the requirement it
+  encodes** (`$` = DMA pander) — the wording need not appear too. DSLF-1278 was refused (an
+  Omission finding) while it already carried the `$` flag (SELNO 870).
+
+### What `_SYSTEM_SELECT` must keep saying
+
+These came from the rule-based checker that used to sit beside QC. It was deleted rather
+than patched because its verdict was `pass_count >= 4 and not hard_fails` — failures were
+never counted or subtracted, so **4 passes / 5 fails still returned `QC PASSED`**. Do not
+reintroduce an absolute pass threshold.
+
+Everything it knew now lives in `_SYSTEM_SELECT` (the last item below is in the SELECT user
+message instead), and `test_qc_checker.py` asserts most of it is still present, but not the
+asymmetric-omit rule, the Nth "must NOT EXCEED" line or the ADSTRA defaults:
+
+- a completed SELECT can never legitimately return **0 records**
+- **Nth** means the count must not exceed the requested quantity; **All Available** skips
+  the quantity comparison entirely
+- the **include set** is judged in one direction only — a standing universe is routinely
+  *wider* than any one order, and only *narrower* (higher floor, shorter window) is wrong,
+  because those donors were never in the pool
+- **flags/states/zips are asymmetric**: an omit the ticket requires and the SELECT skipped
+  is `WRONG`; an extra omit in the SELECT is a `NOTE`
+- flags deferred to prose (`FLAG OMITS: FLAGS LISTED BELOW IN SPECIAL INST.`) are
+  `BLOCKING-BLANK`, not a pass — they cannot be verified at all
+- when two priced lines name different recencies, **the base `W/GEO` line governs**: a
+  trailing `3 MONTH HOTLINE` under `4M $5+ W/GEO` is a 4-month order (DSLF-1420)
+- ADSTRA's published per-seed-database flag defaults still load from
+  `config/adstra_omit_database.yaml` as a third source — not prompt text: `_adstra_flag_context`
+  appends the seed database's set to the SELECT user message as NOTE-level context (untested)
+
+**Hosted lists are the one legitimate List Name mismatch.** The SELECT prints the
+host/master account while the ticket names the rented list, so the two differ by design —
+`_SYSTEM_SELECT` states that the database **code** must still match and a name-only
+difference is a `NOTE`. This was the last surviving class of non-hard failure across the 30
+most-recent tickets with a SELECT PDF; everything else it flagged was real.
+
+### Auto-fix (on by default; `--no-fix` to disable) — order-check findings only
+
+`apply_fixes()` collects every finding whose `fix_field` is in the `_FIXABLE` whitelist and
+writes them in **one PUT**. What it refuses, and why the refusals are the design:
+
+- **`client_db` / `seed_db` / `billable_account` are never writable.** They come from
+  `client_lookup` (or, for an AMLC `T11` order, `AmlcParser` + the `T11R` override), not off the
+  order; they are select fields resolved against a live
+  createmeta lookup; and a wrong write here is the worst outcome in this system. Reported,
+  never written.
+- **`ship_to_email` is never overwritten — it is the destination**, the same class of
+  field. It came out of `_FIXABLE` when fixing became the default (2026-09-11) and no human
+  vetted each write any more. `Ship to: FTP <host>` followed 8–14 lines later by a notify
+  mailbox is the **normal** shape on WE ARE MOORE / DATA-AXLE orders, and that mailbox is
+  routinely at a different company from the host — so a model reading one page will propose
+  replacing the notify address with the bare FTP host and be wrong. **The field holds the
+  notify address; the FTP is carried by Shipping Method.** Destination rules belong in
+  `apply_ship_to_rules`, where they are house rules rather than one model's read.
+  **The one sanctioned model-driven write is `_ship_to_fill`** (2026-10-12, DSLF-1404; widened 2026-10-15,
+  DSLF-1430): on a ticket already `FTP`, exactly one address that the order text prints and
+  that is not the Requestor Email, written as `FTP NOTIFY: <addr>` by qc_checker and run through
+  `apply_ship_to_rules` (which adds the `(SATURN CORP)` label; neither comes from the model), and
+  refused if those rules would change Shipping Method or File Format, or if Requestor Email is
+  blank. Any Ship To write is dropped when a Shipping Method fix lands in the same pass. It replaces only what is provably
+  not the destination: a blank, the same address (a relabel), the Requestor, or an address
+  the order never prints. A filled address the order does print is never overwritten
+  (`_ship_to_blocker`). An FTP order whose Ship-To block gives only a host/folder and no
+  mailbox (DSLF-1427, `FTP: data.net60.net / FOLDER: Call_Trader`) carries
+  `FTP NOTIFY: <requestor>`: `tools_jira.ftp_notify_default` writes it at creation, and the
+  ORDER prompt exempts that case from its requestor and broker-domain rules — the host stays on
+  the attached order, as on every FTP ticket. Separately, `_ship_to_house_fix` rewrites the ticket's own FTP Ship To
+  into the house wording with no model finding at all, but only where `apply_ship_to_rules` would
+  reword it — in practice the `FTP NOTIFY:` prefix + `(SATURN CORP)` label on a Saturn order, or
+  the prefix on `incoming.files@data-axle.com`; a bare address on an ordinary FTP ticket is left
+  alone. It refuses any change of address, method or format — DSLF-1430's re-check passed the
+  unlabelled mailbox, so the label cannot depend on the model noticing. Replayed against the 15 Ship To refusals of 09-17..10-15 plus
+  DSLF-1240: 5 matched the human's final value, 3 wrote the same address more cleanly, the
+  rest refused, none wrote a different destination. On FTP the field is only the notify mailbox: PP21's
+  `TO:` line is email-delivery only (LRF_Processing `dslf_printplus.py`), so the file's route
+  never depends on it.
+- **`description` / `omission` are never overwritten** — ADF prose owned by the parsers and
+  `tools_polish`, and a field-level overwrite flattens the bullet structure
+  `_build_adf_description` builds. **Three edits are sanctioned.** `fix_field: "omission_add"`
+  (2026-10-15, `_omission_add`) appends one omit the order prints **verbatim** — matched
+  ignoring case, list markers and line wraps — that carries an OMIT/SUPPRESS/EXCLUDE/DEDUPE/DUPE/PANDER
+  word, no dollar amount or recency, no DO NOT / DON'T, and is not already there. Replayed on the
+  omission refusals: DSLF-1362 (`APPLY GLOBAL SUPPRESSION`) and DSLF-1397 (`Omits: Order
+  #71090 09/28/2026`) are added as a person added them; DSLF-1278's pander line would be added
+  too, but LRF's parser reads nothing from it and the `$` flag already covers it.
+  `_household_fix` appends
+  `1 PER HOUSEHOLD` when `parsers.base.household_asked` finds it on the order and the
+  Omission lacks it — deterministic, the same rule ticket creation applies (DSLF-1429), and
+  reported as `household:` so the auto-runner never counts it as curing another Omission
+  finding. **The other is `fix_field: "omission_move"`**
+  (since 2026-09-28, `adf_move.plan_move`): it drops exactly one matching node from the
+  Description and appends it as one paragraph to the Omission Description, leaving every
+  other node untouched and writing both fields in the same PUT. One move per pass, never at
+  `NOTE`, and a line that is absent, appears more than once, or is already in the Omission is
+  refused as a `SKIPPED` line. It exists for DSLF-1274, whose `STATE OMIT` sat as a `Selects:` bullet in the Description and
+  stranded the ticket because nothing could correct it. Pinned in `test_adf_move.py`.
+- A **select option** Jira cannot resolve is dropped server-side *without failing the
+  request*, so `_validate_fix` checks every option against `AVAILABILITY_RULE_OPTIONS` /
+  `FILE_FORMAT_OPTIONS` / `SHIPPING_METHOD_OPTIONS` and sends `{"id": ...}`.
+- `list_manager` must be one of the 14 (read from `client_lookup._MANAGER_TO_FILE`), dates
+  must be `YYYY-MM-DD`, quantities must be plausible positive integers, and `seed_tracking`
+  must equal the ticket's current Manager Order # or it is refused (unchecked when that is blank).
+- **`NOTE`-severity findings are never applied**, an empty `fix_value` is refused (blanking
+  a field is not a fix), and a second fix for the same field is ignored.
+- Every refusal is printed in the QC comment as a `SKIPPED  <field>: <reason>` line after the
+  `FIXED` lines (`WOULD FIX` under `--dry-run`), so a skipped fix is visible rather than silent.
+
+**`knowledge.md` has been absorbed, not referenced.** It specced a separate hosted agent for
+whether a ticket was *created* correctly against the **order** PDF, reporting by email. That
+job is now the ORDER check: its field map, severities, broker PO table, requestor defaults,
+known-missing-Jira-options list and both wrong-client incidents live in `_SYSTEM_ORDER`. Its
+line-161 claim that KAP titles are `P.O. {DL#} {LIST NAME}` "by design" was **not** carried
+over — that was a bug fixed in `39d94bc` which 64 tickets carried, and
+`test_qc_checker.py` asserts the exemption never comes back.
+
+## AI-Assisted Offline Tools
+
+Auxiliary, **not part of the live pipeline**. All require `ANTHROPIC_API_KEY` and follow the one model policy — `claude-opus-5` @ medium (see "LLM Model Policy" for where it is set). `compare_extraction` and `hybrid_create` both take `--model`, so another model can be tried without editing anything.
+
+| Tool | Purpose |
+|------|---------|
+| `ai_extract.py` | `extract_fields_from_pdf()` — base64 PDF → Claude structured output (`DSLF_SCHEMA`); prose fields returned as per-line arrays. Module import only (no CLI). Rejects PDFs > 32 MB. |
+| `compare_extraction.py` | **Read-only**: pull a ticket's current fields + its PDF, run Claude, print a field-by-field diff (terminal/`--md`/`--json`). Never writes to Jira. |
+| `hybrid_create.py` | `process_pdf(dry_run=True)` for complete rule-based kwargs, then merges Claude's Description prose on top → **live create**. Omission is the dry-run pass's, already through `tools_polish`. |
+
+⚠ **`hybrid_create.py` (non-dry-run) calls `create_jira_ticket` directly** and writes a live production ticket with no duplicate check, no work order (no WO#, so LRF stalls it) and no profile/zip attachments. It crashes on a multi-page non-ADSTRA PDF and on a SKIP_DB_CODES order — always run `--dry-run` first. Claude-only extraction misses db_code enrichment, profile-injected STANDARD/FLAG omits, and the correct broker requestor — which is why the hybrid keeps rule-based for all structured fields and uses Claude only for Description prose.
+
+## Field Rules
+
+- **Title**: `{LIST NAME} - {MAILER NAME} - {MANAGER ORDER NUMBER}` (never Mailer PO while a Manager Order # exists; `ParseResult` falls back to the PO when it is blank, and leaves the title empty when list or mailer name is blank). e.g. `JUDICIAL WATCH DONORS - HERITAGE FOUNDATION - W74926JW`
+- **Description**: an **ADF document** of `segment_criteria` (selection/select portion of the PDF) plus the client profile's `Select By`, `Dollar Cap`, `Standard Suppressions`, and `Special Instructions`. It is **not** the raw PDF text — the raw order text is passed separately as `create_jira_ticket(order_text=…)` and used only for the Saturn ship-to rule; the PDF itself is attached.
+  - **`Dollar Cap:` is written on every ticket that has one on file**, immediately after `Select By:`, verbatim from the profile's `dollar_cap` (`$99.99`, `NO CAP`, `VARIES PER ORDER`, … — never normalised, each means something different). Without it neither a human nor `qc_checker` can tell a correct capped pull (`10.00 THRU 99.99` against a `$10+` order) from one that quietly lost every donor above the cap. Tickets created before this ran are corrected by `backfill_dollar_cap.py`; a client with no cap recorded gets no line.
+  - **Indentation in `segment_criteria` is structural, not cosmetic.** In `_build_adf_description` a run of indented lines becomes an ADF `bulletList` under the paragraph above it — the same shape the profile blocks use. This is the contract `tools_polish` writes to when it labels a `Selects:` group. Jira's renderer collapses leading whitespace, so an indent that stays a plain string is invisible in the UI; it has to become real ADF structure. Polish strips input indentation and `_clean_out` keeps only the model's own indents, so a parser-indented run (KAP's BELOW SCFs) stays a bullet list after a successful polish only if the model re-indents it.
+- **Omission Description** (`cf[12270]`, ADF): what is omitted/suppressed — flags, states, zips/SCFs, "OMIT PREVIOUS ORDER", "1 PER HOUSEHOLD", plus profile `FLAG OMITS:`. Accepts a pre-built ADF dict **or** a plain string; a plain string is split into **one paragraph per line** so criteria don't render as a run-on blob.
+- **List Manager** = one of these exact values: ADSTRA, AALC, AMLC, CELCO, CONRAD, DATA-AXLE, KAP, MARY E GRANGER, NEGEV, NAMES IN THE NEWS, RKD, RMI, WASHINGTON LISTS, WE ARE MOORE
+- **Mailer Name** = organization sending the mail. **List Name** = donor list being rented. Never swap. On the order forms themselves the "Mailer" and "Broker" labels are used interchangeably (per Lee Ann Hazelwood) — read the value, not the label.
+- **List Name** is stored as the abbreviation, e.g. FAIR = Federation for American Immigration Reform.
+- **Availability Rule**: "Full Run" = "All Available", "NTH NAME" = "Nth"
+- **Other Fees**: parsers write `State Omits` when their own omission has 6+ states/zips/SCFs (state count + 3-5-digit-number count summed ≥ 6 — automatic, expected); the QC and `ai_extract` prompts say `STATE OMITS`, so both casings occur. Data Axle / SimioCloud keep the order's printed `Other Fees:` first. The count runs once per parser on raw tokens (OR/IN/ME/HI count as states, any 3-5-digit number as a zip) and is never redone after polish or FLAG OMITS.
+- **File Format**: `create_jira_ticket` defaults to **ASCII Delimited** when unspecified (after the ASCII-Fixed forcing rules), so new tickets are never blank on this field.
+- **Special Seed Instructions**: only "Insert:" lines. Never FTP/email info. Blank for most orders. That is the rule, not what the code enforces: `_extract_special_seed_instructions` takes the first non-blank text after the first `Insert` / `SEED INSTRUCTION(S)` anywhere, up to the next newline (the whole next line when the keyword ends its line), with any case, no leading word boundary and no FTP/email filter, and only ADSTRA, RKD/AMLC, CONRAD, NIN and WE ARE MOORE call it; the other parsers leave it blank.
+- **Status on creation**: Always "Needs Assignment". Never transition on creation.
+
+
+**KAP: only the Ship To block decides the destination (bar the `incoming.files@data-axle.com` drop-box), and it can be 15 lines below the label.** `_ship_block` is capped at 260 chars for reading the Via/format tokens, but the address hunt now runs over everything from `Ship To:` to the end of the page and never above it — except `incoming.files@data-axle.com`, a real FTP drop-box, which wins from anywhere on the page. DSLF-1152 printed `Email: BCRABTREE@RKDGROUP.COM` (the broker's own rep) near the top and the real drop point in prose further down — the old page-wide `Email:` fallback took the rep. Same family as DSLF-1022 and DSLF-1029. `send an email to X and Y` takes X; Y is the broker being copied. Pinned in `test_kap_fields.py` and `test_ship_to_rules.py`.
+
+**KAP: a select can point at codes printed elsewhere on the page (usually further down), and the pointer must be followed.**
+DM166's select line reads `24 MO $10-99.99 IN SCF'S BELOW` with the nine SCFs sitting under
+Special Instructions. `segment_criteria` is read as a single line and never followed the
+pointer, so those codes reached neither prose field and DSLF-1307 was created with **no
+geography at all**. `_resolve_below_reference` matches on the subject named before `BELOW`
+and appends every other line on the page (above or below) that starts with that subject and holds a digit — that is what keeps the unrelated prose,
+the ship-label line and a URL on the same page out of the select. **Those codes are an
+include, so they stay in the Description**; `_detect_state_omits` counts off the omission
+field and so cannot fire State Omits on them. The same order also lost its destination: the
+upload pattern required the literal `file to:`, and this one phrases it "use the link below
+to upload the file on our secured, encrypted site" with the URL on the next line — a
+fallback now catches that. Pinned in `test_kap_fields.py`.
+
+## Ship-To House Rules (tools_jira.py)
+
+Run at the top of `create_jira_ticket` and **override** whatever the parser produced:
+
+1. **Saturn** — `"saturn"` in `ship_to_email` OR `order_text` → force File Format = ASCII Fixed, Method = FTP, rewrite ship-to to `FTP NOTIFY: … (SATURN CORP)`. (`order_text` is passed in specifically so a body-only Saturn mention still fires.) The trigger is the bare substring `saturn`, any case, and this is the one rule that reads the whole order: unless the ship-to already names Saturn or is in-house, the first `@saturncorp.com` address printed anywhere replaces it, and a ship-to still blank becomes `PLACE ON SATURN CORP FTP FILESHARE`.
+2. **Data Axle drop-box** — a ship-to containing `incoming.files@data-axle.com` (`_DATA_AXLE_DROPBOXES`) → ASCII Fixed + FTP + `FTP NOTIFY:` prefix (never emailed). The mailbox, never the domain: a Data Axle staff address is left alone (DSLF-1022).
+3. `_FIXED_FORMAT_EMAILS` (data@trylondm.com, data@talonmm.com, data@rkdgroup.com, tisdata@trinitydirect.net, tapelibrarian@directmail.com) → File Format ASCII Fixed only; Shipping Method is untouched (normally Email, but a parsed FTP stays FTP — while `_SYSTEM_ORDER` says "delivery stays Email" and would call that WRONG).
+4. **IN-HOUSE — runs LAST and overrides 1 and 2.** Any ship-to at `data-management.com` is our own address, so the order is in-house: destination forced to `tlibrarian@data-management.com` and Shipping Method to **Email**, **even when the order says FTP**. Any DMI mailbox (`smondal@`) normalises to `tlibrarian@`. `file_format` is deliberately left alone — `create_jira_ticket` already defaults it to ASCII Delimited. Measured: of 440 tickets shipping to data-management.com, 439 use `tlibrarian@` and 418 carry Email; the 7 on FTP were the defect (DSLF-1152). Put destination rules here, never in a parser — this function runs at the top of `create_jira_ticket` and covers all twelve brokers at once.
+
+## Mailer PO and Manager Order # by Broker
+
+| Broker | Mailer PO source | Manager Order # source |
+|--------|-----------------|----------------------|
+| ADSTRA | `Broker PO:` — 6-digit, BRK-prefixed, or slashed (`B/19217`); **the value can sit on the line below the label** | J-prefix or I-prefix |
+| RMI | Broker PO# field | MGT# — **the number only, prefix stripped**: `MGT26-01658` on the order becomes `26-01658` |
+| WE ARE MOORE | Ship Label number | Order# |
+| Data Axle | Ship Label, by `_ship_label_po`: up to 3 letters + digits after `PO#`/`PO:`, so a `-RN` suffix is cut (`58364-RN` → `58364`); other forms in the note below | Order# (2316747) |
+| WASHINGTON LISTS | Client Reference: first all-digit 4+ value within 7 lines of the label (a suffixed value is skipped) | Order Number |
+| KAP | Broker order # value | the `KAP ORDER:` value, read as the first `D[LM]\d+` on the page (DL or DM, no hyphen) |
+| CONRAD DIRECT | BROK/MAIL PO: field | PURCHASE ORDER NO |
+| Names in News | 6-7 digit number | LR # |
+| CELCO | ORDER # as printed (`D04-086888-NI`) | the ORDER #'s digit group only (`086888`, since 2026-11-02), so Title and Seed Tracking carry it too; an ORDER # without a hyphen-delimited 5+ digit group is kept as printed |
+| SimioCloud | Ship Label, by `_ship_label_po` — see the note below | Order# (inherits `DataAxleParser.parse`) |
+| RKD / AMLC | `Client P.O.:` — in AMLC's columnar layout the value can sit up to 25 lines *below* its label | first 5-6 digit number in the first 10 lines (Service Bureau No. / Purchase Order No.) |
+
+**RMI: `MGT` is the field label, not part of the number.** The order prints `MGT26-01658`;
+the ticket's Manager Order # is `26-01658`. The capture group sits *inside* the prefix
+(`MGT(\d{2}-\d+)`), but the line-matching further down still looks for the whole `MGT26-…`
+token — that is how the line is located on the page. One bad capture reaches three fields,
+because `ParseResult` builds the title from the manager order number and
+`create_jira_ticket` forces Seed Tracking Number to equal it.
+Story and all ten real orders: `test_rmi_fields.py`.
+
+**A truncated Mailer PO poisons the duplicate check**, because the check keys on
+`cf[12193]` Mailer PO — every order truncating to the same stub matches every other one.
+ADSTRA prints some Broker POs as `B/19217` on the line *below* the label, so in
+`parsers/adstra.py`: `/` is part of the value, the gap to the value is at most one newline
+(`_find` passes `re.DOTALL`, so a bare `\s*` runs down the page), and an all-letter match is
+rejected because every real PO carries a digit. **DSLF-722/723/724 still carry the bare `B`.**
+Story and the pinned cases: `test_adstra_list_code.py`.
+
+### The Ship Label is a jumble and only one number in it is ours
+
+`parsers/data_axle._ship_label_po` reads the Mailer PO for `DataAxleParser` and
+`SimioCloudParser` (SimioCloud tickets carry List Manager WE ARE MOORE). The `we_are_moore`
+parser has its own `W\d+` Ship Label regex and none of the rules below. The label is slash-separated and carries several of the mailer's own
+reference numbers, so the rules are (per Lee Ann's team, 2026-08-27), in priority order:
+
+1. An explicit `PO#` / `PO:` marker with a value attached, **letter prefix included**.
+2. An **`E`-prefixed number is the PO even when nothing says "PO"** — `MOWP E20467/QTY/WWP/JOB 54634` yields `E20467`.
+3. **Three letters followed by two digits** is a PO — `CLU96`, `CLP78`, `CLL76`.
+4. Only then the old guess: the first 4+ digit run. Blank falls back to Manager Order #.
+
+**A `JOB` or `MERGE` number is the mailer's own and is never the PO.** Those are stripped
+before anything looks for digits, so they cannot win even when they come first.
+
+**Match whole tokens.** An unanchored `[A-Z]{3}\d{2}` finds `AGA11` inside `TSAGA112991`
+(DSLF-1093) and invents a PO out of the middle of somebody else's number.
+
+**A failed match here becomes a plausible wrong answer, not a blank** — a rejected value
+falls through to the digit-run fallback, which finds the digits of the very value the first
+branch just rejected and stores them without their prefix. That is why this went unnoticed
+for so long, and why a change here needs the whole test file re-run, not one case.
+
+**Shapes deliberately left alone** because no stated rule covers them, and guessing would
+be worse than the status quo: `DD4769` (two letters), `TSAGA112991` / `SGK108431` (letters
++ six digits), `CB21PH01`. All four keep their bare digit run. **Ask before extending the
+token forms to cover these.**
+
+`test_data_axle_ship_label.py` carries the story and pins every rule — all 25 real labels
+from the most recent WE ARE MOORE (SimioCloud) / DATA-AXLE tickets, the 6 the old code got wrong and the
+19 that must not move, plus all four left-alone shapes.
+
+### Data Axle / SimioCloud state their omits three times, and the first one is a pointer
+
+These orders repeat the same omit criteria in up to three places: a `*Omit Prior 66088`
+tail on the `Base:` line, `State=OMIT States: …` rows under `Selects:`, and the full
+restatement under `Special Instructions:`. `DataAxleParser` read the omission with a single
+`re.search` that started at the **first** `OMIT` anywhere in the text and ran to the next
+label, so it kept whichever came first and dropped the rest.
+
+Keeping only the first one loses whatever it pointed at, and **Other Fees goes blank with
+it** — `_detect_state_omits` counts off the omission field, so the automatic `State Omits`
+never fires either.
+
+`_collect_omit_clauses` takes every line's clause from its first `OMIT` token onward (the
+text to the left is the field label or base criteria, which belong in the Description),
+joins a `*Omit Prior` that wrapped onto a bare number line, drops a clause with an unclosed
+`(` because that is the wrapped half of a forward reference, and de-duplicates
+case-insensitively so the Selects/Special-Instructions restatement folds into one.
+Story, the DSLF-1240 forward-reference case and the 30-order measurement:
+`test_data_axle_ship_label.py`.
+
+## Requestor by Broker
+
+Only `WeAreMooreParser` (always) and `KapParser` (fallback, stored as "Jenny Gomez") hard-code a
+requestor. The other parsers read it off the order — Data Axle / SimioCloud fall back to the
+ship-to address for the email — and the rest leave it blank when absent; the ADSTRA / RMI /
+CONRAD rows are the defaults the `LLM_writes._SYSTEM` and `_SYSTEM_ORDER` prompts assume.
+
+| Broker | Requestor | Email |
+|--------|-----------|-------|
+| ADSTRA | BOBBI DURRETT | BOBBI.DURRETT@ADSTRADATA.COM |
+| RMI | ALICIA GALLAGHER | AGALLAGHER@RMIDIRECT.COM |
+| WE ARE MOORE | MICHELLE NAY | MNAY@WEAREMOORE.COM |
+| KAP | Jenny Gomez | jgomez@keyacquisition.com — house default only. The order's own `contact <Name> at\|@ Email: <addr>` line wins, and the captured address is pinned to `@keyacquisition.com` / `@keyacquisitionpartners.com`: "Please" is optional, so a domain-agnostic pattern could take the FTP-setup address (`eftaccountsetup@igxfer.com`, DSLF-1141) instead. |
+| CONRAD DIRECT | Brenda Gundlah | bgundlah@conraddirect.com |
+| CELCO | an `email` / `Email to` / `PLEASE EMAIL` address and the SHIP TO name first; the CONTACT AT rep (Sara Ghods on every order so far) as fallback | that address first; else the rep's, sara@celcononprofit.com |
+
+## DSLF Custom Field IDs
+
+| Field | ID | Type | Notes |
+|-------|-----|------|-------|
+| Work Order | customfield_12089 | text | Set by IBM i step |
+| Client Database | customfield_12155 | select | = full db_code; derived in create |
+| Seed Database | customfield_12156 | select | = db_code[:-1] + "S"; derived in create |
+| Billable Account | customfield_12191 | select | config `billing_cust` (or learned / AMLC `T11`), sent as stored |
+| Manager Order Number | customfield_12192 | text | Used in title; AMLC dup key |
+| Mailer PO | customfield_12193 | text | Duplicate-check field (non-AMLC) |
+| Mailer Name | customfield_12194 | text | |
+| Key Code | customfield_12195 | text | |
+| Mail Date | customfield_12196 | date | YYYY-MM-DD |
+| List Manager | customfield_12231 | text | Broker company |
+| Requestor Name | customfield_12232 | text | |
+| Requestor Email | customfield_12233 | text | |
+| List Name | customfield_12234 | text | Abbreviation |
+| Omission Description | customfield_12270 | ADF | |
+| Requested Quantity | customfield_12271 | number | Integer |
+| Seed Tracking Number | customfield_12272 | text | Forced = Manager Order # |
+| Availability Rule | customfield_12273 | select | Nth=13235, All Available=13236 |
+| File Format | customfield_12274 | select | ASCII Delimited=13237, ASCII Fixed=13238, Excel=13239, Other=13240 |
+| Ship To Email | customfield_12275 | text | |
+| Shipping Method | customfield_12276 | select | Email=13241, FTP=13242, Other=13243 |
+| Shipping Instructions | customfield_12277 | text | Defaults to `CC: {requestor_email}` |
+| Other Fees | customfield_12278 | text | |
+| Special Seed Instructions | customfield_12311 | text | Only "Insert:" lines |
+| Due Date | duedate | date | Ship By date |
+
+Fill all fields on creation. Unknown select-option labels (availability/file format/shipping) are silently dropped with a log warning; Billable/Client/Seed DB options are resolved via a live createmeta lookup and dropped if unmatched.
+
+## Billable Account / Client DB / Seed DB
+
+From db_code (e.g., F41D): Client Database = full db_code (F41D); Seed Database = db_code with S suffix (F41S). **Billable Account is never derived from db_code**: it is the config row's `billing_cust` exactly as stored (usually the base, `F41`, but some rows hold `M24R` or `T11 (A42D)` and nothing strips them), a learned tier-5 value, or `T11` from `AmlcParser`. It can legitimately differ from the Client-DB prefix by config design — treat billing_cust as authoritative. `A18` has a hard-coded option id; any other label must match a createmeta option (case-insensitive) or it is dropped.
+
+## Key Code Patterns
+
+| Broker | Source |
+|--------|--------|
+| Conrad Direct | Text after "And"/"&" on MATERIAL line (not always present). e.g. "...PO# L50278HF & HF Thirteen Star Flag #2215A" → Key Code = "HF Thirteen Star Flag #2215A" |
+| Data Axle / SimioCloud | The order's `Key Code:` field, else a `Key <value>` segment in the Ship Label. **Never the Order # suffix** — see below. |
+| Others | Extracted from order if present |
+
+**The Order # suffix is a rep name, not a key code.** `Order # 70853-MNay` /
+`2341064-Laura` — the trailing token is whoever keyed the order. It was a fallback in
+`DataAxleParser` until 2026-08-31 and was a rep name on all 20 of the 30 most recent orders
+that carried one, never a key code. **When a key code exists, the order states it** in the
+`Key Code:` field; blank is the right answer otherwise, since Key Code is optional.
+Pinned in `test_data_axle_ship_label.py`.
+
+**Underscore ends a Ship Label field just as `/` does.** `FA_Wounded Warrior_69715_Key
+S67_Qty` means Key = `S67`; stopping only at `/` and whitespace swallowed the trailing
+`_Qty` and stored `S67_Qty` (DSLF-1130). `test_data_axle_ship_label.py` pins both rules.
+
+## Supported Brokers (12) & Detection
+
+12 brokers in 10 files; two files host two parsers each via inheritance:
+- `data_axle.py`: `DataAxleParser` + `SimioCloudParser` — ⚠ SimioCloud's **List Manager is WE ARE MOORE** (SimioCloud is We Are Moore's ordering platform), not DATA-AXLE.
+- `amlc.py`: `RkdGroupParser` (→ List Manager RKD) + `AmlcParser` (→ AMLC; sets billable_account=T11 for a rental or a list name containing VIGUERIE, and `finalize_and_create` then forces db_code `T11R` with no lookup).
+
+`PARSER_REGISTRY` keys: adstra, data_axle, simiocloud, rmi_direct, celco, rkd_group, amlc, kap, washington_lists, conrad_direct, names_in_news, we_are_moore.
+
+`_RULES` order is **load-bearing**: `amlc` precedes `rkd_group` (RKD-serviced AMLC orders contain "RKD GROUP"); `simiocloud`/`data_axle` share the "Exchange/Rental Order" anchor and are disambiguated only by the second pattern.
+
+## Parser Internals
+
+- **BaseBrokerParser** (`parsers/base.py`): shared helpers include `_find()`, `_find_date()`, `_normalize_date()`, `_find_quantity()`, `_map_shipping_method()`, `_detect_file_format()`, `_detect_state_omits()`, `_state_codes_from_omit()`, `_collect_continuation_block()`, `_is_saturn_order()`, `_extract_special_seed_instructions()`, `_find_email()`.
+- **CONFIDENCE_RULE_BASED = 0.92** is defined in **both** `base.py:7` and `parsers/__init__.py:28` (detect_broker uses the `__init__` copy). Keep them in sync — editing one alone does not change the other.
+- **Broker detection** (`parsers/__init__.py`): pre-compiled regex in `_RULES`, scanned over `text[:3000]`; all patterns must match; first fully-matching broker wins; `detect_broker()` returns a frozen `BrokerMatch(broker_key, confidence, matched_patterns)` or `None`.
+- **Client lookup** (`client_lookup.py`): reads `config/*.yaml`, the hand-maintained runtime source (see Config System) — **not** the Excel at runtime.
+
+## Adding a New Broker Parser
+
+1. Create `parsers/my_broker.py` inheriting from `BaseBrokerParser`; implement `parse(text) -> ParseResult`.
+2. Register in `PARSER_REGISTRY` in `parsers/__init__.py`.
+3. Add detection regex to `_RULES` in `parsers/__init__.py` — **positioned** so its patterns neither shadow nor are shadowed by an existing broker (more-specific/ambiguous formats first).
+
+## Project Subagents (`.claude/agents/`)
+
+Two agents are documented, both `model: opus` and both **write-capable**
+(`Read, Write, Edit, Bash, Glob, Grep, Agent, WebSearch, WebFetch`):
+
+| Agent | Scope |
+|-------|-------|
+| `jira_Auto` | General DSLF pipeline work — parse broker PDFs, fix parsers, manage tickets. |
+| `bff_agent` | BrightFocus Foundation orders only (ADSTRA-brokered, ADR/MDR/NGR programs) and their BFF-specific parsing quirks. |
+
+They can create and edit live Jira tickets through `tools_jira`, same as the pipeline. Prefer
+`bff_agent` when the order is BFF — it carries the program-level knowledge `jira_Auto` does not.
+**Only `jira_Auto` is tracked in git.** `bff_agent.md` can sit in `.claude/agents/` as a local
+file (it does on the main dev box, 2026-10-23), but `.claude/` is gitignored, so a fresh clone has
+no `bff_agent` and BFF work there falls back to `jira_Auto`.
+
+## Github Rules
+
+- When a change is made in any file always push it to github with proper message.
+- When i say commit to github - it means you need to commit and push the changes.
+- Make sure all push happens in main branch.
+- **"Always push" means the code you changed, not everything in the working tree.** Stage
+  named paths; never `git add -A` / `git add .`. Anything already modified when you started
+  is someone else's change — surface it, don't sweep it into your commit.
+- **Never commit, even if it appears staged or someone asks:** `.env` / `*.env` (Jira token,
+  MS service password, IBM i credentials), `email_scanner/thread_map.json` and
+  `processed_ids.json` and `token_cache.bin` (runtime state — see "Email scanner specifics"
+  for why losing them spawns duplicate tickets), the source Excel workbooks and
+  `Client Profiles/` (client data), and `.claude/settings.local.json` (per-machine
+  permissions). ⚠ **`NEW LR CLIENT LIST 2026.xlsx` is already tracked** — committed before
+  the rule existed, same as `settings.local.json` below — so this rule protects only the
+  *other* workbooks; do not read it as proof the Excel is out of the repo.
+- **`.gitignore` does NOT cover `.claude/settings.local.json` — that file is tracked.** The
+  `.claude/` ignore entry cannot untrack what was committed before it, so the file shows as
+  modified on every machine and any `git add` naming it sweeps it in. `.claude/agents/`
+  is the mirror case: only `jira_Auto.md` is tracked, so a fresh clone has no `bff_agent`.
+  Ignore rules are a safety net, not a reason to skip checking `git status` before
+  committing.
