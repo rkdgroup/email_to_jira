@@ -1419,8 +1419,12 @@ def _cost_usd(usage, model: str) -> float:
 
 
 def _review(pdf_path: str, system: str, schema: dict, user_text: str,
-            check: str, model: str = None, effort: str = None) -> dict:
-    """One PDF, one prompt, one verdict. Never raises. UNVERIFIED on every failure path."""
+            check: str, model: str = None, effort: str = None,
+            report_text: str | None = None) -> dict:
+    """One PDF, one prompt, one verdict. Never raises. UNVERIFIED on every failure path.
+
+    `report_text` sends the PDF's extracted text in the message instead of the PDF itself
+    (see `_select_text`)."""
     model  = model or QC_MODEL
     effort = effort or QC_EFFORT
 
@@ -1434,7 +1438,7 @@ def _review(pdf_path: str, system: str, schema: dict, user_text: str,
     if len(data) > _MAX_PDF_MB * 1024 * 1024:
         return _unverified(f"PDF exceeds {_MAX_PDF_MB} MB — not sent", check)
 
-    cache_key = (hash(data), user_text, system[:64], model, effort)
+    cache_key = (hash(data), user_text, system[:64], model, effort, bool(report_text))
     if cache_key in _cache:
         # A hit made no API call, so it cost nothing. Without this a multi-page or
         # repeated-text order would bill the same dollars once per page.
@@ -1481,7 +1485,8 @@ def _review(pdf_path: str, system: str, schema: dict, user_text: str,
                 # re-check after a --fix), with only user_text differing. Pays
                 # once more than ~28% of prechecks re-check -- read cache_read
                 # against cache_write in logs/api_usage.jsonl to confirm it does.
-                "content": [
+                "content": [{"type": "text", "text": user_text + "\n\n" + report_text}]
+                           if report_text else [
                     {"type": "document",
                      "source": {"type": "base64", "media_type": "application/pdf",
                                 "data": base64.standard_b64encode(data).decode("ascii")},
@@ -1572,6 +1577,29 @@ def _quantity_context(pdf_path: str, ticket_fields: dict) -> str:
             f"\"{rule or '(blank)'}\".")
 
 
+SELECT_AS_TEXT = True
+_SELECT_TEXT_MIN = 400      # below this the PDF is scanned or garbled: send it as a PDF
+
+
+def _select_text(pdf_path: str) -> str | None:
+    """The SELECT report as text for the prompt, or None to send the PDF itself.
+
+    A PDF block costs the text plus a rendered image per page: a 12 KB, 3-page SELECT was
+    10,200 input tokens against ~2,100 for its text (DSLF-1589). The report is a
+    monospaced printout, so the extracted text keeps every column. A scan or garbled
+    extraction falls back to the PDF rather than risk a verdict on missing text."""
+    if not SELECT_AS_TEXT:
+        return None
+    from tools_pdf import extract_pdf_text
+    try:
+        text = extract_pdf_text(pdf_path)
+    except Exception:
+        return None
+    if text.startswith("[") or len(text.strip()) < _SELECT_TEXT_MIN:
+        return None
+    return "THE SELECT REPORT, text extracted from its PDF with the layout kept:\n\n" + text
+
+
 def review_select(pdf_path: str, ticket_fields: dict,
                   model: str = None, effort: str = None) -> dict:
     """Did the SELECT deliver what the ticket asked for?"""
@@ -1589,7 +1617,8 @@ def review_select(pdf_path: str, ticket_fields: dict,
         # throws, the check has not run — and "has not run" is UNVERIFIED, never a pass.
         return _unverified(f"could not assemble the ticket context ({e})", "SELECT")
     result = _excuse_household(_review(pdf_path, _SYSTEM_SELECT, _schema(False), user, "SELECT",
-                                       model, effort), ticket_fields.get("client_db"))
+                                       model, effort, report_text=_select_text(pdf_path)),
+                              ticket_fields.get("client_db"))
     result = _excuse_unverifiable_cap(result, ticket_fields, ticket)
     try:
         suffix = parse_select_pdf(pdf_path).get("criteria_suffix", "")
@@ -2052,27 +2081,31 @@ def format_report(ticket_key: str, result: dict) -> str:
 # Runner
 # ---------------------------------------------------------------------------
 
-TRANSITION_TARGET = "STOREHOUSE"
+TRANSITION_PASS = "STOREHOUSE"
+TRANSITION_FAIL = "STUCK"
 
 
-def _move_on_pass(ticket_key: str, out: dict, status: str) -> str | None:
-    """--transition: Needs QC -> STOREHOUSE, only on a clean PASS that includes a SELECT check.
+def _move_on_verdict(ticket_key: str, out: dict, status: str) -> str | None:
+    """--transition: Needs QC -> STOREHOUSE on a PASS, -> STUCK on a FAIL.
 
-    A PASS from the ORDER check alone says the ticket was created right, not that the pull
-    delivered it, so a missing SELECT is a refusal. Returns what happened (None when the
-    verdict is not PASS: a FAIL or UNVERIFIED ticket stays put silently).
+    A PASS needs a SELECT check: an ORDER-only pass says the ticket was created right, not
+    that the pull delivered it. A FAIL moves on either check's say-so. UNVERIFIED means QC
+    did not run, so that ticket stays put in silence, as does one already out of Needs QC.
+    Returns what happened, or None when nothing was attempted.
     """
     from tools_jira import transition_ticket
-    if out.get("verdict") != PASS:
+    verdict = out.get("verdict")
+    target = {PASS: TRANSITION_PASS, FAIL: TRANSITION_FAIL}.get(verdict)
+    if not target:
         return None
-    if not out.get("select"):
+    if verdict == PASS and not out.get("select"):
         return "NOT MOVED: no SELECT check ran"
     if status != NEED_QC_STATUS:
         return f"NOT MOVED: status is {status!r}, not {NEED_QC_STATUS!r}"
-    res = transition_ticket(ticket_key, TRANSITION_TARGET)
+    res = transition_ticket(ticket_key, target)
     if "error" in res:
         return f"NOT MOVED: {res['error']}"
-    return f"MOVED to {TRANSITION_TARGET}"
+    return f"MOVED to {target}"
 
 
 def check_ticket(ticket_key: str, post: bool = False, fix: bool = False,
@@ -2150,7 +2183,7 @@ def check_ticket(ticket_key: str, post: bool = False, fix: bool = False,
                 log.error("Could not post QC comment to %s: %s", ticket_key, cr["error"])
             # Move only after the verdict is on the ticket, so a moved ticket always shows why.
             if transition and out["posted"]:
-                out["moved"] = _move_on_pass(ticket_key, out, fields.get("status", ""))
+                out["moved"] = _move_on_verdict(ticket_key, out, fields.get("status", ""))
         return out
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -2313,9 +2346,10 @@ def main() -> int:
                     help="apply the ORDER check's field corrections to the live ticket "
                          "(default: on; --no-fix to report them without writing)")
     ap.add_argument("--transition", action="store_true",
-                    help=f"move a ticket from {NEED_QC_STATUS!r} to {TRANSITION_TARGET!r} when "
-                         "it PASSES with a SELECT check (default: off; QC never moves tickets "
-                         "otherwise). Skips the percentage-report and geo checks qc_gate runs")
+                    help=f"move a {NEED_QC_STATUS!r} ticket to {TRANSITION_PASS!r} when it PASSES "
+                         f"(with a SELECT check) or to {TRANSITION_FAIL!r} when it FAILS "
+                         "(default: off; QC never moves tickets otherwise). Skips the "
+                         "percentage-report and geo checks qc_gate runs")
     ap.add_argument("--order-only", action="store_true", help="skip the SELECT check")
     ap.add_argument("--select-only", action="store_true", help="skip the ORDER check")
     ap.add_argument("--model", default=QC_MODEL)

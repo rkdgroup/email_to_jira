@@ -1,4 +1,4 @@
-"""--transition moves a ticket to STOREHOUSE only on a clean PASS that includes a SELECT check.
+"""--transition: a PASS (with a SELECT check) goes to STOREHOUSE, a FAIL goes to STUCK.
 
     python -m pytest -q test_qc_transition.py
 """
@@ -25,26 +25,31 @@ def _out(verdict=qc.PASS, select=True):
 
 
 def test_pass_with_select_moves_to_storehouse(moves):
-    assert qc._move_on_pass("DSLF-1", _out(), qc.NEED_QC_STATUS) == "MOVED to STOREHOUSE"
+    assert qc._move_on_verdict("DSLF-1", _out(), qc.NEED_QC_STATUS) == "MOVED to STOREHOUSE"
     assert moves == [("DSLF-1", "STOREHOUSE")]
 
 
-@pytest.mark.parametrize("verdict", [qc.FAIL, qc.UNVERIFIED])
-def test_fail_and_unverified_stay_put(moves, verdict):
-    assert qc._move_on_pass("DSLF-1", _out(verdict), qc.NEED_QC_STATUS) is None
+def test_fail_moves_to_stuck_even_without_a_select(moves):
+    assert qc._move_on_verdict("DSLF-1", _out(qc.FAIL, select=False), qc.NEED_QC_STATUS) == "MOVED to STUCK"
+    assert moves == [("DSLF-1", "STUCK")]
+
+
+def test_unverified_stays_put(moves):
+    assert qc._move_on_verdict("DSLF-1", _out(qc.UNVERIFIED), qc.NEED_QC_STATUS) is None
     assert moves == []
 
 
 def test_pass_without_select_is_refused(moves):
-    assert "no SELECT" in qc._move_on_pass("DSLF-1", _out(select=False), qc.NEED_QC_STATUS)
+    assert "no SELECT" in qc._move_on_verdict("DSLF-1", _out(select=False), qc.NEED_QC_STATUS)
     assert moves == []
 
 
-def test_only_moves_out_of_needs_qc(moves):
-    assert "NOT MOVED" in qc._move_on_pass("DSLF-1", _out(), "STOREHOUSE")
+@pytest.mark.parametrize("verdict", [qc.PASS, qc.FAIL])
+def test_only_moves_out_of_needs_qc(moves, verdict):
+    assert "NOT MOVED" in qc._move_on_verdict("DSLF-1", _out(verdict), "STOREHOUSE")
     assert moves == []
 
 
 def test_a_failed_transition_is_reported_not_raised(monkeypatch):
     monkeypatch.setattr(tools_jira, "transition_ticket", lambda k, n: {"error": "boom"})
-    assert qc._move_on_pass("DSLF-1", _out(), qc.NEED_QC_STATUS) == "NOT MOVED: boom"
+    assert qc._move_on_verdict("DSLF-1", _out(), qc.NEED_QC_STATUS) == "NOT MOVED: boom"

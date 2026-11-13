@@ -989,3 +989,30 @@ def test_the_move_key_is_offered_to_the_model():
         assert "omission_move" in json.dumps(qc._schema(with_fix=True))
     else:
         assert "omission_move" in props["fix_field"]["description"]
+
+
+def test_select_report_goes_to_the_model_as_text_when_it_extracts_cleanly(monkeypatch):
+    """10,200 input tokens as a PDF vs ~2,100 as text (DSLF-1589); same verdicts on 12 tickets."""
+    import tools_pdf
+    monkeypatch.setattr(tools_pdf, "extract_pdf_text", lambda p: "JOB : W1 N13 D  ACCOUNT\n" * 40)
+    monkeypatch.setattr(qc, "SELECT_AS_TEXT", True)
+
+    assert qc._select_text("x.pdf").startswith("THE SELECT REPORT, text extracted")
+
+
+import pytest
+
+
+@pytest.mark.parametrize("extracted", ["[ERROR:NO_TEXT] none", "[WARNING:LOW_TEXT] scan", "a few words"])
+def test_a_scan_or_garbled_extraction_falls_back_to_the_pdf(monkeypatch, extracted):
+    import tools_pdf
+    monkeypatch.setattr(tools_pdf, "extract_pdf_text", lambda p: extracted)
+    monkeypatch.setattr(qc, "SELECT_AS_TEXT", True)
+
+    assert qc._select_text("x.pdf") is None
+
+
+def test_select_as_text_can_be_switched_off(monkeypatch):
+    monkeypatch.setattr(qc, "SELECT_AS_TEXT", False)
+
+    assert qc._select_text("x.pdf") is None
