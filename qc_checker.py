@@ -2052,10 +2052,34 @@ def format_report(ticket_key: str, result: dict) -> str:
 # Runner
 # ---------------------------------------------------------------------------
 
+TRANSITION_TARGET = "STOREHOUSE"
+
+
+def _move_on_pass(ticket_key: str, out: dict, status: str) -> str | None:
+    """--transition: Needs QC -> STOREHOUSE, only on a clean PASS that includes a SELECT check.
+
+    A PASS from the ORDER check alone says the ticket was created right, not that the pull
+    delivered it, so a missing SELECT is a refusal. Returns what happened (None when the
+    verdict is not PASS: a FAIL or UNVERIFIED ticket stays put silently).
+    """
+    from tools_jira import transition_ticket
+    if out.get("verdict") != PASS:
+        return None
+    if not out.get("select"):
+        return "NOT MOVED: no SELECT check ran"
+    if status != NEED_QC_STATUS:
+        return f"NOT MOVED: status is {status!r}, not {NEED_QC_STATUS!r}"
+    res = transition_ticket(ticket_key, TRANSITION_TARGET)
+    if "error" in res:
+        return f"NOT MOVED: {res['error']}"
+    return f"MOVED to {TRANSITION_TARGET}"
+
+
 def check_ticket(ticket_key: str, post: bool = False, fix: bool = False,
                  do_order: bool = True, do_select: bool = True,
-                 model: str = None, effort: str = None, dry_run: bool = False) -> dict:
-    """Run both checks on one ticket, optionally fix and comment. Never raises."""
+                 model: str = None, effort: str = None, dry_run: bool = False,
+                 transition: bool = False) -> dict:
+    """Run both checks on one ticket, optionally fix, comment and move. Never raises."""
     os.environ["DSLF_TICKET"] = ticket_key      # tags this ticket's usage_log rows; tickets run one at a time
     import tempfile, shutil
     from tools_jira import (get_ticket_qc_fields, download_attachment,
@@ -2124,6 +2148,9 @@ def check_ticket(ticket_key: str, post: bool = False, fix: bool = False,
             out["posted"] = "error" not in cr
             if not out["posted"]:
                 log.error("Could not post QC comment to %s: %s", ticket_key, cr["error"])
+            # Move only after the verdict is on the ticket, so a moved ticket always shows why.
+            if transition and out["posted"]:
+                out["moved"] = _move_on_pass(ticket_key, out, fields.get("status", ""))
         return out
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -2285,6 +2312,10 @@ def main() -> int:
     ap.add_argument("--fix", action=argparse.BooleanOptionalAction, default=True,
                     help="apply the ORDER check's field corrections to the live ticket "
                          "(default: on; --no-fix to report them without writing)")
+    ap.add_argument("--transition", action="store_true",
+                    help=f"move a ticket from {NEED_QC_STATUS!r} to {TRANSITION_TARGET!r} when "
+                         "it PASSES with a SELECT check (default: off; QC never moves tickets "
+                         "otherwise). Skips the percentage-report and geo checks qc_gate runs")
     ap.add_argument("--order-only", action="store_true", help="skip the SELECT check")
     ap.add_argument("--select-only", action="store_true", help="skip the ORDER check")
     ap.add_argument("--model", default=QC_MODEL)
@@ -2295,7 +2326,7 @@ def main() -> int:
 
     kw = dict(post=not args.dry_run, fix=args.fix, dry_run=args.dry_run,
               do_order=not args.select_only, do_select=not args.order_only,
-              model=args.model, effort=args.effort)
+              model=args.model, effort=args.effort, transition=args.transition)
 
     if args.tickets:
         results = [check_ticket(k, **kw) for k in args.tickets]
@@ -2308,6 +2339,8 @@ def main() -> int:
     for r in results:
         print("\n" + "=" * 78)
         print(r.get("report") or format_report(r.get("ticket_key", "?"), r))
+        if r.get("moved"):
+            print(f"\n>> {r['moved']}")
 
     tally: dict = {}
     for r in results:

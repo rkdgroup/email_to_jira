@@ -45,7 +45,7 @@ python parse_pipeline.py /path/to/order.pdf --dry-run    # no ticket, no dup che
 
 ### Testing
 
-No linter and no CI test stage — Jenkins never runs the tests. 25 hermetic regression files (23 in the root, 2 in `WO#/`): no Jira, DB, PDFs or network. `pytest` is not in `requirements.txt`; install it separately.
+No linter and no CI test stage — Jenkins never runs the tests. 26 hermetic regression files (24 in the root, 2 in `WO#/`): no Jira, DB, PDFs or network. `pytest` is not in `requirements.txt`; install it separately.
 
 ```bash
 python -m pytest -q test_*.py "WO#/"                          # everything (bash / Git Bash)
@@ -53,7 +53,7 @@ python -m pytest -q $(Get-ChildItem test_*.py -Name) "WO#/"   # the same, PowerS
 python -m pytest -q test_kap_fields.py -k below               # one file / one test
 ```
 
-Eighteen files are also standalone runners (`python test_x.py` prints `PASS`/`ALL PASSED`). **Seven are pytest-only** and exit 0 having run nothing under `python`: `test_adf_move.py`, `test_usage_log.py`, `test_scanner_host_lock.py`, `test_graph_retry.py`, and the three `test_qc_*` excuse files (`test_qc_household_no_set.py`, `test_qc_unverifiable_cap.py`, `test_qc_title_tag.py`). `test_qc_checker.py` is a partial runner — its `omission_move` tests sit after the `__main__` guard, so only pytest runs them. The `WO#/` tests (`test_work_order_allocation.py`, `test_ibmi_credentials.py`) run standalone too.
+Eighteen files are also standalone runners (`python test_x.py` prints `PASS`/`ALL PASSED`). **Eight are pytest-only** and exit 0 having run nothing under `python`: `test_adf_move.py`, `test_usage_log.py`, `test_scanner_host_lock.py`, `test_graph_retry.py`, `test_qc_transition.py`, and the three `test_qc_*` excuse files (`test_qc_household_no_set.py`, `test_qc_unverifiable_cap.py`, `test_qc_title_tag.py`). `test_qc_checker.py` is a partial runner — its `omission_move` tests sit after the `__main__` guard, so only pytest runs them. The `WO#/` tests (`test_work_order_allocation.py`, `test_ibmi_credentials.py`) run standalone too.
 
 Run the matching test file after touching: `tools_jira.py` ship-to rules, `parsers/{kap,adstra,data_axle,rmi_direct,celco}.py`, `qc_checker.py`, `parse_pipeline` (`_build_adf_description`, `_dup_check_key`, `_create_and_link_work_order`, `_strip_ncc_dnm`, `_with_household`), `qty_approval_scanner.py`, `WO#/work_order.py`, `WO#/base.py`, `adf_move.py`, `usage_log.py`, `cost_report.py`, `build_profile_yaml.py`, `email_scanner.run_scan` / `ALLOWED_HOSTS` / the Graph helpers (`_send`, `_get_folder_id`). Everything else is checked manually via `--dry-run` on real PDFs. `tools_polish._validate` (the live polish gate) has no test file.
 
@@ -61,7 +61,7 @@ Run the matching test file after touching: `tools_jira.py` ship-to rules, `parse
 
 ```bash
 python email_scanner/email_scanner.py                 # one poll of the shared mailbox
-python qc_checker.py [DSLF-123 ...] [--status S] [--no-fix] [--dry-run]
+python qc_checker.py [DSLF-123 ...] [--status S] [--no-fix] [--dry-run] [--transition]
                      [--order-only|--select-only] [--model M] [--effort E] [--json f]
 python qty_approval_scanner.py [--no-email-scan] [--combined] [--output f] [--email a] [--cc b] [--subject s]
 python ticket_scanner/ticket_scanner.py [--loop N] [--reset] [--learn] [--reporter NAME]
@@ -138,7 +138,7 @@ Load-bearing behaviors that are easy to get wrong:
 | Tool | Trigger / scope | Behavior |
 |------|-----------------|----------|
 | `email_scanner/email_scanner.py` | Shared-mailbox `List Rental` folder | MSAL ROPC auth → per message: if `conversationId` is in `thread_map.json`, add the HTML-stripped body as a comment on the thread's first ticket (no attachments downloaded, mail not moved); else download PDFs (or synthesize one from the body) → `process_pdf(broker_hint=SENDER_BROKER_MAP[domain])` → move to `List Rental/Processed` or `/Failed`. `broker_hint` skips fingerprint detection. |
-| `qc_checker.py` | `Needs QC` tickets **assigned to the service account** (`--status` for other queues; named tickets bypass the scan) | Two LLM checks per ticket; posts a comment on every ticket checked, pass included; **never transitions**; order-check corrections are written back by default (`--no-fix` to report only). See "QC". |
+| `qc_checker.py` | `Needs QC` tickets **assigned to the service account** (`--status` for other queues; named tickets bypass the scan) | Two LLM checks per ticket; posts a comment on every ticket checked, pass included; **transitions only with `--transition`** (off by default; PASS incl. a SELECT check, `Needs QC` → `STOREHOUSE`); order-check corrections are written back by default (`--no-fix` to report only). See "QC". |
 | `qty_approval_scanner.py` | `Ready to Send for Qty Approval` tickets | Reads `QTY APPROVAL/<order#>` emails → sets Requested Quantity (`cf[12271]`). The SELECT `TOTAL RECORDS SELECTED` count only fills the emailed digest, never the field directly. **Never transitions.** One digest per (mailer, requestor). Subject carries a LIST code (single ticket) or MAILER code (group), resolved from `dslf_list_and_mailer_names.txt` with an initials fallback. Body is `<order#> = <qty>` lines + `Requestor: <email>` — the shape the reply scan parses back, so change one, change both. The scan reads one order per email (subject's first token); a collapsed range (`J1000-J1003`) sets none. |
 | `ticket_scanner/ticket_scanner.py` | New DSLF tickets (issue# > saved state) | **Read-only** audit → `ticket_scanner/reports/`. `--learn` mines List Name→db_code into `learned_patterns.json` (enrich tier 5) but pages `/search/jql` by `startAt`/`total`, which that endpoint ignores, so each fetch stops at 50. |
 
@@ -218,10 +218,11 @@ For orders **no parser recognizes** (`process_pdf` flags those; `hybrid_create.p
 | Findings carry a fix | **yes** — `fix_field`/`fix_value`, applied by default | **no**, by design |
 | Prompt | `_SYSTEM_ORDER` | `_SYSTEM_SELECT` |
 
-The ticket verdict is the **worse** of the two; `UNVERIFIED` outranks `FAIL`. Flags: `--dry-run` (print only), `--no-fix`, `--order-only | --select-only`, `--status S`, `--model M`, `--effort E`, `--json FILE`.
+The ticket verdict is the **worse** of the two; `UNVERIFIED` outranks `FAIL`. Flags: `--dry-run` (print only), `--no-fix`, `--transition`, `--order-only | --select-only`, `--status S`, `--model M`, `--effort E`, `--json FILE`.
 
 - **The `Jenkinsfile` in this repo is NOT what runs.** The live job "DSLF-Email-Scanner" is a freestyle Execute-shell step: `rm -rf email_to_jira && git clone …`, `python3.11 -m venv env`, `pip3 install -r requirements.txt`, `cp <credential> .env`, then `email_scanner.py` + `qc_checker.py`. Editing the Jenkinsfile changes nothing. **Verify which config drives a build before assuming the repo file does.**
 - **Posting AND fixing are the DEFAULT; `--dry-run` suppresses both.** The cron calls the script bare. The guarantee against bad writes is `_FIXABLE`, not the flag.
+- **`--transition` moves a ticket out of `Needs QC`** (`_move_on_pass`) only when the verdict is PASS, a SELECT check ran, the comment posted and the status is still `Needs QC`; never under `--dry-run`. A bare cron call still moves nothing. It does **not** run the percentage-report or geo checks LRF_Processing's `qc_gate` does, so don't run both movers on one box. Pinned in `test_qc_transition.py`.
 - **`main()` returns 0 even when tickets fail** (a failing ticket is a result; non-zero reds the build under `sh -xe`). Non-zero is reserved for "the scan could not run": `config_guard` exit, argparse exit, or an unexpected exception (`_entry` returns 1). Pinned in `test_qc_checker.py`.
 - **Prompt caching: breakpoints sit on the system block and on the PDF document block, never top-level.** The request ends in the per-ticket PDF, so an automatic top-level breakpoint lands after it and pays the 1.25x write premium on bytes nothing reads back. The PDF breakpoint pays because LRF_Processing's `auto_runner._run_precheck` sends the same PDF twice. Reordering message blocks silently un-caches (cost, not correctness); `test_usage_log.py` pins both. Compare `cache_read` vs `cache_write` in `logs/api_usage.jsonl`.
 - **`scan()` returns only tickets assigned to the service account**, read from `/rest/api/3/myself`, **failing closed by raising** if that read fails (cron exits 1; a caller such as `qc_gate` gets the exception, not `[]`). LRF_Processing's `qc_gate` imports `scan()` and **does transition** what it returns, so `scan()` is a cross-repo interface: keep its signature and fail-closed behaviour. A ticket someone self-assigned is never scanned; name it on the command line to check it.
