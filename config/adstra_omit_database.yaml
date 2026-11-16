@@ -149,3 +149,6 @@ adstra_database:
   - seed_database: N15S
     adstra_list_name: 3-SDCA VETS & SERVICE ORG M F
     flags: [R, $, "!"]
+  - seed_database: M84S
+    adstra_list_name: 3-MBF MANS BEST FRIEND
+    flags: [A, R, T, 5, $, "!"]
