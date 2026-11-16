@@ -2234,15 +2234,35 @@ def _last_qc_comment_time(ticket_key: str) -> str | None:
     below would never let it back in, and a ticket the checker never read would sit in the
     queue looking done. Anything the budget cut off must come back on the next run.
     """
+    last = _last_qc_comment(ticket_key)
+    if not last or re.search(r'^VERDICT:\s*UNVERIFIED', last["body"], re.MULTILINE):
+        return None
+    return last["created"]
+
+
+def _last_qc_comment(ticket_key: str) -> dict | None:
+    """The newest QC report on the ticket as {"created", "body"}, or None."""
     from tools_jira import get_issue_comments
     for c in get_issue_comments(ticket_key):
         body = _adf_text(c.get("body", ""))
-        if not body.startswith(_QC_COMMENT_PREFIXES):
-            continue
-        if re.search(r'^VERDICT:\s*UNVERIFIED', body, re.MULTILINE):
-            return None
-        return c.get("created", "")
+        if body.startswith(_QC_COMMENT_PREFIXES):
+            return {"created": c.get("created", ""), "body": body}
     return None
+
+
+def _move_from_last_report(ticket_key: str, status: str) -> dict:
+    """--transition on a ticket the re-run guard skipped: act on its posted verdict, no new API call.
+
+    A ticket QC'd before the flag was on (or whose move failed) would otherwise sit in
+    Needs QC for good, because nothing about it changes."""
+    last = _last_qc_comment(ticket_key)
+    m = re.search(r'^VERDICT:\s*(\w+)', last["body"], re.MULTILINE) if last else None
+    verdict = m.group(1) if m else UNVERIFIED
+    out = {"verdict": verdict,
+           "select": "SELECT (ticket vs the pull)" in last["body"] if last else False}
+    moved = _move_on_verdict(ticket_key, out, status)
+    return {"ticket_key": ticket_key, "verdict": verdict, "moved": moved,
+            "report": f"{ticket_key}: already checked, VERDICT {verdict}; no new QC run"}
 
 
 def _updated_after_qc(ticket_updated: str, qc_created: str) -> bool:
@@ -2305,6 +2325,8 @@ def scan(status: str, **kw) -> list:
         last = _last_qc_comment_time(key)
         if last and not _updated_after_qc(issue["fields"].get("updated", ""), last):
             log.info("%s: no changes since last QC — skipping", key)
+            if kw.get("transition") and not kw.get("dry_run"):
+                results.append(_move_from_last_report(key, issue["fields"]["status"]["name"]))
             continue
         results.append(check_ticket(key, **kw))
     return results
